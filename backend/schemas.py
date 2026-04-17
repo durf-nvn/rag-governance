@@ -17,6 +17,8 @@ class UserResponse(BaseModel):
     id: uuid.UUID
     email: EmailStr
     role: str
+    full_name: Optional[str] = None  # NEW
+    is_verified: bool                # NEW
     created_at: datetime
 
     class Config:

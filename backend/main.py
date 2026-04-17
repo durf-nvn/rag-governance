@@ -4,6 +4,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 import models, schemas, utils
 from database import engine, get_db
+from typing import List
 
 models.Base.metadata.create_all(bind=engine)
 
@@ -99,3 +100,19 @@ def login_user(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = D
         "email": user.email,
         "role": user.role
     }
+
+@app.get("/users", response_model=List[schemas.UserResponse])
+def get_all_users(db: Session = Depends(get_db)):
+    # Fetch every user in the database
+    return db.query(models.User).all()
+
+@app.put("/users/{user_id}/verify")
+def verify_user(user_id: str, db: Session = Depends(get_db)):
+    # Find the user and flip their lock to True
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    user.is_verified = True
+    db.commit()
+    return {"message": "User approved successfully!"}
