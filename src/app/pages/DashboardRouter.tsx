@@ -4,9 +4,11 @@ import { FacultyDashboard } from "./FacultyDashboard";
 import { StudentDashboard } from "./StudentDashboard";
 
 export function DashboardRouter() {
-  const { user } = useRole();
+  // FIXED: We extract 'userRole' instead of 'user'
+  const { userRole } = useRole();
 
-  switch (user.role) {
+  // FIXED: We check 'userRole' directly instead of 'user.role'
+  switch (userRole) {
     case "ADMIN":
       return <AdminDashboard />;
     case "FACULTY":
@@ -14,6 +16,7 @@ export function DashboardRouter() {
     case "STUDENT":
       return <StudentDashboard />;
     default:
-      return <AdminDashboard />;
+      // Fallback just in case
+      return <StudentDashboard />; 
   }
 }

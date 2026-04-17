@@ -1,18 +1,20 @@
-import { Navigate } from "react-router";
-import { useRole } from "../contexts/RoleContext";
-import { hasPermission } from "../utils/rolePermissions";
+import { Navigate } from "react-router"
+import { useRole } from "../contexts/RoleContext"
+import { hasPermission } from "../utils/rolePermissions"
 
 interface ProtectedRouteProps {
-  children: React.ReactNode;
-  permission: string;
+  children: React.ReactNode
+  permission: string
 }
 
 export function ProtectedRoute({ children, permission }: ProtectedRouteProps) {
-  const { user } = useRole();
+  const { userRole } = useRole()
 
-  if (!hasPermission(user.role, permission as any)) {
-    return <Navigate to="/app" replace />;
+  const currentRole = userRole || "STUDENT"
+
+  if (!hasPermission(currentRole, permission as any)) {
+    return <Navigate to="/app" replace />
   }
 
-  return <>{children}</>;
+  return <>{children}</>
 }

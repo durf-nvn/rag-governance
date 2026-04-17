@@ -1,9 +1,5 @@
 import { Link, useNavigate } from "react-router";
-<<<<<<< HEAD
-import { GraduationCap, User, Mail, Lock, Shield } from "lucide-react";
-=======
-import { GraduationCap, User, Mail, Lock, IdCard, BookOpen, Calendar } from "lucide-react";
->>>>>>> 2b9632eb2809ae69a739f2b373d8495955ab8239
+import { GraduationCap, User, Mail, Lock, IdCard, BookOpen, Calendar } from "lucide-react"; // TEAMMATE: added IdCard, BookOpen, Calendar (keep - more icons available)
 import { useState } from "react";
 import axios from "axios";
 import { useRole } from "../contexts/RoleContext";
@@ -42,28 +38,24 @@ export function SignUpPage() {
     setIsLoading(true);
 
     try {
-      // 1. FIXED: Send ALL the required data to FastAPI
       const response = await axios.post("http://localhost:8000/register", {
         email: formData.email,
         password: formData.password,
         role: formData.role,
-        full_name: formData.fullName, // Now we send the name!
-        course: formData.course || null, // Send course (or null if Faculty)
-        year: formData.year || null      // Send year (or null if Faculty)
+        full_name: formData.fullName,
+        course: formData.course || null,
+        year: formData.year || null
       });
 
       setUserRole(formData.role);
       navigate("/login");
 
     } catch (error: any) {
-      // 2. FIXED: A smarter error catcher!
       const detail = error.response?.data?.detail;
       
-      // If FastAPI sends back an array of validation objects (like our error), extract the text message safely
       if (Array.isArray(detail)) {
         setApiError(`Data Error: ${detail[0].loc[1]} - ${detail[0].msg}`);
       } else {
-        // Otherwise, print the standard text error (like "Email already registered")
         setApiError(detail || "Registration failed. Please check your connection.");
       }
     } finally {
@@ -127,34 +119,23 @@ export function SignUpPage() {
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-5">
-<<<<<<< HEAD
-              {/* Account Type Selection — Student & Faculty only */}
-=======
-              
-              {/* API Error Message Display */}
+
+              {/* API Error Message Display — TEAMMATE's addition, keep it */}
               {apiError && (
                 <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-md">
                   <p className="text-sm text-red-700">{apiError}</p>
                 </div>
               )}
 
-              {/* Account Type Selection - ADMIN REMOVED */}
->>>>>>> 2b9632eb2809ae69a739f2b373d8495955ab8239
+              {/* Account Type Selection - ADMIN REMOVED, Student & Faculty only */}
               <div>
                 <label className="block text-sm font-medium mb-3 text-[#1F2937]">
                   Select Account Type
                 </label>
-<<<<<<< HEAD
-                <div className="grid grid-cols-2 gap-3">
-                  {[
-                    { value: "STUDENT", label: "Student", icon: GraduationCap },
-                    { value: "FACULTY", label: "Faculty", icon: User },
-=======
                 <div className="grid grid-cols-2 gap-4">
                   {[
                     { value: "STUDENT", label: "Student", icon: GraduationCap },
                     { value: "FACULTY", label: "Faculty", icon: User }
->>>>>>> 2b9632eb2809ae69a739f2b373d8495955ab8239
                   ].map((option) => {
                     const OptionIcon = option.icon;
                     return (
