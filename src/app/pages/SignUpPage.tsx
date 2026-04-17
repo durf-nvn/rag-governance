@@ -40,20 +40,30 @@ export function SignUpPage() {
     setIsLoading(true);
 
     try {
-      // Send the request to our FastAPI backend
-      // Note: We are sending email and password to match our current Pydantic schema
-      const response = await axios.post("http://127.0.0.1:8000/register", {
+      // 1. FIXED: Send ALL the required data to FastAPI
+      const response = await axios.post("http://localhost:8000/register", {
         email: formData.email,
         password: formData.password,
-        role: formData.role
+        role: formData.role,
+        full_name: formData.fullName, // Now we send the name!
+        course: formData.course || null, // Send course (or null if Faculty)
+        year: formData.year || null      // Send year (or null if Faculty)
       });
 
       setUserRole(formData.role);
       navigate("/login");
 
     } catch (error: any) {
-      // Capture and display any errors from FastAPI (like "Email already registered")
-      setApiError(error.response?.data?.detail || "Registration failed. Please check your connection.");
+      // 2. FIXED: A smarter error catcher!
+      const detail = error.response?.data?.detail;
+      
+      // If FastAPI sends back an array of validation objects (like our error), extract the text message safely
+      if (Array.isArray(detail)) {
+        setApiError(`Data Error: ${detail[0].loc[1]} - ${detail[0].msg}`);
+      } else {
+        // Otherwise, print the standard text error (like "Email already registered")
+        setApiError(detail || "Registration failed. Please check your connection.");
+      }
     } finally {
       setIsLoading(false);
     }

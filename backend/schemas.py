@@ -1,12 +1,16 @@
 from pydantic import BaseModel, EmailStr
 from datetime import datetime
 import uuid
+from typing import Optional
 
 # What the user sends us when they sign up
 class UserCreate(BaseModel):
     email: EmailStr
     password: str
     role: str  # NEW: We now accept the role from the frontend
+    full_name: str
+    course: Optional[str] = None  # NEW
+    year: Optional[str] = None    # NEW
 
 # What we send back to the user (Notice we DO NOT send the password back!)
 class UserResponse(BaseModel):

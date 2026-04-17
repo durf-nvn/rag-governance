@@ -43,24 +43,32 @@ def register_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
     if existing_user:
         raise HTTPException(status_code=400, detail="Email already registered")
 
-    # 2. Hash password
     hashed_pwd = utils.hash_password(user.password)
-
-    # 3. The Auto-Verification Logic
-    # Students are auto-verified. Faculty are locked (False) until Admin approves.
     auto_verify = True if user.role.upper() == "STUDENT" else False
 
-    # 4. Create user
+    # 2. Create the Base User account
     new_user = models.User(
-        email=user.email, 
+        email=user.email,
+        full_name=user.full_name,
         hashed_password=hashed_pwd,
         role=user.role.upper(),
         is_verified=auto_verify
     )
-
+    
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
+
+    # 3. NEW: If they are a student, create their specific profile!
+    if user.role.upper() == "STUDENT":
+        new_student_profile = models.StudentProfile(
+            user_id=new_user.id,
+            course=user.course,
+            year_level=user.year
+        )
+        db.add(new_student_profile)
+        db.commit()
+
     return new_user
 
 @app.post("/login", response_model=schemas.Token)
