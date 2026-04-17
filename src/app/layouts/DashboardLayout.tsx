@@ -29,10 +29,21 @@ import { NotificationSidebar } from "../components/NotificationSidebar";
 export function DashboardLayout() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user } = useRole();
+  
+  // FIXED: We extract 'userRole' from our context instead of 'user'
+  const { userRole } = useRole();
+  
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
+
+  // FIXED: Create a temporary user object so the UI doesn't crash looking for names
+  const currentRole = userRole || "STUDENT";
+  const userProfile = {
+    role: currentRole,
+    name: currentRole === "STUDENT" ? "CTU Student" : "CTU Staff",
+    email: "user@ctu.edu.ph"
+  };
 
   const allMenuItems = [
     { path: "/app", label: "Dashboard", icon: LayoutDashboard, permission: "canAccessDashboard" },
@@ -49,16 +60,18 @@ export function DashboardLayout() {
   ];
 
   const menuItems = allMenuItems.filter((item) =>
-    hasPermission(user.role, item.permission as any)
+    hasPermission(userProfile.role, item.permission as any)
   );
 
   const getRoleBadge = () => {
-    switch (user.role) {
+    switch (userProfile.role) {
       case "ADMIN":
         return { icon: Shield, color: "bg-[#1D6FA3]", textColor: "text-white", label: "Administrator" };
       case "FACULTY":
         return { icon: BookOpen, color: "bg-[#1D6FA3]", textColor: "text-white", label: "Faculty" };
       case "STUDENT":
+        return { icon: GraduationCap, color: "bg-[#1D6FA3]", textColor: "text-white", label: "Student" };
+      default:
         return { icon: GraduationCap, color: "bg-[#1D6FA3]", textColor: "text-white", label: "Student" };
     }
   };
@@ -66,7 +79,9 @@ export function DashboardLayout() {
   const badge = getRoleBadge();
 
   const handleLogout = () => {
-    navigate("/");
+    // FIXED: Clear the JWT token so the user is securely logged out
+    localStorage.removeItem('token');
+    navigate("/login");
   };
 
   return (
@@ -119,7 +134,7 @@ export function DashboardLayout() {
                   {badge.icon === GraduationCap && <GraduationCap className="h-4 w-4 text-white" />}
                 </div>
                 <div className="text-left hidden lg:block">
-                  <div className="text-sm font-medium text-[#1F2937]">{user.name}</div>
+                  <div className="text-sm font-medium text-[#1F2937]">{userProfile.name}</div>
                   <div className="text-xs text-[#6B7280]">{badge.label}</div>
                 </div>
               </button>
@@ -127,8 +142,8 @@ export function DashboardLayout() {
               {showUserMenu && (
                 <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border border-[#E5E7EB] py-2 z-50">
                   <div className="px-4 py-3 border-b border-[#E5E7EB]">
-                    <p className="text-sm font-medium text-[#1F2937]">{user.name}</p>
-                    <p className="text-xs text-[#6B7280]">{user.email}</p>
+                    <p className="text-sm font-medium text-[#1F2937]">{userProfile.name}</p>
+                    <p className="text-xs text-[#6B7280]">{userProfile.email}</p>
                   </div>
                   <button className="w-full px-4 py-2 text-left text-sm text-[#1F2937] hover:bg-[#F5F7FA] flex items-center gap-2 transition-colors">
                     <User className="h-4 w-4 text-[#6B7280]" />
