@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 
 export type UserRole = 'STUDENT' | 'FACULTY' | 'ADMIN';
 
@@ -10,10 +10,20 @@ interface RoleContextType {
 const RoleContext = createContext<RoleContextType | undefined>(undefined);
 
 export function RoleProvider({ children }: { children: ReactNode }) {
-  const [userRole, setUserRole] = useState<UserRole | null>(null);
+  // Initialize state by checking localStorage first
+  const [userRole, setUserRole] = useState<UserRole | null>(() => {
+    const savedRole = localStorage.getItem('userRole');
+    return (savedRole as UserRole) || null;
+  });
+
+  // Keep localStorage in sync if the role changes
+  const handleSetRole = (role: UserRole) => {
+    localStorage.setItem('userRole', role);
+    setUserRole(role);
+  };
 
   return (
-    <RoleContext.Provider value={{ userRole, setUserRole }}>
+    <RoleContext.Provider value={{ userRole, setUserRole: handleSetRole }}>
       {children}
     </RoleContext.Provider>
   );
