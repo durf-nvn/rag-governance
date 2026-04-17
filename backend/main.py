@@ -90,4 +90,12 @@ def login_user(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = D
         )
 
     access_token = utils.create_access_token(data={"sub": user.email})
-    return {"access_token": access_token, "token_type": "bearer"}
+    
+    # FIXED: Send the actual database details back to React
+    return {
+        "access_token": access_token, 
+        "token_type": "bearer",
+        "full_name": user.full_name or "CTU User", 
+        "email": user.email,
+        "role": user.role
+    }

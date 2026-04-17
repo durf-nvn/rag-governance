@@ -37,12 +37,12 @@ export function DashboardLayout() {
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
 
-  // FIXED: Create a temporary user object so the UI doesn't crash looking for names
+  // Fetch the saved data, or use fallbacks if something goes wrong
   const currentRole = userRole || "STUDENT";
   const userProfile = {
     role: currentRole,
-    name: currentRole === "STUDENT" ? "CTU Student" : "CTU Staff",
-    email: "user@ctu.edu.ph"
+    name: localStorage.getItem('userName') || "CTU User",
+    email: localStorage.getItem('userEmail') || "user@ctu.edu.ph"
   };
 
   const allMenuItems = [

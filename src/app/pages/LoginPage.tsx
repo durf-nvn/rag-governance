@@ -32,15 +32,15 @@ export function LoginPage() {
         },
       });
 
-      // 1. Save the JWT token securely in the browser
+      // 1. Save the JWT token and User Details securely
       localStorage.setItem('token', response.data.access_token);
+      localStorage.setItem('userName', response.data.full_name);
+      localStorage.setItem('userEmail', response.data.email);
       
-      // 2. Set the React Context role 
-      // NOTE: Temporarily hardcoded to STUDENT so your dashboard loads. 
-      // Eventually, you will extract the true role from the JWT token here!
-      setUserRole("STUDENT"); 
+      // 2. Set the TRUE React Context role from the database
+      setUserRole(response.data.role); 
       
-      // 3. Redirect to the protected dashboard
+      // 3. Redirect to the dashboard
       navigate("/app");
       
     } catch (error: any) {
