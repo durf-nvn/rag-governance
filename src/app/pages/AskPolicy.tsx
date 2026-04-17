@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
-import { Send, Sparkles, FileText, ThumbsUp, ThumbsDown } from "lucide-react";
+import { Send, Sparkles, FileText, ThumbsUp, ThumbsDown, Loader2 } from "lucide-react";
+import axios from "axios";
 
 interface Message {
   id: number;
@@ -11,6 +12,7 @@ interface Message {
 
 export function AskPolicy() {
   const [query, setQuery] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
   const [messages, setMessages] = useState<Message[]>([
     {
       id: 1,
@@ -37,30 +39,53 @@ export function AskPolicy() {
     "How to file a grievance?",
   ];
 
-  const handleSendMessage = () => {
+  // FIXED: Wired up to the FastAPI backend!
+  const handleSendMessage = async () => {
     if (!query.trim()) return;
 
     const userMessage: Message = {
       id: messages.length + 1,
       type: "user",
       content: query,
-      timestamp: "Just now"
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     };
 
-    const aiMessage: Message = {
-      id: messages.length + 2,
-      type: "ai",
-      content: `Based on the institutional policies, here's what I found: The grading system follows a weighted average computation where Class Standing (CS) accounts for 60% and Final Examination (FE) accounts for 40% of the final grade. The formula is: Final Grade = (CS × 0.6) + (FE × 0.4). Students must achieve a minimum passing grade of 75% (3.0) to pass a course.`,
-      sources: [
-        { name: "Student Handbook 2026 - Section 5.2", relevance: 95 },
-        { name: "Academic Policies Manual - Chapter 3", relevance: 88 },
-        { name: "Grading System Procedure v1.5", relevance: 92 }
-      ],
-      timestamp: "Just now"
-    };
-
-    setMessages([...messages, userMessage, aiMessage]);
+    setMessages((prev) => [...prev, userMessage]);
     setQuery("");
+    setIsLoading(true);
+
+    try {
+      const response = await axios.post("http://localhost:8000/ask-policy", {
+        question: userMessage.content
+      });
+
+      // Map backend text sources to the teammate's UI format with a dummy relevance score for the progress bar
+      const formattedSources = response.data.sources.map((src: string) => ({
+        name: src,
+        relevance: Math.floor(Math.random() * (99 - 85 + 1) + 85) 
+      }));
+
+      const aiMessage: Message = {
+        id: messages.length + 2,
+        type: "ai",
+        content: response.data.answer,
+        sources: formattedSources.length > 0 ? formattedSources : undefined,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      };
+
+      setMessages((prev) => [...prev, aiMessage]);
+
+    } catch (error) {
+      const errorMessage: Message = {
+        id: messages.length + 2,
+        type: "ai",
+        content: "Sorry, I had trouble connecting to the AI brain. Please make sure the backend and Ollama are running!",
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      };
+      setMessages((prev) => [...prev, errorMessage]);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleQuickQuestion = (question: string) => {
@@ -104,10 +129,10 @@ export function AskPolicy() {
           </div>
         </div>
 
-        {/* Chat Interface - Larger and More Prominent */}
+        {/* Chat Interface */}
         <div className="lg:col-span-9">
           <div className="bg-white rounded-lg border border-[#E5E7EB] flex flex-col h-full">
-            {/* Chat Messages - Scrollable Area */}
+            {/* Chat Messages */}
             <div className="flex-1 overflow-y-auto p-6 space-y-6 min-h-0">
               {messages.map((message) => (
                 <div key={message.id} className={`flex ${message.type === "user" ? "justify-end" : "justify-start"}`}>
@@ -131,7 +156,7 @@ export function AskPolicy() {
                       <p className="whitespace-pre-wrap text-base leading-relaxed">{message.content}</p>
                     </div>
 
-                    {message.sources && (
+                    {message.sources && message.sources.length > 0 && (
                       <div className="mt-4 space-y-3">
                         <p className="text-sm font-medium text-[#1F2937]">Sources:</p>
                         {message.sources.map((source, index) => (
@@ -172,10 +197,28 @@ export function AskPolicy() {
                   </div>
                 </div>
               ))}
+
+              {/* Loading Indicator */}
+              {isLoading && (
+                <div className="flex justify-start">
+                  <div className="max-w-4xl order-1">
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="w-10 h-10 bg-[#1D6FA3] rounded-lg flex items-center justify-center">
+                        <Sparkles className="h-5 w-5 text-white" />
+                      </div>
+                      <span className="text-sm font-medium text-[#1F2937]">AI Assistant</span>
+                    </div>
+                    <div className="rounded-lg px-5 py-4 bg-[#F5F7FA] text-[#1F2937] border border-[#E5E7EB] flex items-center gap-3">
+                      <Loader2 className="h-5 w-5 animate-spin text-[#1D6FA3]" />
+                      <p className="text-base text-gray-500">Searching handbook and generating answer...</p>
+                    </div>
+                  </div>
+                </div>
+              )}
               <div ref={messagesEndRef} />
             </div>
 
-            {/* Input Area - Fixed at Bottom */}
+            {/* Input Area */}
             <div className="border-t border-[#E5E7EB] p-6 bg-white">
               <div className="flex gap-3 items-end">
                 <div className="flex-1">
@@ -195,7 +238,8 @@ export function AskPolicy() {
                 </div>
                 <button
                   onClick={handleSendMessage}
-                  className="px-6 py-4 bg-[#1D6FA3] text-white rounded-lg hover:bg-[#0B3C5D] transition-colors flex items-center gap-2 font-medium h-[72px]"
+                  disabled={isLoading || !query.trim()}
+                  className="px-6 py-4 bg-[#1D6FA3] text-white rounded-lg hover:bg-[#0B3C5D] disabled:opacity-50 transition-colors flex items-center gap-2 font-medium h-[72px]"
                 >
                   <Send className="h-5 w-5" />
                   Send

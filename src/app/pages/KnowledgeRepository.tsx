@@ -1,88 +1,121 @@
-import { useState } from "react"
-import { Search, Filter, Upload, Download, Edit, Archive, Clock, Eye, CheckCircle } from "lucide-react"
+import { useState, useRef, useEffect } from "react"
+import { Search, Filter, Upload, Download, Edit, Archive, Clock, Eye, CheckCircle, FileText } from "lucide-react"
+import axios from "axios"
 import { useRole } from "../contexts/RoleContext"
-import { hasPermission } from "../utils/rolePermissions"
 
 export function KnowledgeRepository() {
-  // FIXED: We extract 'userRole' from our context instead of 'user'
   const { userRole } = useRole()
-  
-  // FIXED: Safely default to STUDENT if the role is still loading
   const currentRole = userRole || "STUDENT"
+
+  // Explicitly allow both Admin and Faculty to upload/edit
+  const canUpload = ["ADMIN", "FACULTY"].includes(currentRole)
+  const canEdit = ["ADMIN", "FACULTY"].includes(currentRole)
+  const canDelete = currentRole === "ADMIN"
 
   const [showUploadModal, setShowUploadModal] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedCategory, setSelectedCategory] = useState("all")
 
-  // FIXED: Check permissions using 'currentRole' instead of the broken 'user.role'
-  const canUpload = hasPermission(currentRole, "canUploadDocuments")
-  const canEdit = hasPermission(currentRole, "canEditDocuments")
-  const canDelete = hasPermission(currentRole, "canDeleteDocuments")
+  // Form State
+  const [formData, setFormData] = useState({
+    name: "",
+    category: "Policy",
+    office: "Academic Affairs",
+    version: "",
+    effectivityDate: ""
+  })
 
-  const documents = [
-    {
-      id: 1,
-      name: "Student Handbook 2026",
-      category: "Policy",
-      office: "Student Affairs",
-      version: "3.2",
-      effectivityDate: "January 15, 2026",
-      status: "Active",
-      lastUpdated: "2 days ago"
-    },
-    {
-      id: 2,
-      name: "Research Ethics Guidelines",
-      category: "Guideline",
-      office: "Research Office",
-      version: "2.1",
-      effectivityDate: "March 1, 2026",
-      status: "Active",
-      lastUpdated: "1 week ago"
-    },
-    {
-      id: 3,
-      name: "Faculty Manual",
-      category: "Policy",
-      office: "Human Resources",
-      version: "4.0",
-      effectivityDate: "June 1, 2025",
-      status: "Active",
-      lastUpdated: "3 weeks ago"
-    },
-    {
-      id: 4,
-      name: "Grading System Procedure",
-      category: "Procedure",
-      office: "Academic Affairs",
-      version: "1.5",
-      effectivityDate: "August 1, 2025",
-      status: "Active",
-      lastUpdated: "1 month ago"
-    },
-    {
-      id: 5,
-      name: "CHED CMO No. 46 s.2012",
-      category: "Memorandum",
-      office: "Quality Assurance",
-      version: "1.0",
-      effectivityDate: "May 20, 2012",
-      status: "Reference",
-      lastUpdated: "6 months ago"
-    },
-  ]
+  // File State
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [isDragging, setIsDragging] = useState(false)
+  const [isUploading, setIsUploading] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const [documents, setDocuments] = useState<any[]>([]);
+
+  useEffect(() => {
+    const loadDocs = async () => {
+      const res = await axios.get("http://localhost:8000/documents");
+      setDocuments(res.data);
+    };
+    loadDocs();
+  }, []);
 
   const getAccessBadge = () => {
     if (canUpload && canEdit) {
       return { label: "Full Access", color: "bg-green-50 text-green-700 border-green-200", icon: CheckCircle }
-    } else if (canEdit) {
-      return { label: "Limited Access", color: "bg-yellow-50 text-yellow-700 border-yellow-200", icon: Edit }
     } else {
       return { label: "View Only", color: "bg-blue-50 text-blue-700 border-blue-200", icon: Eye }
     }
   }
 
   const accessBadge = getAccessBadge()
+
+  // Drag and Drop Handlers
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(true)
+  }
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(false)
+  }
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(false)
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      setSelectedFile(e.dataTransfer.files[0])
+    }
+  }
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      setSelectedFile(e.target.files[0])
+    }
+  }
+
+  // Handle Form Input Changes
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    setFormData({ ...formData, [e.target.name]: e.target.value })
+  }
+
+  // API Upload Function
+  const handleUploadSubmit = async () => {
+    if (!selectedFile || !formData.name || !formData.version || !formData.effectivityDate) {
+      alert("Please fill out all fields and select a file.")
+      return
+    }
+
+    setIsUploading(true)
+    
+    // Bundle the file AND the text fields together
+    const submitData = new FormData()
+    submitData.append("file", selectedFile)
+    submitData.append("name", formData.name)
+    submitData.append("category", formData.category)
+    submitData.append("office", formData.office)
+    submitData.append("version", formData.version)
+    submitData.append("effectivity_date", formData.effectivityDate)
+
+    try {
+      const response = await axios.post("http://localhost:8000/upload-document", submitData, {
+        headers: { "Content-Type": "multipart/form-data" }
+      })
+      alert(response.data.message)
+      
+      // Reset Modal
+      setShowUploadModal(false)
+      setSelectedFile(null)
+      setFormData({ name: "", category: "Policy", office: "Academic Affairs", version: "", effectivityDate: "" })
+      
+    } catch (error) {
+      alert("Upload failed. Please check your connection.")
+    } finally {
+      setIsUploading(false)
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -109,64 +142,6 @@ export function KnowledgeRepository() {
         </div>
       </div>
 
-      {/* Read-only notice for Students */}
-      {!canUpload && !canEdit && (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-          <div className="flex items-start gap-3">
-            <Eye className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" />
-            <div>
-              <p className="text-sm font-medium text-blue-900">View-Only Access</p>
-              <p className="text-sm text-blue-700 mt-1">
-                You can view and download documents, but cannot upload or edit them.
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Search and Filters */}
-      <div className="bg-white rounded-lg border border-[#E5E7EB] p-6">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="md:col-span-2">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-[#6B7280]" />
-              <input
-                type="text"
-                placeholder="Search by document name, keyword, or content..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-2.5 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm text-[#1F2937] placeholder-[#6B7280] focus:outline-none focus:ring-2 focus:ring-[#1D6FA3] focus:border-transparent"
-              />
-            </div>
-          </div>
-
-          <div>
-            <select
-              value={selectedCategory}
-              onChange={(e) => setSelectedCategory(e.target.value)}
-              className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm text-[#1F2937] focus:outline-none focus:ring-2 focus:ring-[#1D6FA3] focus:border-transparent"
-            >
-              <option value="all">All Categories</option>
-              <option value="policy">Policies</option>
-              <option value="procedure">Procedures</option>
-              <option value="guideline">Guidelines</option>
-              <option value="memorandum">Memoranda</option>
-            </select>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-3 mt-4">
-          <button className="flex items-center gap-2 px-4 py-2 text-sm text-[#6B7280] hover:bg-[#F5F7FA] rounded-lg transition-colors border border-[#E5E7EB]">
-            <Filter className="h-4 w-4" />
-            More Filters
-          </button>
-          <div className="flex gap-2">
-            <span className="px-3 py-1 bg-blue-50 text-blue-700 text-xs font-medium rounded-lg border border-blue-200">Office: All</span>
-            <span className="px-3 py-1 bg-green-50 text-green-700 text-xs font-medium rounded-lg border border-green-200">Status: Active</span>
-          </div>
-        </div>
-      </div>
-
       {/* Documents Table */}
       <div className="bg-white rounded-lg border border-[#E5E7EB] overflow-hidden">
         <div className="overflow-x-auto">
@@ -176,77 +151,17 @@ export function KnowledgeRepository() {
                 <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Document Name</th>
                 <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Category</th>
                 <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Office</th>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Version</th>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Effectivity</th>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Status</th>
                 <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#E5E7EB]">
               {documents.map((doc) => (
-                <tr key={doc.id} className="hover:bg-[#F5F7FA] transition-colors">
-                  <td className="px-6 py-4">
-                    <div>
-                      <div className="text-sm font-medium text-[#1F2937]">{doc.name}</div>
-                      <div className="text-xs text-[#6B7280]">{doc.lastUpdated}</div>
-                    </div>
-                  </td>
+                <tr key={doc.id} className="hover:bg-[#F5F7FA]">
+                  <td className="px-6 py-4 text-sm font-medium text-[#1F2937]">{doc.name}</td>
                   <td className="px-6 py-4 text-sm text-[#1F2937]">{doc.category}</td>
                   <td className="px-6 py-4 text-sm text-[#1F2937]">{doc.office}</td>
                   <td className="px-6 py-4">
-                    <span className="px-3 py-1 bg-blue-50 text-blue-700 text-xs font-medium rounded-lg border border-blue-200">
-                      v{doc.version}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-sm text-[#6B7280]">{doc.effectivityDate}</td>
-                  <td className="px-6 py-4">
-                    <span
-                      className={`px-3 py-1 rounded-lg text-xs font-medium border ${
-                        doc.status === "Active"
-                          ? "bg-green-50 text-green-700 border-green-200"
-                          : "bg-gray-100 text-gray-700 border-gray-200"
-                      }`}
-                    >
-                      {doc.status}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-1">
-                      <button
-                        className="p-2 text-[#6B7280] hover:text-[#1D6FA3] hover:bg-blue-50 rounded-lg transition-colors"
-                        title="View"
-                      >
-                        <Eye className="h-4 w-4" />
-                      </button>
-                      <button
-                        className="p-2 text-[#6B7280] hover:text-[#1D6FA3] hover:bg-blue-50 rounded-lg transition-colors"
-                        title="Download"
-                      >
-                        <Download className="h-4 w-4" />
-                      </button>
-                      {canEdit && (
-                        <button
-                          className="p-2 text-[#6B7280] hover:text-[#10B981] hover:bg-green-50 rounded-lg transition-colors"
-                          title="Edit"
-                        >
-                          <Edit className="h-4 w-4" />
-                        </button>
-                      )}
-                      <button
-                        className="p-2 text-[#6B7280] hover:text-[#FFC107] hover:bg-yellow-50 rounded-lg transition-colors"
-                        title="Version History"
-                      >
-                        <Clock className="h-4 w-4" />
-                      </button>
-                      {canDelete && (
-                        <button
-                          className="p-2 text-[#6B7280] hover:text-[#EF4444] hover:bg-red-50 rounded-lg transition-colors"
-                          title="Archive"
-                        >
-                          <Archive className="h-4 w-4" />
-                        </button>
-                      )}
-                    </div>
+                    <button className="p-2 text-[#6B7280] hover:text-[#1D6FA3]"><Eye className="h-4 w-4" /></button>
                   </td>
                 </tr>
               ))}
@@ -255,7 +170,7 @@ export function KnowledgeRepository() {
         </div>
       </div>
 
-      {/* Upload Modal */}
+      {/* Upload Modal with Full Form */}
       {showUploadModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] flex flex-col">
@@ -269,7 +184,10 @@ export function KnowledgeRepository() {
                   <label className="block text-sm font-medium text-[#1F2937] mb-2">Document Name</label>
                   <input
                     type="text"
-                    className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1D6FA3] focus:border-transparent"
+                    name="name"
+                    value={formData.name}
+                    onChange={handleInputChange}
+                    className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1D6FA3]"
                     placeholder="Enter document name"
                   />
                 </div>
@@ -277,7 +195,7 @@ export function KnowledgeRepository() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-[#1F2937] mb-2">Category</label>
-                    <select className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1D6FA3] focus:border-transparent">
+                    <select name="category" value={formData.category} onChange={handleInputChange} className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1D6FA3]">
                       <option>Policy</option>
                       <option>Procedure</option>
                       <option>Guideline</option>
@@ -287,7 +205,7 @@ export function KnowledgeRepository() {
 
                   <div>
                     <label className="block text-sm font-medium text-[#1F2937] mb-2">Office</label>
-                    <select className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1D6FA3] focus:border-transparent">
+                    <select name="office" value={formData.office} onChange={handleInputChange} className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1D6FA3]">
                       <option>Academic Affairs</option>
                       <option>Student Affairs</option>
                       <option>Research Office</option>
@@ -301,7 +219,10 @@ export function KnowledgeRepository() {
                     <label className="block text-sm font-medium text-[#1F2937] mb-2">Version</label>
                     <input
                       type="text"
-                      className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1D6FA3] focus:border-transparent"
+                      name="version"
+                      value={formData.version}
+                      onChange={handleInputChange}
+                      className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1D6FA3]"
                       placeholder="e.g., 1.0, 2.5"
                     />
                   </div>
@@ -310,41 +231,67 @@ export function KnowledgeRepository() {
                     <label className="block text-sm font-medium text-[#1F2937] mb-2">Effectivity Date</label>
                     <input
                       type="date"
-                      className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1D6FA3] focus:border-transparent"
+                      name="effectivityDate"
+                      value={formData.effectivityDate}
+                      onChange={handleInputChange}
+                      className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1D6FA3]"
                     />
                   </div>
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-[#1F2937] mb-2">Upload File</label>
-                  <div className="border-2 border-dashed border-[#E5E7EB] rounded-lg p-8 text-center hover:border-[#1D6FA3] hover:bg-[#F5F7FA] transition-all cursor-pointer">
-                    <Upload className="h-12 w-12 mx-auto mb-4 text-[#6B7280]" />
-                    <p className="text-sm text-[#1F2937] mb-2 font-medium">Drag and drop your file here, or click to browse</p>
-                    <p className="text-xs text-[#6B7280]">Supported formats: PDF, DOCX, DOC (Max 10MB)</p>
-                    <input type="file" className="hidden" />
+                  <div 
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                    onDrop={handleDrop}
+                    onClick={() => fileInputRef.current?.click()}
+                    className={`border-2 border-dashed rounded-lg p-8 text-center transition-all cursor-pointer ${
+                      isDragging ? "border-[#1D6FA3] bg-[#E3F2FD]" : "border-[#E5E7EB] hover:border-[#1D6FA3] hover:bg-[#F5F7FA]"
+                    }`}
+                  >
+                    {selectedFile ? (
+                      <div className="flex flex-col items-center">
+                        <FileText className="h-12 w-12 text-[#1D6FA3] mb-2" />
+                        <p className="text-sm font-medium text-[#1F2937]">{selectedFile.name}</p>
+                        <p className="text-xs text-[#6B7280]">{(selectedFile.size / 1024 / 1024).toFixed(2)} MB</p>
+                      </div>
+                    ) : (
+                      <div>
+                        <Upload className="h-12 w-12 mx-auto mb-4 text-[#6B7280]" />
+                        <p className="text-sm text-[#1F2937] mb-2 font-medium">Drag and drop your PDF here, or click to browse</p>
+                        <p className="text-xs text-[#6B7280]">Supported format: PDF</p>
+                      </div>
+                    )}
+                    <input 
+                      type="file" 
+                      accept=".pdf"
+                      className="hidden" 
+                      ref={fileInputRef}
+                      onChange={handleFileSelect}
+                    />
                   </div>
                 </div>
               </div>
             </div>
 
-            <div className="p-6 border-t border-[#E5E7EB] bg-white">
-              <div className="flex justify-end gap-3">
-                <button
-                  onClick={() => setShowUploadModal(false)}
-                  className="px-6 py-2.5 text-sm font-medium text-[#6B7280] hover:bg-[#F5F7FA] rounded-lg transition-colors border border-[#E5E7EB]"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={() => {
-                    setShowUploadModal(false)
-                    alert("Document uploaded successfully!")
-                  }}
-                  className="px-6 py-2.5 text-sm font-medium bg-[#1D6FA3] text-white rounded-lg hover:bg-[#0B3C5D] transition-colors"
-                >
-                  Upload Document
-                </button>
-              </div>
+            <div className="p-6 border-t border-[#E5E7EB] bg-white flex justify-end gap-3">
+              <button
+                onClick={() => {
+                  setShowUploadModal(false)
+                  setSelectedFile(null)
+                }}
+                className="px-6 py-2.5 text-sm font-medium text-[#6B7280] border border-[#E5E7EB] rounded-lg hover:bg-[#F5F7FA]"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleUploadSubmit}
+                disabled={!selectedFile || isUploading}
+                className="px-6 py-2.5 text-sm font-medium bg-[#1D6FA3] text-white rounded-lg disabled:opacity-50 hover:bg-[#0B3C5D]"
+              >
+                {isUploading ? "Extracting Data..." : "Upload Document"}
+              </button>
             </div>
           </div>
         </div>

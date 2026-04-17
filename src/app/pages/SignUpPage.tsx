@@ -1,5 +1,5 @@
 import { Link, useNavigate } from "react-router";
-import { GraduationCap, User, Mail, Lock, IdCard, BookOpen, Calendar } from "lucide-react"; // TEAMMATE: added IdCard, BookOpen, Calendar (keep - more icons available)
+import { GraduationCap, User, Mail, Lock, IdCard, BookOpen, Calendar } from "lucide-react";
 import { useState } from "react";
 import axios from "axios";
 import { useRole } from "../contexts/RoleContext";
@@ -17,8 +17,10 @@ export function SignUpPage() {
     password: "",
     confirmPassword: "",
     role: "STUDENT" as UserRole,
+    studentId: "",
     course: "",
     year: "",
+    employeeId: "",
     agreeToTerms: false
   });
 
@@ -38,24 +40,28 @@ export function SignUpPage() {
     setIsLoading(true);
 
     try {
+      // 1. FIXED: Send ALL the required data to FastAPI
       const response = await axios.post("http://localhost:8000/register", {
         email: formData.email,
         password: formData.password,
         role: formData.role,
-        full_name: formData.fullName,
-        course: formData.course || null,
-        year: formData.year || null
+        full_name: formData.fullName, // Now we send the name!
+        course: formData.course || null, // Send course (or null if Faculty)
+        year: formData.year || null      // Send year (or null if Faculty)
       });
 
       setUserRole(formData.role);
       navigate("/login");
 
     } catch (error: any) {
+      // 2. FIXED: A smarter error catcher!
       const detail = error.response?.data?.detail;
       
+      // If FastAPI sends back an array of validation objects (like our error), extract the text message safely
       if (Array.isArray(detail)) {
         setApiError(`Data Error: ${detail[0].loc[1]} - ${detail[0].msg}`);
       } else {
+        // Otherwise, print the standard text error (like "Email already registered")
         setApiError(detail || "Registration failed. Please check your connection.");
       }
     } finally {
@@ -117,17 +123,17 @@ export function SignUpPage() {
               <h2 className="text-2xl font-semibold text-[#1F2937] mb-2">Create Your Account</h2>
               <p className="text-sm text-[#6B7280]">Fill in your details to get started</p>
             </div>
-
+            
             <form onSubmit={handleSubmit} className="space-y-5">
-
-              {/* API Error Message Display — TEAMMATE's addition, keep it */}
+              
+              {/* API Error Message Display */}
               {apiError && (
                 <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-md">
                   <p className="text-sm text-red-700">{apiError}</p>
                 </div>
               )}
 
-              {/* Account Type Selection - ADMIN REMOVED, Student & Faculty only */}
+              {/* Account Type Selection - ADMIN REMOVED */}
               <div>
                 <label className="block text-sm font-medium mb-3 text-[#1F2937]">
                   Select Account Type

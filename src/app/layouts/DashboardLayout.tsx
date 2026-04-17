@@ -1,4 +1,3 @@
-
 import { Outlet, Link, useLocation, useNavigate } from "react-router";
 import { useState } from "react";
 import {
@@ -38,13 +37,12 @@ export function DashboardLayout() {
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
 
-  // Fetch the saved data, or use fallbacks if something goes wrong
-  const currentRole = userRole || "STUDENT";
+  const currentRole = userRole || "STUDENT"
   const userProfile = {
     role: currentRole,
     name: localStorage.getItem('userName') || "CTU User",
     email: localStorage.getItem('userEmail') || "user@ctu.edu.ph"
-  };
+  }
 
   const allMenuItems = [
     { path: "/app", label: "Dashboard", icon: LayoutDashboard, permission: "canAccessDashboard" },
@@ -116,12 +114,10 @@ export function DashboardLayout() {
           <div className="flex items-center gap-3">
             <RoleSwitcher />
 
-           <button
-  onClick={() => setShowNotifications(true)}
-  title="Notifications"
-  aria-label="Notifications"
-  className="relative p-2 hover:bg-[#F5F7FA] rounded-lg transition-colors"
->
+            <button
+              onClick={() => setShowNotifications(true)}
+              className="relative p-2 hover:bg-[#F5F7FA] rounded-lg transition-colors"
+            >
               <Bell className="h-5 w-5 text-[#6B7280]" />
               <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-[#EF4444] rounded-full"></span>
             </button>
@@ -148,21 +144,14 @@ export function DashboardLayout() {
                     <p className="text-sm font-medium text-[#1F2937]">{userProfile.name}</p>
                     <p className="text-xs text-[#6B7280]">{userProfile.email}</p>
                   </div>
-               
-<button
-  onClick={() => { navigate("/app/profile"); setShowUserMenu(false); }}
-  className="w-full px-4 py-2 text-left text-sm text-[#1F2937] hover:bg-[#F5F7FA] flex items-center gap-2 transition-colors"
->
-  <User className="h-4 w-4 text-[#6B7280]" />
-  My Profile
-</button>
-<button
-  onClick={() => { navigate("/app/settings"); setShowUserMenu(false); }}
-  className="w-full px-4 py-2 text-left text-sm text-[#1F2937] hover:bg-[#F5F7FA] flex items-center gap-2 transition-colors"
->
-  <Settings className="h-4 w-4 text-[#6B7280]" />
-  Settings
-</button>
+                  <button className="w-full px-4 py-2 text-left text-sm text-[#1F2937] hover:bg-[#F5F7FA] flex items-center gap-2 transition-colors">
+                    <User className="h-4 w-4 text-[#6B7280]" />
+                    My Profile
+                  </button>
+                  <button className="w-full px-4 py-2 text-left text-sm text-[#1F2937] hover:bg-[#F5F7FA] flex items-center gap-2 transition-colors">
+                    <Settings className="h-4 w-4 text-[#6B7280]" />
+                    Settings
+                  </button>
                   <div className="border-t border-[#E5E7EB] my-1"></div>
                   <button
                     onClick={handleLogout}

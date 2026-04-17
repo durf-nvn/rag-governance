@@ -1,4 +1,4 @@
-import { createBrowserRouter, Outlet } from "react-router";
+import { createBrowserRouter, Outlet } from "react-router"; // <-- Note: added Outlet here
 import { LandingPage } from "./pages/LandingPage";
 import { LoginPage } from "./pages/LoginPage";
 import { SignUpPage } from "./pages/SignUpPage";
@@ -17,21 +17,20 @@ import { AIDocumentGenerator } from "./pages/AIDocumentGenerator";
 import { GradeEvaluation } from "./pages/GradeEvaluation";
 import { StudentRecords } from "./pages/StudentRecords";
 import { ProtectedRoute } from "./components/ProtectedRoute";
-import { ForgotPasswordPage } from "./pages/ForgotPasswordPage"; // YOUR addition
-import { AdminProfilePage } from "./pages/AdminProfilePage";     // YOUR addition
-import { RoleProvider } from "./contexts/RoleContext";           // TEAMMATE's addition
+import { RoleProvider } from "./contexts/RoleContext"; // <-- Import the provider here
 
-// TEAMMATE's: Root layout that wraps everything in RoleProvider
+// Create a root layout that wraps EVERYTHING in the RoleProvider
 function RootLayout() {
   return (
     <RoleProvider>
-      <Outlet />
+      <Outlet /> 
     </RoleProvider>
   );
 }
 
 export const router = createBrowserRouter([
   {
+    // The root layout acts as the very top level for all routes
     element: <RootLayout />,
     children: [
       {
@@ -47,18 +46,10 @@ export const router = createBrowserRouter([
         element: <SignUpPage />,
       },
       {
-        path: "/forgot-password",
-        element: <ForgotPasswordPage />,
-      },
-      {
-        path: "/dashboard",
+        path: "/app",
         element: <DashboardLayout />,
         children: [
           { index: true, element: <DashboardRouter /> },
-          {
-            path: "profile",
-            element: <AdminProfilePage />,
-          },
           {
             path: "knowledge-repository",
             element: (
