@@ -183,44 +183,46 @@ async def upload_document(
 def ask_policy(request: QuestionRequest):
     question = request.question
     
-    # 1. RETRIEVE: Find the top 3 most relevant paragraphs in Supabase
+    # 1. RETRIEVE: Find relevant sections in Supabase
     relevant_chunks = vector_store.search_knowledge(question)
     
-    if not relevant_chunks:
-        return {"answer": "I'm sorry, I couldn't find any information about that in the uploaded documents.", "sources": []}
-    
-    # 2. AUGMENT: Combine the chunks into one big context string
+    # 2. AUGMENT: Prepare the context string
     context_text = "\n\n".join([chunk['content'] for chunk in relevant_chunks])
     
-    # 3. GENERATE: Give the Cloud AI a strict personality and the context
-    system_prompt = f"""You are the official AI Assistant for Cebu Technological University (CTU) Argao Campus.
-    Your job is to answer student questions based STRICTLY on the provided context. 
-    If the answer is not in the context, say "I cannot find this in the institutional policies."
-    Do not make up rules.
+    # 3. GENERATE: The "Hybrid" System Prompt
+    system_prompt = f"""You are the friendly and professional AI Policy Assistant for Cebu Technological University (CTU) Argao Campus.
     
-    CONTEXT:
+    YOUR PERSONALITY:
+    - You are warm, welcoming, and helpful.
+    - You represent the CTU Argao brand.
+
+    INSTRUCTIONS:
+    1. GREETINGS: If the user says "Hello", "Hi", "Good morning", or asks "How are you?", respond warmly and introduce yourself. Ask how you can assist them with university policies today.
+    2. POLICY QUESTIONS: If the question is about university rules, grades, research, or handbooks, use the CONTEXT provided below to answer.
+    3. NO CONTEXT: If a question is asked that is NOT in the context, say: "I'm sorry, I don't have the specific details for that in our current records. You might want to visit the relevant campus office for more info!"
+    4. STAY IN CHARACTER: Even when you can't find an answer, remain professional and polite.
+
+    CONTEXT FROM HANDBOOKS:
     {context_text}
     """
     
     try:
-        # Call the Groq Cloud API (Using the ultra-fast Llama 3 8B model)
         response = groq_client.chat.completions.create(
             messages=[
                 {'role': 'system', 'content': system_prompt},
                 {'role': 'user', 'content': question}
             ],
-            model="llama-3.1-8b-instant", 
-            temperature=0.2 # Keep it low so the AI doesn't hallucinate
+            model="llama-3.1-8b-instant",
+            temperature=0.3 # Increased slightly to make it more "conversational"
         )
         
-        # Extract the text answer
         answer = response.choices[0].message.content
         
     except Exception as e:
         print(f"Cloud API Error: {e}")
-        return {"answer": "Sorry, I am having trouble connecting to the cloud server right now.", "sources": []}
+        return {"answer": "I'm having a bit of trouble connecting to the network. Please try again in a moment!", "sources": []}
 
-    # Format the sources so the frontend can display where the AI got the answer
+    # Format the sources
     sources = [
         f"{chunk['metadata']['name']} (v{chunk['metadata']['version']}) - {chunk['metadata']['office']}"
         for chunk in relevant_chunks
@@ -228,9 +230,13 @@ def ask_policy(request: QuestionRequest):
     # Remove duplicates
     sources = list(set(sources))
     
+    # If it was just a greeting, the LLM will likely ignore the context, 
+    # so we can clear the sources for a cleaner UI
+    final_sources = sources if "I cannot find" not in answer and len(context_text) > 10 else []
+
     return {
         "answer": answer,
-        "sources": sources
+        "sources": final_sources
     }
 
 @app.get("/documents")
