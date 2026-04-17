@@ -12,6 +12,7 @@ import PyPDF2
 import io
 from groq import Groq
 from pydantic import BaseModel
+import datetime
 
 load_dotenv()
 groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
