@@ -1,48 +1,19 @@
-import { createContext, useContext, useState } from "react";
-import type { ReactNode } from "react";
+import React, { createContext, useContext, useState, ReactNode } from 'react';
 
-export type UserRole = "ADMIN" | "FACULTY" | "STUDENT";
-
-interface User {
-  name: string;
-  email: string;
-  role: UserRole;
-}
+export type UserRole = 'STUDENT' | 'FACULTY' | 'ADMIN';
 
 interface RoleContextType {
-  user: User;
+  userRole: UserRole | null;
   setUserRole: (role: UserRole) => void;
 }
 
 const RoleContext = createContext<RoleContextType | undefined>(undefined);
 
 export function RoleProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User>({
-    name: "Admin User",
-    email: "admin@ctu.edu.ph",
-    role: "ADMIN",
-  });
-
-  const setUserRole = (role: UserRole) => {
-    const names = {
-      ADMIN: "Admin User",
-      FACULTY: "Faculty User",
-      STUDENT: "Student User",
-    };
-    const emails = {
-      ADMIN: "admin@ctu.edu.ph",
-      FACULTY: "faculty@ctu.edu.ph",
-      STUDENT: "student@ctu.edu.ph",
-    };
-    setUser({
-      name: names[role],
-      email: emails[role],
-      role,
-    });
-  };
+  const [userRole, setUserRole] = useState<UserRole | null>(null);
 
   return (
-    <RoleContext.Provider value={{ user, setUserRole }}>
+    <RoleContext.Provider value={{ userRole, setUserRole }}>
       {children}
     </RoleContext.Provider>
   );
@@ -51,7 +22,7 @@ export function RoleProvider({ children }: { children: ReactNode }) {
 export function useRole() {
   const context = useContext(RoleContext);
   if (context === undefined) {
-    throw new Error("useRole must be used within a RoleProvider");
+    throw new Error('useRole must be used within a RoleProvider');
   }
   return context;
 }

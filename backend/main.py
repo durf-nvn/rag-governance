@@ -1,16 +1,24 @@
 from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi.middleware.cors import CORSMiddleware  # <-- ADD THIS IMPORT
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 import models, schemas, utils
 from database import engine, get_db
 
-# This line tells SQLAlchemy to create the tables in Supabase based on models.py
 models.Base.metadata.create_all(bind=engine)
 
-# Initialize the FastAPI app
 app = FastAPI(
     title="CTU Institutional Knowledge System API",
     description="Backend for the RAG-Powered Quality Assurance System"
+)
+
+# --- ADD THIS CORS BLOCK ---
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"], # Allows your React app to communicate with FastAPI
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # A simple test route to check if the server is running

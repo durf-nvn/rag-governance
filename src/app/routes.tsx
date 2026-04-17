@@ -1,4 +1,4 @@
-import { createBrowserRouter } from "react-router";
+import { createBrowserRouter, Outlet } from "react-router"; // <-- Note: added Outlet here
 import { LandingPage } from "./pages/LandingPage";
 import { LoginPage } from "./pages/LoginPage";
 import { SignUpPage } from "./pages/SignUpPage";
@@ -17,120 +17,136 @@ import { AIDocumentGenerator } from "./pages/AIDocumentGenerator";
 import { GradeEvaluation } from "./pages/GradeEvaluation";
 import { StudentRecords } from "./pages/StudentRecords";
 import { ProtectedRoute } from "./components/ProtectedRoute";
+import { RoleProvider } from "./contexts/RoleContext"; // <-- Import the provider here
+
+// Create a root layout that wraps EVERYTHING in the RoleProvider
+function RootLayout() {
+  return (
+    <RoleProvider>
+      <Outlet /> 
+    </RoleProvider>
+  );
+}
 
 export const router = createBrowserRouter([
   {
-    path: "/",
-    element: <LandingPage />,
-  },
-  {
-    path: "/login",
-    element: <LoginPage />,
-  },
-  {
-    path: "/signup",
-    element: <SignUpPage />,
-  },
-  {
-    path: "/app",
-    element: <DashboardLayout />,
+    // The root layout acts as the very top level for all routes
+    element: <RootLayout />,
     children: [
-      { index: true, element: <DashboardRouter /> },
       {
-        path: "knowledge-repository",
-        element: (
-          <ProtectedRoute permission="canAccessKnowledgeRepository">
-            <KnowledgeRepository />
-          </ProtectedRoute>
-        ),
+        path: "/",
+        element: <LandingPage />,
       },
       {
-        path: "ask-policy",
-        element: (
-          <ProtectedRoute permission="canAccessAskPolicy">
-            <AskPolicy />
-          </ProtectedRoute>
-        ),
+        path: "/login",
+        element: <LoginPage />,
       },
       {
-        path: "accreditation-support",
-        element: (
-          <ProtectedRoute permission="canAccessAccreditationSupport">
-            <AccreditationSupport />
-          </ProtectedRoute>
-        ),
+        path: "/signup",
+        element: <SignUpPage />,
       },
       {
-        path: "governance-reference",
-        element: (
-          <ProtectedRoute permission="canAccessGovernanceReference">
-            <GovernanceReference />
-          </ProtectedRoute>
-        ),
-      },
-      {
-        path: "audit-trail",
-        element: (
-          <ProtectedRoute permission="canAccessAuditTrail">
-            <AuditTrail />
-          </ProtectedRoute>
-        ),
-      },
-      {
-        path: "users-roles",
-        element: (
-          <ProtectedRoute permission="canAccessUsersRoles">
-            <UsersRoles />
-          </ProtectedRoute>
-        ),
-      },
-      {
-        path: "settings",
-        element: (
-          <ProtectedRoute permission="canAccessSettings">
-            <Settings />
-          </ProtectedRoute>
-        ),
-      },
-      {
-        path: "broadcast-announcement",
-        element: (
-          <ProtectedRoute permission="canAccessBroadcastAnnouncement">
-            <BroadcastAnnouncement />
-          </ProtectedRoute>
-        ),
-      },
-      {
-        path: "document-generator",
-        element: (
-          <ProtectedRoute permission="canAccessDocumentGenerator">
-            <DocumentGenerator />
-          </ProtectedRoute>
-        ),
-      },
-      {
-        path: "ai-document-generator",
-        element: (
-          <ProtectedRoute permission="canAccessAIDocumentGenerator">
-            <AIDocumentGenerator />
-          </ProtectedRoute>
-        ),
-      },
-      {
-        path: "grade-evaluation",
-        element: (
-          <ProtectedRoute permission="canAccessGradeEvaluation">
-            <GradeEvaluation />
-          </ProtectedRoute>
-        ),
-      },
-      {
-        path: "student-records",
-        element: (
-          <ProtectedRoute permission="canAccessStudentRecords">
-            <StudentRecords />
-          </ProtectedRoute>
-        ),
+        path: "/app",
+        element: <DashboardLayout />,
+        children: [
+          { index: true, element: <DashboardRouter /> },
+          {
+            path: "knowledge-repository",
+            element: (
+              <ProtectedRoute permission="canAccessKnowledgeRepository">
+                <KnowledgeRepository />
+              </ProtectedRoute>
+            ),
+          },
+          {
+            path: "ask-policy",
+            element: (
+              <ProtectedRoute permission="canAccessAskPolicy">
+                <AskPolicy />
+              </ProtectedRoute>
+            ),
+          },
+          {
+            path: "accreditation-support",
+            element: (
+              <ProtectedRoute permission="canAccessAccreditationSupport">
+                <AccreditationSupport />
+              </ProtectedRoute>
+            ),
+          },
+          {
+            path: "governance-reference",
+            element: (
+              <ProtectedRoute permission="canAccessGovernanceReference">
+                <GovernanceReference />
+              </ProtectedRoute>
+            ),
+          },
+          {
+            path: "audit-trail",
+            element: (
+              <ProtectedRoute permission="canAccessAuditTrail">
+                <AuditTrail />
+              </ProtectedRoute>
+            ),
+          },
+          {
+            path: "users-roles",
+            element: (
+              <ProtectedRoute permission="canAccessUsersRoles">
+                <UsersRoles />
+              </ProtectedRoute>
+            ),
+          },
+          {
+            path: "settings",
+            element: (
+              <ProtectedRoute permission="canAccessSettings">
+                <Settings />
+              </ProtectedRoute>
+            ),
+          },
+          {
+            path: "broadcast-announcement",
+            element: (
+              <ProtectedRoute permission="canAccessBroadcastAnnouncement">
+                <BroadcastAnnouncement />
+              </ProtectedRoute>
+            ),
+          },
+          {
+            path: "document-generator",
+            element: (
+              <ProtectedRoute permission="canAccessDocumentGenerator">
+                <DocumentGenerator />
+              </ProtectedRoute>
+            ),
+          },
+          {
+            path: "ai-document-generator",
+            element: (
+              <ProtectedRoute permission="canAccessAIDocumentGenerator">
+                <AIDocumentGenerator />
+              </ProtectedRoute>
+            ),
+          },
+          {
+            path: "grade-evaluation",
+            element: (
+              <ProtectedRoute permission="canAccessGradeEvaluation">
+                <GradeEvaluation />
+              </ProtectedRoute>
+            ),
+          },
+          {
+            path: "student-records",
+            element: (
+              <ProtectedRoute permission="canAccessStudentRecords">
+                <StudentRecords />
+              </ProtectedRoute>
+            ),
+          },
+        ],
       },
     ],
   },

@@ -1,12 +1,16 @@
 import { Link, useNavigate } from "react-router";
-import { GraduationCap, User, Mail, Lock, Shield, IdCard, BookOpen, Calendar } from "lucide-react";
+import { GraduationCap, User, Mail, Lock, IdCard, BookOpen, Calendar } from "lucide-react";
 import { useState } from "react";
+import axios from "axios";
 import { useRole } from "../contexts/RoleContext";
 import type { UserRole } from "../contexts/RoleContext";
 
 export function SignUpPage() {
   const navigate = useNavigate();
   const { setUserRole } = useRole();
+  const [isLoading, setIsLoading] = useState(false);
+  const [apiError, setApiError] = useState("");
+  
   const [formData, setFormData] = useState({
     fullName: "",
     email: "",
@@ -20,18 +24,39 @@ export function SignUpPage() {
     agreeToTerms: false
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setApiError("");
+
     if (formData.password !== formData.confirmPassword) {
-      alert("Passwords do not match!");
+      setApiError("Passwords do not match!");
       return;
     }
     if (!formData.agreeToTerms) {
-      alert("Please agree to the terms and conditions");
+      setApiError("Please agree to the terms and conditions");
       return;
     }
-    setUserRole(formData.role);
-    navigate("/app");
+
+    setIsLoading(true);
+
+    try {
+      // Send the request to our FastAPI backend
+      // Note: We are sending email and password to match our current Pydantic schema
+      const response = await axios.post("http://127.0.0.1:8000/register", {
+        email: formData.email,
+        password: formData.password
+      });
+
+      // If successful, set local state and redirect to login
+      setUserRole(formData.role);
+      navigate("/login");
+
+    } catch (error: any) {
+      // Capture and display any errors from FastAPI (like "Email already registered")
+      setApiError(error.response?.data?.detail || "Registration failed. Please check your connection.");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const courses = [
@@ -90,16 +115,23 @@ export function SignUpPage() {
             </div>
             
             <form onSubmit={handleSubmit} className="space-y-5">
-              {/* Account Type Selection */}
+              
+              {/* API Error Message Display */}
+              {apiError && (
+                <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-md">
+                  <p className="text-sm text-red-700">{apiError}</p>
+                </div>
+              )}
+
+              {/* Account Type Selection - ADMIN REMOVED */}
               <div>
                 <label className="block text-sm font-medium mb-3 text-[#1F2937]">
                   Select Account Type
                 </label>
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-2 gap-4">
                   {[
                     { value: "STUDENT", label: "Student", icon: GraduationCap },
-                    { value: "FACULTY", label: "Faculty", icon: User },
-                    { value: "ADMIN", label: "Admin", icon: Shield }
+                    { value: "FACULTY", label: "Faculty", icon: User }
                   ].map((option) => {
                     const OptionIcon = option.icon;
                     return (
@@ -169,49 +201,44 @@ export function SignUpPage() {
 
               {/* Conditional Fields for Student */}
               {formData.role === "STUDENT" && (
-                <>
-                  
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label htmlFor="course" className="block text-sm font-medium mb-2 text-[#1F2937]">
-                        Course
-                      </label>
-                      <select
-                        id="course"
-                        required
-                        value={formData.course}
-                        onChange={(e) => setFormData({ ...formData, course: e.target.value })}
-                        className="w-full px-4 py-3 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm text-[#1F2937] focus:outline-none focus:ring-2 focus:ring-[#1D6FA3] focus:border-transparent"
-                      >
-                        <option value="">Select Course</option>
-                        {courses.map(course => (
-                          <option key={course} value={course}>{course}</option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div>
-                      <label htmlFor="year" className="block text-sm font-medium mb-2 text-[#1F2937]">
-                        Year
-                      </label>
-                      <select
-                        id="year"
-                        required
-                        value={formData.year}
-                        onChange={(e) => setFormData({ ...formData, year: e.target.value })}
-                        className="w-full px-4 py-3 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm text-[#1F2937] focus:outline-none focus:ring-2 focus:ring-[#1D6FA3] focus:border-transparent"
-                      >
-                        <option value="">Select Year</option>
-                        {years.map(year => (
-                          <option key={year} value={year}>{year}</option>
-                        ))}
-                      </select>
-                    </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label htmlFor="course" className="block text-sm font-medium mb-2 text-[#1F2937]">
+                      Course
+                    </label>
+                    <select
+                      id="course"
+                      required
+                      value={formData.course}
+                      onChange={(e) => setFormData({ ...formData, course: e.target.value })}
+                      className="w-full px-4 py-3 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm text-[#1F2937] focus:outline-none focus:ring-2 focus:ring-[#1D6FA3] focus:border-transparent"
+                    >
+                      <option value="">Select Course</option>
+                      {courses.map(course => (
+                        <option key={course} value={course}>{course}</option>
+                      ))}
+                    </select>
                   </div>
-                </>
-              )}
 
+                  <div>
+                    <label htmlFor="year" className="block text-sm font-medium mb-2 text-[#1F2937]">
+                      Year
+                    </label>
+                    <select
+                      id="year"
+                      required
+                      value={formData.year}
+                      onChange={(e) => setFormData({ ...formData, year: e.target.value })}
+                      className="w-full px-4 py-3 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm text-[#1F2937] focus:outline-none focus:ring-2 focus:ring-[#1D6FA3] focus:border-transparent"
+                    >
+                      <option value="">Select Year</option>
+                      {years.map(year => (
+                        <option key={year} value={year}>{year}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              )}
 
               {/* Password Fields */}
               <div className="grid grid-cols-2 gap-4">
@@ -257,6 +284,7 @@ export function SignUpPage() {
                 <input
                   id="terms"
                   type="checkbox"
+                  required
                   checked={formData.agreeToTerms}
                   onChange={(e) => setFormData({ ...formData, agreeToTerms: e.target.checked })}
                   className="mt-1 mr-3 w-4 h-4 rounded border-[#E5E7EB] text-[#1D6FA3] focus:ring-[#1D6FA3]"
@@ -276,9 +304,16 @@ export function SignUpPage() {
               {/* Submit Button */}
               <button
                 type="submit"
-                className="w-full py-3 bg-[#1D6FA3] text-white rounded-lg hover:bg-[#0B3C5D] transition-colors font-medium"
+                disabled={isLoading}
+                className="w-full py-3 bg-[#1D6FA3] text-white rounded-lg hover:bg-[#0B3C5D] transition-colors font-medium disabled:opacity-70 disabled:cursor-not-allowed flex justify-center items-center"
               >
-                Sign Up
+                {isLoading ? (
+                  <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                ) : null}
+                {isLoading ? 'Registering...' : 'Sign Up'}
               </button>
             </form>
 
