@@ -18,6 +18,8 @@ import { GradeEvaluation } from "./pages/GradeEvaluation";
 import { StudentRecords } from "./pages/StudentRecords";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { ForgotPasswordPage } from "./pages/ForgotPasswordPage";
+import { AdminProfilePage } from "./pages/AdminProfilePage";
+
 
 export const router = createBrowserRouter([
   {
@@ -37,6 +39,10 @@ export const router = createBrowserRouter([
     path: "/app",
     element: <DashboardLayout />,
     children: [
+      {
+        path: "profile",
+        element: <AdminProfilePage />,
+      },
       { index: true, element: <DashboardRouter /> },
       {
         path: "knowledge-repository",
