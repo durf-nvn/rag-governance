@@ -1,17 +1,23 @@
-import { useState } from "react";
-import { Search, Filter, Upload, Download, Edit, Archive, Clock, Eye, CheckCircle } from "lucide-react";
-import { useRole } from "../contexts/RoleContext";
-import { hasPermission } from "../utils/rolePermissions";
+import { useState } from "react"
+import { Search, Filter, Upload, Download, Edit, Archive, Clock, Eye, CheckCircle } from "lucide-react"
+import { useRole } from "../contexts/RoleContext"
+import { hasPermission } from "../utils/rolePermissions"
 
 export function KnowledgeRepository() {
-  const { user } = useRole();
-  const [showUploadModal, setShowUploadModal] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState("all");
+  // FIXED: We extract 'userRole' from our context instead of 'user'
+  const { userRole } = useRole()
+  
+  // FIXED: Safely default to STUDENT if the role is still loading
+  const currentRole = userRole || "STUDENT"
 
-  const canUpload = hasPermission(user.role, "canUploadDocuments");
-  const canEdit = hasPermission(user.role, "canEditDocuments");
-  const canDelete = hasPermission(user.role, "canDeleteDocuments");
+  const [showUploadModal, setShowUploadModal] = useState(false)
+  const [searchQuery, setSearchQuery] = useState("")
+  const [selectedCategory, setSelectedCategory] = useState("all")
+
+  // FIXED: Check permissions using 'currentRole' instead of the broken 'user.role'
+  const canUpload = hasPermission(currentRole, "canUploadDocuments")
+  const canEdit = hasPermission(currentRole, "canEditDocuments")
+  const canDelete = hasPermission(currentRole, "canDeleteDocuments")
 
   const documents = [
     {
@@ -64,19 +70,19 @@ export function KnowledgeRepository() {
       status: "Reference",
       lastUpdated: "6 months ago"
     },
-  ];
+  ]
 
   const getAccessBadge = () => {
     if (canUpload && canEdit) {
-      return { label: "Full Access", color: "bg-green-50 text-green-700 border-green-200", icon: CheckCircle };
+      return { label: "Full Access", color: "bg-green-50 text-green-700 border-green-200", icon: CheckCircle }
     } else if (canEdit) {
-      return { label: "Limited Access", color: "bg-yellow-50 text-yellow-700 border-yellow-200", icon: Edit };
+      return { label: "Limited Access", color: "bg-yellow-50 text-yellow-700 border-yellow-200", icon: Edit }
     } else {
-      return { label: "View Only", color: "bg-blue-50 text-blue-700 border-blue-200", icon: Eye };
+      return { label: "View Only", color: "bg-blue-50 text-blue-700 border-blue-200", icon: Eye }
     }
-  };
+  }
 
-  const accessBadge = getAccessBadge();
+  const accessBadge = getAccessBadge()
 
   return (
     <div className="space-y-6">
@@ -331,8 +337,8 @@ export function KnowledgeRepository() {
                 </button>
                 <button
                   onClick={() => {
-                    setShowUploadModal(false);
-                    alert("Document uploaded successfully!");
+                    setShowUploadModal(false)
+                    alert("Document uploaded successfully!")
                   }}
                   className="px-6 py-2.5 text-sm font-medium bg-[#1D6FA3] text-white rounded-lg hover:bg-[#0B3C5D] transition-colors"
                 >
@@ -344,5 +350,5 @@ export function KnowledgeRepository() {
         </div>
       )}
     </div>
-  );
+  )
 }
