@@ -1,17 +1,34 @@
 import os
 from supabase import create_client
 from sentence_transformers import SentenceTransformer
+from dotenv import load_dotenv
 
-# Replace with your actual Supabase credentials
-SUPABASE_URL = "https://rcnmrjjuhrbluhxomnzv.supabase.co"
-SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJjbm1yamp1aHJibHVoeG9tbnp2Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NjM5MDM0OSwiZXhwIjoyMDkxOTY2MzQ5fQ.iZId04aGPBVSk6GK7AUInTB7YlNviKeEsjncGpUjVpY" 
+# Path logic to find .env even if run from different folders
+load_dotenv()
 
-supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+# Verify names match your .env exactly
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_KEY") 
 
-# Load the model that turns text into 384-dimensional vectors
+supabase = None
+
+if SUPABASE_URL and SUPABASE_KEY:
+    try:
+        supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+        print("✅ Supabase client initialized successfully.")
+    except Exception as e:
+        print(f"❌ Failed to initialize Supabase: {e}")
+else:
+    print("❌ ERROR: SUPABASE_URL or SUPABASE_SERVICE_KEY is missing from .env!")
+
 model = SentenceTransformer('all-MiniLM-L6-v2')
 
 def add_to_vector_db(text, metadata):
+    # Check if supabase was actually initialized before using it
+    if supabase is None:
+        print("⚠️ search_knowledge called but supabase client is not initialized!")
+        return []
+    
     # Split text into chunks of 500 characters
     chunks = [text[i:i+500] for i in range(0, len(text), 500)]
     
@@ -29,16 +46,19 @@ def add_to_vector_db(text, metadata):
     return len(chunks)
 
 def search_knowledge(question: str, match_count: int = 3):
-    # 1. Turn the user's question into math (embedding)
+    # Check if supabase was actually initialized before using it
+    if supabase is None:
+        print("⚠️ search_knowledge called but supabase client is not initialized!")
+        return []
+
     query_embedding = model.encode(question).tolist()
     
-    # 2. Call the Supabase SQL function we just created
     response = supabase.rpc(
         'match_document_sections',
         {
             'query_embedding': query_embedding,
-            'match_threshold': 0.3, # How strict the match should be (0 to 1)
-            'match_count': match_count # How many paragraphs to return
+            'match_threshold': 0.3,
+            'match_count': match_count
         }
     ).execute()
     

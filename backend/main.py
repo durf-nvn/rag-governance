@@ -2,14 +2,15 @@ from fastapi import FastAPI, Depends, HTTPException, status, File, UploadFile, F
 from fastapi.middleware.cors import CORSMiddleware  # <-- ADD THIS IMPORT
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
+from dotenv import load_dotenv
+import os
+load_dotenv()
 import models, schemas, utils, vector_store
 from database import engine, get_db
 from typing import List
 import PyPDF2
 import io
-import os
 from groq import Groq
-from dotenv import load_dotenv
 from pydantic import BaseModel
 
 load_dotenv()
