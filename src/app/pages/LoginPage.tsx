@@ -1,22 +1,53 @@
 import { Link, useNavigate } from "react-router";
-import { GraduationCap, AlertCircle, Mail, Lock, Shield, User } from "lucide-react";
+import { GraduationCap, AlertCircle, Mail, Lock } from "lucide-react";
 import { useState } from "react";
+import axios from "axios";
 import { useRole } from "../contexts/RoleContext";
-import type { UserRole } from "../contexts/RoleContext";
 
 export function LoginPage() {
   const navigate = useNavigate();
   const { setUserRole } = useRole();
+  const [isLoading, setIsLoading] = useState(false);
+  const [apiError, setApiError] = useState("");
+  
   const [formData, setFormData] = useState({
     email: "",
     password: "",
-    role: "FACULTY" as UserRole
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setUserRole(formData.role);
-    navigate("/app");
+    setApiError("");
+    setIsLoading(true);
+
+    // FastAPI's OAuth2 requires URL Encoded Form Data, not standard JSON
+    const formBody = new URLSearchParams();
+    formBody.append('username', formData.email);
+    formBody.append('password', formData.password);
+
+    try {
+      const response = await axios.post("http://localhost:8000/login", formBody, {
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+      });
+
+      // 1. Save the JWT token securely in the browser
+      localStorage.setItem('token', response.data.access_token);
+      
+      // 2. Set the React Context role 
+      // NOTE: Temporarily hardcoded to STUDENT so your dashboard loads. 
+      // Eventually, you will extract the true role from the JWT token here!
+      setUserRole("STUDENT"); 
+      
+      // 3. Redirect to the protected dashboard
+      navigate("/app");
+      
+    } catch (error: any) {
+      setApiError(error.response?.data?.detail || "Failed to connect to the server.");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -64,44 +95,13 @@ export function LoginPage() {
             </div>
             
             <form onSubmit={handleSubmit} className="space-y-5">
-              {/* Account Type Selection */}
-              <div>
-                <label className="block text-sm font-medium mb-3 text-[#1F2937]">
-                  Select Account Type
-                </label>
-                <div className="grid grid-cols-3 gap-3">
-                  {[
-                    { value: "STUDENT", label: "Student", icon: GraduationCap },
-                    { value: "FACULTY", label: "Faculty", icon: User },
-                    { value: "ADMIN", label: "Admin", icon: Shield }
-                  ].map((option) => {
-                    const OptionIcon = option.icon;
-                    return (
-                      <button
-                        key={option.value}
-                        type="button"
-                        onClick={() => setFormData({ ...formData, role: option.value as UserRole })}
-                        className={`p-3 rounded-lg border-2 transition-all ${
-                          formData.role === option.value
-                            ? "border-[#1D6FA3] bg-[#E3F2FD]"
-                            : "border-[#E5E7EB] hover:border-[#D1D5DB]"
-                        }`}
-                      >
-                        <OptionIcon
-                          className={`h-5 w-5 mx-auto mb-1 ${
-                            formData.role === option.value ? "text-[#1D6FA3]" : "text-[#9CA3AF]"
-                          }`}
-                        />
-                        <p className={`text-xs font-medium ${
-                          formData.role === option.value ? "text-[#1F2937]" : "text-[#6B7280]"
-                        }`}>
-                          {option.label}
-                        </p>
-                      </button>
-                    );
-                  })}
+              
+              {/* API Error Message Display */}
+              {apiError && (
+                <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-md">
+                  <p className="text-sm text-red-700">{apiError}</p>
                 </div>
-              </div>
+              )}
 
               {/* Email Field */}
               <div>
@@ -155,9 +155,16 @@ export function LoginPage() {
               {/* Submit Button */}
               <button
                 type="submit"
-                className="w-full py-3 bg-[#1D6FA3] text-white rounded-lg hover:bg-[#0B3C5D] transition-colors font-medium"
+                disabled={isLoading}
+                className="w-full py-3 bg-[#1D6FA3] text-white rounded-lg hover:bg-[#0B3C5D] transition-colors font-medium disabled:opacity-70 disabled:cursor-not-allowed flex justify-center items-center"
               >
-                Sign In
+                {isLoading ? (
+                  <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                ) : null}
+                {isLoading ? 'Authenticating...' : 'Sign In'}
               </button>
             </form>
 

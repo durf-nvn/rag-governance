@@ -6,6 +6,7 @@ import uuid
 class UserCreate(BaseModel):
     email: EmailStr
     password: str
+    role: str  # NEW: We now accept the role from the frontend
 
 # What we send back to the user (Notice we DO NOT send the password back!)
 class UserResponse(BaseModel):

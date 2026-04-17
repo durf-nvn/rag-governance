@@ -44,10 +44,10 @@ export function SignUpPage() {
       // Note: We are sending email and password to match our current Pydantic schema
       const response = await axios.post("http://127.0.0.1:8000/register", {
         email: formData.email,
-        password: formData.password
+        password: formData.password,
+        role: formData.role
       });
 
-      // If successful, set local state and redirect to login
       setUserRole(formData.role);
       navigate("/login");
 

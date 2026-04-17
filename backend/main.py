@@ -38,30 +38,35 @@ def test_db_connection(db: Session = Depends(get_db)):
     
 @app.post("/register", response_model=schemas.UserResponse, status_code=status.HTTP_201_CREATED)
 def register_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
-    # 1. Check if the email already exists
+    # 1. Check if email exists
     existing_user = db.query(models.User).filter(models.User.email == user.email).first()
     if existing_user:
         raise HTTPException(status_code=400, detail="Email already registered")
 
-    # 2. Hash the password
+    # 2. Hash password
     hashed_pwd = utils.hash_password(user.password)
 
-    # 3. Create the new user object
-    new_user = models.User(email=user.email, hashed_password=hashed_pwd)
+    # 3. The Auto-Verification Logic
+    # Students are auto-verified. Faculty are locked (False) until Admin approves.
+    auto_verify = True if user.role.upper() == "STUDENT" else False
 
-    # 4. Save to the database
+    # 4. Create user
+    new_user = models.User(
+        email=user.email, 
+        hashed_password=hashed_pwd,
+        role=user.role.upper(),
+        is_verified=auto_verify
+    )
+
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
-
     return new_user
 
 @app.post("/login", response_model=schemas.Token)
 def login_user(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
-    # 1. FastAPI's OAuth2 uses 'username' by default, so we map form_data.username to our email column
     user = db.query(models.User).filter(models.User.email == form_data.username).first()
     
-    # 2. Check if user exists AND if the password matches the hashed password
     if not user or not utils.verify_password(form_data.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -69,9 +74,12 @@ def login_user(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = D
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    # 3. If credentials are correct, generate the JWT Token
-    # We store the user's email inside the token's "subject" (sub)
+    # NEW: The Verification Check
+    if not user.is_verified:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Your Faculty account is currently pending Admin verification."
+        )
+
     access_token = utils.create_access_token(data={"sub": user.email})
-    
-    # 4. Return the token to the frontend
     return {"access_token": access_token, "token_type": "bearer"}
