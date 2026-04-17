@@ -1,5 +1,5 @@
 import { Link, useNavigate } from "react-router";
-import { GraduationCap, User, Mail, Lock, Shield, IdCard, BookOpen, Calendar } from "lucide-react";
+import { GraduationCap, User, Mail, Lock, Shield } from "lucide-react";
 import { useState } from "react";
 import { useRole } from "../contexts/RoleContext";
 import type { UserRole } from "../contexts/RoleContext";
@@ -13,10 +13,8 @@ export function SignUpPage() {
     password: "",
     confirmPassword: "",
     role: "STUDENT" as UserRole,
-    studentId: "",
     course: "",
     year: "",
-    employeeId: "",
     agreeToTerms: false
   });
 
@@ -88,18 +86,17 @@ export function SignUpPage() {
               <h2 className="text-2xl font-semibold text-[#1F2937] mb-2">Create Your Account</h2>
               <p className="text-sm text-[#6B7280]">Fill in your details to get started</p>
             </div>
-            
+
             <form onSubmit={handleSubmit} className="space-y-5">
-              {/* Account Type Selection */}
+              {/* Account Type Selection — Student & Faculty only */}
               <div>
                 <label className="block text-sm font-medium mb-3 text-[#1F2937]">
                   Select Account Type
                 </label>
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-2 gap-3">
                   {[
                     { value: "STUDENT", label: "Student", icon: GraduationCap },
                     { value: "FACULTY", label: "Faculty", icon: User },
-                    { value: "ADMIN", label: "Admin", icon: Shield }
                   ].map((option) => {
                     const OptionIcon = option.icon;
                     return (
@@ -169,82 +166,41 @@ export function SignUpPage() {
 
               {/* Conditional Fields for Student */}
               {formData.role === "STUDENT" && (
-                <>
+                <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label htmlFor="studentId" className="block text-sm font-medium mb-2 text-[#1F2937]">
-                      Student ID
+                    <label htmlFor="course" className="block text-sm font-medium mb-2 text-[#1F2937]">
+                      Course
                     </label>
-                    <div className="relative">
-                      <IdCard className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-[#6B7280]" />
-                      <input
-                        id="studentId"
-                        type="text"
-                        required
-                        value={formData.studentId}
-                        onChange={(e) => setFormData({ ...formData, studentId: e.target.value })}
-                        className="w-full pl-10 pr-4 py-3 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm text-[#1F2937] focus:outline-none focus:ring-2 focus:ring-[#1D6FA3] focus:border-transparent"
-                        placeholder="2024-XXXX"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label htmlFor="course" className="block text-sm font-medium mb-2 text-[#1F2937]">
-                        Course
-                      </label>
-                      <select
-                        id="course"
-                        required
-                        value={formData.course}
-                        onChange={(e) => setFormData({ ...formData, course: e.target.value })}
-                        className="w-full px-4 py-3 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm text-[#1F2937] focus:outline-none focus:ring-2 focus:ring-[#1D6FA3] focus:border-transparent"
-                      >
-                        <option value="">Select Course</option>
-                        {courses.map(course => (
-                          <option key={course} value={course}>{course}</option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div>
-                      <label htmlFor="year" className="block text-sm font-medium mb-2 text-[#1F2937]">
-                        Year
-                      </label>
-                      <select
-                        id="year"
-                        required
-                        value={formData.year}
-                        onChange={(e) => setFormData({ ...formData, year: e.target.value })}
-                        className="w-full px-4 py-3 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm text-[#1F2937] focus:outline-none focus:ring-2 focus:ring-[#1D6FA3] focus:border-transparent"
-                      >
-                        <option value="">Select Year</option>
-                        {years.map(year => (
-                          <option key={year} value={year}>{year}</option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-                </>
-              )}
-
-              {/* Conditional Fields for Faculty */}
-              {formData.role === "FACULTY" && (
-                <div>
-                  <label htmlFor="employeeId" className="block text-sm font-medium mb-2 text-[#1F2937]">
-                    Employee ID
-                  </label>
-                  <div className="relative">
-                    <IdCard className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-[#6B7280]" />
-                    <input
-                      id="employeeId"
-                      type="text"
+                    <select
+                      id="course"
                       required
-                      value={formData.employeeId}
-                      onChange={(e) => setFormData({ ...formData, employeeId: e.target.value })}
-                      className="w-full pl-10 pr-4 py-3 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm text-[#1F2937] focus:outline-none focus:ring-2 focus:ring-[#1D6FA3] focus:border-transparent"
-                      placeholder="EMP-XXXX"
-                    />
+                      value={formData.course}
+                      onChange={(e) => setFormData({ ...formData, course: e.target.value })}
+                      className="w-full px-4 py-3 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm text-[#1F2937] focus:outline-none focus:ring-2 focus:ring-[#1D6FA3] focus:border-transparent"
+                    >
+                      <option value="">Select Course</option>
+                      {courses.map(course => (
+                        <option key={course} value={course}>{course}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label htmlFor="year" className="block text-sm font-medium mb-2 text-[#1F2937]">
+                      Year
+                    </label>
+                    <select
+                      id="year"
+                      required
+                      value={formData.year}
+                      onChange={(e) => setFormData({ ...formData, year: e.target.value })}
+                      className="w-full px-4 py-3 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm text-[#1F2937] focus:outline-none focus:ring-2 focus:ring-[#1D6FA3] focus:border-transparent"
+                    >
+                      <option value="">Select Year</option>
+                      {years.map(year => (
+                        <option key={year} value={year}>{year}</option>
+                      ))}
+                    </select>
                   </div>
                 </div>
               )}

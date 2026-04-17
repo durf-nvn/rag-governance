@@ -1,21 +1,38 @@
 import { Link, useNavigate } from "react-router";
-import { GraduationCap, AlertCircle, Mail, Lock, Shield, User } from "lucide-react";
+import { GraduationCap, AlertCircle, Mail, Lock } from "lucide-react";
 import { useState } from "react";
 import { useRole } from "../contexts/RoleContext";
 import type { UserRole } from "../contexts/RoleContext";
 
+const TEST_ACCOUNTS: Record<string, UserRole> = {
+  "student@ctu.edu.ph": "STUDENT",
+  "faculty@ctu.edu.ph": "FACULTY",
+  "admin@ctu.edu.ph": "ADMIN",
+};
+
 export function LoginPage() {
   const navigate = useNavigate();
   const { setUserRole } = useRole();
-  const [formData, setFormData] = useState({
-    email: "",
-    password: "",
-    role: "FACULTY" as UserRole
-  });
+  const [formData, setFormData] = useState({ email: "", password: "" });
+  const [error, setError] = useState("");
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    setUserRole(formData.role);
+    setError("");
+
+    const role = TEST_ACCOUNTS[formData.email];
+
+    if (!role) {
+      setError("No account found with that email address.");
+      return;
+    }
+
+    if (formData.password.length < 1) {
+      setError("Please enter your password.");
+      return;
+    }
+
+    setUserRole(role);
     navigate("/app");
   };
 
@@ -40,6 +57,8 @@ export function LoginPage() {
               RAG-Powered Knowledge Management System
             </p>
           </div>
+
+          
         </div>
       </div>
 
@@ -62,46 +81,15 @@ export function LoginPage() {
               <h2 className="text-2xl font-semibold text-[#1F2937] mb-2">Welcome Back</h2>
               <p className="text-sm text-[#6B7280]">Sign in to access your account</p>
             </div>
-            
+
             <form onSubmit={handleSubmit} className="space-y-5">
-              {/* Account Type Selection */}
-              <div>
-                <label className="block text-sm font-medium mb-3 text-[#1F2937]">
-                  Select Account Type
-                </label>
-                <div className="grid grid-cols-3 gap-3">
-                  {[
-                    { value: "STUDENT", label: "Student", icon: GraduationCap },
-                    { value: "FACULTY", label: "Faculty", icon: User },
-                    { value: "ADMIN", label: "Admin", icon: Shield }
-                  ].map((option) => {
-                    const OptionIcon = option.icon;
-                    return (
-                      <button
-                        key={option.value}
-                        type="button"
-                        onClick={() => setFormData({ ...formData, role: option.value as UserRole })}
-                        className={`p-3 rounded-lg border-2 transition-all ${
-                          formData.role === option.value
-                            ? "border-[#1D6FA3] bg-[#E3F2FD]"
-                            : "border-[#E5E7EB] hover:border-[#D1D5DB]"
-                        }`}
-                      >
-                        <OptionIcon
-                          className={`h-5 w-5 mx-auto mb-1 ${
-                            formData.role === option.value ? "text-[#1D6FA3]" : "text-[#9CA3AF]"
-                          }`}
-                        />
-                        <p className={`text-xs font-medium ${
-                          formData.role === option.value ? "text-[#1F2937]" : "text-[#6B7280]"
-                        }`}>
-                          {option.label}
-                        </p>
-                      </button>
-                    );
-                  })}
+              {/* Error Message */}
+              {error && (
+                <div className="flex items-center gap-2 bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm">
+                  <AlertCircle className="h-4 w-4 flex-shrink-0" />
+                  {error}
                 </div>
-              </div>
+              )}
 
               {/* Email Field */}
               <div>
@@ -115,7 +103,7 @@ export function LoginPage() {
                     type="email"
                     required
                     value={formData.email}
-                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                    onChange={(e) => { setError(""); setFormData({ ...formData, email: e.target.value }); }}
                     className="w-full pl-10 pr-4 py-3 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm text-[#1F2937] focus:outline-none focus:ring-2 focus:ring-[#1D6FA3] focus:border-transparent"
                     placeholder="your.email@ctu.edu.ph"
                   />
@@ -134,7 +122,7 @@ export function LoginPage() {
                     type="password"
                     required
                     value={formData.password}
-                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                    onChange={(e) => { setError(""); setFormData({ ...formData, password: e.target.value }); }}
                     className="w-full pl-10 pr-4 py-3 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm text-[#1F2937] focus:outline-none focus:ring-2 focus:ring-[#1D6FA3] focus:border-transparent"
                     placeholder="••••••••"
                   />
@@ -144,12 +132,13 @@ export function LoginPage() {
               {/* Remember Me and Forgot Password */}
               <div className="flex items-center justify-between">
                 <label className="flex items-center">
-                  <input type="checkbox" className="mr-2 w-4 h-4 rounded border-[#E5E7EB] text-[#1D6FA3] focus:ring-[#1D6FA3]" />
+                  <input
+                    type="checkbox"
+                    className="mr-2 w-4 h-4 rounded border-[#E5E7EB] text-[#1D6FA3] focus:ring-[#1D6FA3]"
+                  />
                   <span className="text-sm text-[#6B7280]">Remember me</span>
                 </label>
-                <a href="#" className="text-sm text-[#1D6FA3] hover:text-[#0B3C5D] font-medium">
-                  Forgot password?
-                </a>
+                <Link to="/forgot-password" className="text-sm text-[#1D6FA3] ...">Forgot password?</Link>
               </div>
 
               {/* Submit Button */}
@@ -177,7 +166,7 @@ export function LoginPage() {
             <div className="flex items-start gap-3">
               <AlertCircle className="h-5 w-5 text-[#FFC107] flex-shrink-0 mt-0.5" />
               <p className="text-sm text-[#1F2937]">
-                <strong>Security Notice:</strong> Unauthorized access is strictly prohibited. 
+                <strong>Security Notice:</strong> Unauthorized access is strictly prohibited.
                 All activities are logged and monitored.
               </p>
             </div>

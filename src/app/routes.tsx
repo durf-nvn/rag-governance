@@ -17,12 +17,14 @@ import { AIDocumentGenerator } from "./pages/AIDocumentGenerator";
 import { GradeEvaluation } from "./pages/GradeEvaluation";
 import { StudentRecords } from "./pages/StudentRecords";
 import { ProtectedRoute } from "./components/ProtectedRoute";
+import { ForgotPasswordPage } from "./pages/ForgotPasswordPage";
 
 export const router = createBrowserRouter([
   {
     path: "/",
     element: <LandingPage />,
   },
+  { path: "/forgot-password", element: <ForgotPasswordPage /> },
   {
     path: "/login",
     element: <LoginPage />,
