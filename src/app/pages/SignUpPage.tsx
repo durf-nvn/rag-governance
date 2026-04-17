@@ -170,23 +170,7 @@ export function SignUpPage() {
               {/* Conditional Fields for Student */}
               {formData.role === "STUDENT" && (
                 <>
-                  <div>
-                    <label htmlFor="studentId" className="block text-sm font-medium mb-2 text-[#1F2937]">
-                      Student ID
-                    </label>
-                    <div className="relative">
-                      <IdCard className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-[#6B7280]" />
-                      <input
-                        id="studentId"
-                        type="text"
-                        required
-                        value={formData.studentId}
-                        onChange={(e) => setFormData({ ...formData, studentId: e.target.value })}
-                        className="w-full pl-10 pr-4 py-3 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm text-[#1F2937] focus:outline-none focus:ring-2 focus:ring-[#1D6FA3] focus:border-transparent"
-                        placeholder="2024-XXXX"
-                      />
-                    </div>
-                  </div>
+                  
 
                   <div className="grid grid-cols-2 gap-4">
                     <div>
@@ -228,26 +212,6 @@ export function SignUpPage() {
                 </>
               )}
 
-              {/* Conditional Fields for Faculty */}
-              {formData.role === "FACULTY" && (
-                <div>
-                  <label htmlFor="employeeId" className="block text-sm font-medium mb-2 text-[#1F2937]">
-                    Employee ID
-                  </label>
-                  <div className="relative">
-                    <IdCard className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-[#6B7280]" />
-                    <input
-                      id="employeeId"
-                      type="text"
-                      required
-                      value={formData.employeeId}
-                      onChange={(e) => setFormData({ ...formData, employeeId: e.target.value })}
-                      className="w-full pl-10 pr-4 py-3 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm text-[#1F2937] focus:outline-none focus:ring-2 focus:ring-[#1D6FA3] focus:border-transparent"
-                      placeholder="EMP-XXXX"
-                    />
-                  </div>
-                </div>
-              )}
 
               {/* Password Fields */}
               <div className="grid grid-cols-2 gap-4">
