@@ -12,7 +12,7 @@ import PyPDF2
 import io
 from groq import Groq
 from pydantic import BaseModel
-import datetime
+from datetime import datetime
 
 load_dotenv()
 groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
@@ -164,7 +164,7 @@ async def upload_document(
             "office": office,
             "version": version,
             "effectivity_date": effectivity_date,
-            "uploaded_at": datetime.utcnow().isoformat()
+            "uploaded_at": datetime.now().isoformat() # CHANGED THIS LINE
         }
 
         # 3. Process into Vector Store (Supabase)
