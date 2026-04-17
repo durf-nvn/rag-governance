@@ -16,3 +16,8 @@ class UserResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+# What we send back when the user successfully logs in
+class Token(BaseModel):
+    access_token: str
+    token_type: str
