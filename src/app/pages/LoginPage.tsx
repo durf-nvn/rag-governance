@@ -1,8 +1,8 @@
 import { Link, useNavigate } from "react-router";
 import { GraduationCap, AlertCircle, Mail, Lock } from "lucide-react";
 import { useState } from "react";
+import axios from "axios";
 import { useRole } from "../contexts/RoleContext";
-import type { UserRole } from "../contexts/RoleContext";
 
 const TEST_ACCOUNTS: Record<string, UserRole> = {
   "student@ctu.edu.ph": "STUDENT",
@@ -13,11 +13,22 @@ const TEST_ACCOUNTS: Record<string, UserRole> = {
 export function LoginPage() {
   const navigate = useNavigate();
   const { setUserRole } = useRole();
+<<<<<<< HEAD
   const [formData, setFormData] = useState({ email: "", password: "" });
   const [error, setError] = useState("");
+=======
+  const [isLoading, setIsLoading] = useState(false);
+  const [apiError, setApiError] = useState("");
+  
+  const [formData, setFormData] = useState({
+    email: "",
+    password: "",
+  });
+>>>>>>> 2b9632eb2809ae69a739f2b373d8495955ab8239
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+<<<<<<< HEAD
     setError("");
 
     const role = TEST_ACCOUNTS[formData.email];
@@ -34,6 +45,39 @@ export function LoginPage() {
 
     setUserRole(role);
     navigate("/app");
+=======
+    setApiError("");
+    setIsLoading(true);
+
+    // FastAPI's OAuth2 requires URL Encoded Form Data, not standard JSON
+    const formBody = new URLSearchParams();
+    formBody.append('username', formData.email);
+    formBody.append('password', formData.password);
+
+    try {
+      const response = await axios.post("http://localhost:8000/login", formBody, {
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+      });
+
+      // 1. Save the JWT token and User Details securely
+      localStorage.setItem('token', response.data.access_token);
+      localStorage.setItem('userName', response.data.full_name);
+      localStorage.setItem('userEmail', response.data.email);
+      
+      // 2. Set the TRUE React Context role from the database
+      setUserRole(response.data.role); 
+      
+      // 3. Redirect to the dashboard
+      navigate("/app");
+      
+    } catch (error: any) {
+      setApiError(error.response?.data?.detail || "Failed to connect to the server.");
+    } finally {
+      setIsLoading(false);
+    }
+>>>>>>> 2b9632eb2809ae69a739f2b373d8495955ab8239
   };
 
   return (
@@ -83,11 +127,19 @@ export function LoginPage() {
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-5">
+<<<<<<< HEAD
               {/* Error Message */}
               {error && (
                 <div className="flex items-center gap-2 bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm">
                   <AlertCircle className="h-4 w-4 flex-shrink-0" />
                   {error}
+=======
+              
+              {/* API Error Message Display */}
+              {apiError && (
+                <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-md">
+                  <p className="text-sm text-red-700">{apiError}</p>
+>>>>>>> 2b9632eb2809ae69a739f2b373d8495955ab8239
                 </div>
               )}
 
@@ -144,9 +196,16 @@ export function LoginPage() {
               {/* Submit Button */}
               <button
                 type="submit"
-                className="w-full py-3 bg-[#1D6FA3] text-white rounded-lg hover:bg-[#0B3C5D] transition-colors font-medium"
+                disabled={isLoading}
+                className="w-full py-3 bg-[#1D6FA3] text-white rounded-lg hover:bg-[#0B3C5D] transition-colors font-medium disabled:opacity-70 disabled:cursor-not-allowed flex justify-center items-center"
               >
-                Sign In
+                {isLoading ? (
+                  <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                ) : null}
+                {isLoading ? 'Authenticating...' : 'Sign In'}
               </button>
             </form>
 
