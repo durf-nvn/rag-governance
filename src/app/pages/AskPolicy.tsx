@@ -8,6 +8,7 @@ interface Message {
   content: string;
   sources?: { name: string; relevance: number }[];
   timestamp: string;
+  feedback?: "helpful" | "not-helpful"; // ADD THIS LINE
 }
 
 export function AskPolicy() {
@@ -52,6 +53,43 @@ export function AskPolicy() {
     fetchAnalytics();
   }, []); // The empty array means this runs once when the page opens
 
+  // Grab the email saved during login
+  const userEmail = localStorage.getItem('userEmail') || 'guest@ctu.edu.ph';
+
+  // NEW: Fetch history when the component loads
+  useEffect(() => {
+    const fetchHistory = async () => {
+      try {
+        const res = await axios.get(`http://localhost:8000/chat-history?email=${userEmail}`);
+        
+        if (res.data && res.data.length > 0) {
+          // Convert database format to UI format
+          const formattedHistory = res.data.map((msg: any, index: number) => ({
+            id: index + 2, // Start at 2 because the welcome message is id 1
+            type: msg.role,
+            content: msg.content,
+            timestamp: new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          }));
+
+          // Keep the default AI greeting at the top, then attach history
+          setMessages([
+            {
+              id: 1,
+              type: "ai",
+              content: "Hello! I'm your friendly AI Policy Assistant. Ask me anything about institutional policies, procedures, and guidelines.",
+              timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            },
+            ...formattedHistory
+          ]);
+        }
+      } catch (error) {
+        console.error("Failed to load chat history", error);
+      }
+    };
+
+    fetchHistory();
+  }, [userEmail]); // This ensures it runs when the email is available
+
   // FIXED: Now accepts an optional string so buttons can trigger it directly!
   const handleSendMessage = async (quickText?: string) => {
     // If a button passed text, use it. Otherwise, use what's typed in the input.
@@ -71,8 +109,10 @@ export function AskPolicy() {
     setIsLoading(true);
 
     try {
+      // Update this request to include the user_email!
       const response = await axios.post("http://localhost:8000/ask-policy", {
-        question: textToSend
+        question: textToSend,
+        user_email: userEmail // <-- ADD THIS LINE
       });
 
       const formattedSources = response.data.sources.map((src: string) => ({
@@ -100,6 +140,33 @@ export function AskPolicy() {
       setMessages((prev) => [...prev, errorMessage]);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleFeedback = async (messageId: number, isHelpful: boolean) => {
+    // 1. Update UI immediately so it feels fast
+    setMessages((prevMessages) =>
+      prevMessages.map((msg) =>
+        msg.id === messageId
+          ? { ...msg, feedback: isHelpful ? "helpful" : "not-helpful" }
+          : msg
+      )
+    );
+
+    // 2. Find the AI message and the User question that came right before it
+    const aiMessage = messages.find((m) => m.id === messageId);
+    const userMessage = messages.find((m) => m.id === messageId - 1);
+
+    if (aiMessage && userMessage) {
+      try {
+        await axios.post("http://localhost:8000/feedback", {
+          question: userMessage.content,
+          answer: aiMessage.content,
+          is_helpful: isHelpful,
+        });
+      } catch (error) {
+        console.error("Failed to submit feedback", error);
+      }
     }
   };
 
@@ -203,12 +270,29 @@ export function AskPolicy() {
                       ))}
                       
                       <div className="flex items-center gap-2 mt-2">
-                        <button className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-[#6B7280] hover:text-[#10B981] hover:bg-green-50 rounded-md transition-colors border border-transparent hover:border-green-100">
-                          <ThumbsUp className="h-3.5 w-3.5" />
+                        <button 
+                          onClick={() => handleFeedback(message.id, true)}
+                          disabled={message.feedback !== undefined}
+                          className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors border 
+                            ${message.feedback === 'helpful' 
+                              ? 'bg-green-100 text-[#10B981] border-green-200' // Clicked state (Solid Green)
+                              : 'text-[#6B7280] border-transparent hover:text-[#10B981] hover:bg-green-50 hover:border-green-100 disabled:opacity-50' // Default state
+                            }`}
+                        >
+                          <ThumbsUp className={`h-3.5 w-3.5 ${message.feedback === 'helpful' ? 'fill-current' : ''}`} />
                           Helpful
                         </button>
-                        <button className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-[#6B7280] hover:text-[#EF4444] hover:bg-red-50 rounded-md transition-colors border border-transparent hover:border-red-100">
-                          <ThumbsDown className="h-3.5 w-3.5" />
+
+                        <button 
+                          onClick={() => handleFeedback(message.id, false)}
+                          disabled={message.feedback !== undefined}
+                          className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors border 
+                            ${message.feedback === 'not-helpful' 
+                              ? 'bg-red-100 text-[#EF4444] border-red-200' // Clicked state (Solid Red)
+                              : 'text-[#6B7280] border-transparent hover:text-[#EF4444] hover:bg-red-50 hover:border-red-100 disabled:opacity-50' // Default state
+                            }`}
+                        >
+                          <ThumbsDown className={`h-3.5 w-3.5 ${message.feedback === 'not-helpful' ? 'fill-current' : ''}`} />
                           Not Helpful
                         </button>
                       </div>

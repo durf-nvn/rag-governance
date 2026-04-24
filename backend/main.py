@@ -12,13 +12,19 @@ import PyPDF2
 import io
 from groq import Groq
 from pydantic import BaseModel
-from datetime import datetime
+from datetime import datetime, timedelta 
 
 load_dotenv()
 groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
 class QuestionRequest(BaseModel):
     question: str
+    user_email: str
+
+class FeedbackRequest(BaseModel):
+    question: str
+    answer: str
+    is_helpful: bool
 
 models.Base.metadata.create_all(bind=engine)
 
@@ -238,6 +244,24 @@ def ask_policy(request: QuestionRequest):
         )
         
         answer = response.choices[0].message.content
+
+        try:
+            from vector_store import supabase
+            # 1. Save the User's question
+            supabase.table("chat_history").insert({
+                "user_email": request.user_email,
+                "role": "user",
+                "content": request.question
+            }).execute()
+            
+            # 2. Save the AI's answer
+            supabase.table("chat_history").insert({
+                "user_email": request.user_email,
+                "role": "ai",
+                "content": answer
+            }).execute()
+        except Exception as e:
+            print(f"Failed to save chat history: {e}")
         
     except Exception as e:
         print(f"Cloud API Error: {e}")
@@ -370,3 +394,38 @@ def get_popular_topics():
             {"label": "Admissions", "color": "purple"}
         ]
     return topics
+
+@app.post("/feedback")
+def submit_feedback(request: FeedbackRequest):
+    from vector_store import supabase
+    try:
+        supabase.table("feedback_logs").insert({
+            "question_text": request.question,
+            "ai_response": request.answer,
+            "is_helpful": request.is_helpful
+        }).execute()
+        return {"status": "success", "message": "Feedback recorded!"}
+    except Exception as e:
+        print(f"Failed to log feedback: {e}")
+        return {"status": "error", "message": str(e)}
+    
+@app.get("/chat-history")
+def get_chat_history(email: str):
+    from vector_store import supabase
+    
+    # Calculate the exact timestamp for 7 days ago
+    seven_days_ago = (datetime.now() - timedelta(days=7)).isoformat()
+    
+    try:
+        # Fetch messages for this specific user from the last 7 days, oldest to newest
+        response = supabase.table("chat_history")\
+            .select("*")\
+            .eq("user_email", email)\
+            .gte("created_at", seven_days_ago)\
+            .order("created_at", desc=False)\
+            .execute()
+            
+        return response.data
+    except Exception as e:
+        print(f"Error fetching history: {e}")
+        return []
