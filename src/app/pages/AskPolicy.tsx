@@ -17,8 +17,8 @@ export function AskPolicy() {
     {
       id: 1,
       type: "ai",
-      content: "Hello! I'm your AI Policy Assistant. Ask me anything about institutional policies, procedures, and guidelines. I'll provide accurate answers with source citations.",
-      timestamp: "Just now"
+      content: "Hello! I'm your friendly AI Policy Assistant. Ask me anything about institutional policies, procedures, and guidelines. I'll provide accurate answers with source citations.",
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     }
   ]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -39,7 +39,6 @@ export function AskPolicy() {
     "How to file a grievance?",
   ];
 
-  // FIXED: Wired up to the FastAPI backend!
   const handleSendMessage = async () => {
     if (!query.trim()) return;
 
@@ -59,7 +58,6 @@ export function AskPolicy() {
         question: userMessage.content
       });
 
-      // Map backend text sources to the teammate's UI format with a dummy relevance score for the progress bar
       const formattedSources = response.data.sources.map((src: string) => ({
         name: src,
         relevance: Math.floor(Math.random() * (99 - 85 + 1) + 85) 
@@ -79,7 +77,7 @@ export function AskPolicy() {
       const errorMessage: Message = {
         id: messages.length + 2,
         type: "ai",
-        content: "Sorry, I had trouble connecting to the AI brain. Please make sure the backend and Ollama are running!",
+        content: "Sorry, I had trouble connecting to the AI brain. Please make sure the backend and your connection are running!",
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       };
       setMessages((prev) => [...prev, errorMessage]);
@@ -93,162 +91,173 @@ export function AskPolicy() {
   };
 
   return (
-    <div className="h-[calc(100vh-120px)] flex flex-col">
-      {/* Page Header */}
-      <div className="mb-6">
+    <div className="h-[calc(100vh-120px)] flex flex-col overflow-hidden">
+      {/* Page Header - Locked at the top */}
+      <div className="shrink-0 mb-6">
         <h1 className="text-2xl font-semibold text-[#1F2937]">Ask Policy</h1>
         <p className="text-sm text-[#6B7280] mt-1">Get instant AI-powered answers to your policy and governance questions</p>
       </div>
 
-      <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-6 min-h-0">
-        {/* Recent Questions Sidebar */}
-        <div className="lg:col-span-3">
-          <div className="bg-white rounded-lg border border-[#E5E7EB] p-6 h-full overflow-y-auto">
+      {/* Main Layout Grid */}
+      <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-12 gap-6">
+        
+        {/* Sidebar - Locked outline, internal scroll */}
+        <div className="hidden lg:flex lg:col-span-3 bg-white rounded-lg border border-[#E5E7EB] flex-col overflow-hidden">
+          <div className="flex-1 overflow-y-auto p-6">
             <h3 className="text-base font-semibold text-[#1F2937] mb-4">Recent Questions</h3>
-            <div className="space-y-3">
+            <div className="space-y-2">
               {recentQuestions.map((question, index) => (
                 <button
                   key={index}
                   onClick={() => handleQuickQuestion(question)}
-                  className="w-full text-left px-4 py-3 text-sm text-[#1F2937] hover:bg-[#F5F7FA] rounded-lg transition-colors border border-transparent hover:border-[#E5E7EB]"
+                  className="w-full text-left px-4 py-3 text-sm text-[#374151] hover:text-[#1D6FA3] bg-[#F5F7FA] hover:bg-[#E3F2FD] rounded-lg transition-colors border border-transparent"
                 >
                   {question}
                 </button>
               ))}
             </div>
 
-            <div className="mt-6 pt-6 border-t border-[#E5E7EB]">
-              <h4 className="text-sm font-medium mb-3 text-[#1F2937]">Popular Topics</h4>
+            <div className="mt-8 pt-6 border-t border-[#E5E7EB]">
+              <h4 className="text-sm font-medium mb-4 text-[#1F2937]">Popular Topics</h4>
               <div className="flex flex-wrap gap-2">
-                <span className="px-3 py-1.5 bg-blue-50 text-blue-700 text-xs font-medium rounded-lg border border-blue-200">Grading</span>
-                <span className="px-3 py-1.5 bg-blue-50 text-blue-700 text-xs font-medium rounded-lg border border-blue-200">Research</span>
-                <span className="px-3 py-1.5 bg-green-50 text-green-700 text-xs font-medium rounded-lg border border-green-200">Admissions</span>
-                <span className="px-3 py-1.5 bg-blue-50 text-blue-700 text-xs font-medium rounded-lg border border-blue-200">Faculty</span>
+                <button className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-medium rounded-lg border border-blue-200 transition-colors">
+                  Grading
+                </button>
+                <button className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-medium rounded-lg border border-blue-200 transition-colors">
+                  Research
+                </button>
+                <button className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-medium rounded-lg border border-emerald-200 transition-colors">
+                  Admissions
+                </button>
+                <button className="px-3 py-1.5 bg-purple-50 hover:bg-purple-100 text-purple-700 text-xs font-medium rounded-lg border border-purple-200 transition-colors">
+                  Faculty
+                </button>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Chat Interface */}
-        <div className="lg:col-span-9">
-          <div className="bg-white rounded-lg border border-[#E5E7EB] flex flex-col h-full">
-            {/* Chat Messages */}
-            <div className="flex-1 overflow-y-auto p-6 space-y-6 min-h-0">
-              {messages.map((message) => (
-                <div key={message.id} className={`flex ${message.type === "user" ? "justify-end" : "justify-start"}`}>
-                  <div className={`max-w-4xl ${message.type === "user" ? "order-2" : "order-1"}`}>
-                    {message.type === "ai" && (
-                      <div className="flex items-center gap-3 mb-3">
-                        <div className="w-10 h-10 bg-[#1D6FA3] rounded-lg flex items-center justify-center">
-                          <Sparkles className="h-5 w-5 text-white" />
-                        </div>
-                        <span className="text-sm font-medium text-[#1F2937]">AI Assistant</span>
-                      </div>
-                    )}
-                    
-                    <div
-                      className={`rounded-lg px-5 py-4 ${
-                        message.type === "user"
-                          ? "bg-[#1D6FA3] text-white"
-                          : "bg-[#F5F7FA] text-[#1F2937] border border-[#E5E7EB]"
-                      }`}
-                    >
-                      <p className="whitespace-pre-wrap text-base leading-relaxed">{message.content}</p>
-                    </div>
-
-                    {message.sources && message.sources.length > 0 && (
-                      <div className="mt-4 space-y-3">
-                        <p className="text-sm font-medium text-[#1F2937]">Sources:</p>
-                        {message.sources.map((source, index) => (
-                          <div
-                            key={index}
-                            className="flex items-center justify-between bg-white border border-[#E5E7EB] rounded-lg p-4 hover:border-[#1D6FA3] transition-colors"
-                          >
-                            <div className="flex items-center gap-3">
-                              <FileText className="h-5 w-5 text-[#1D6FA3]" />
-                              <span className="text-sm font-medium text-[#1F2937]">{source.name}</span>
-                            </div>
-                            <div className="flex items-center gap-3">
-                              <div className="w-20 bg-gray-200 rounded-full h-2">
-                                <div
-                                  className="bg-[#10B981] h-2 rounded-full"
-                                  style={{ width: `${source.relevance}%` }}
-                                ></div>
-                              </div>
-                              <span className="text-sm font-medium text-[#6B7280] min-w-[40px]">{source.relevance}%</span>
-                            </div>
-                          </div>
-                        ))}
-                        
-                        <div className="flex items-center gap-3 mt-3">
-                          <button className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-[#6B7280] hover:text-[#10B981] hover:bg-green-50 rounded-lg transition-colors border border-[#E5E7EB]">
-                            <ThumbsUp className="h-4 w-4" />
-                            Helpful
-                          </button>
-                          <button className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-[#6B7280] hover:text-[#EF4444] hover:bg-red-50 rounded-lg transition-colors border border-[#E5E7EB]">
-                            <ThumbsDown className="h-4 w-4" />
-                            Not Helpful
-                          </button>
-                        </div>
-                      </div>
-                    )}
-
-                    <span className="text-xs text-[#6B7280] mt-3 block">{message.timestamp}</span>
-                  </div>
-                </div>
-              ))}
-
-              {/* Loading Indicator */}
-              {isLoading && (
-                <div className="flex justify-start">
-                  <div className="max-w-4xl order-1">
+        {/* Chat Interface - Locked outline, internal scroll */}
+        <div className="lg:col-span-9 bg-white rounded-lg border border-[#E5E7EB] flex flex-col overflow-hidden">
+          
+          {/* Chat Messages Area - Natively Scrolls */}
+          <div className="flex-1 overflow-y-auto p-6 space-y-6">
+            {messages.map((message) => (
+              <div key={message.id} className={`flex ${message.type === "user" ? "justify-end" : "justify-start"}`}>
+                <div className={`max-w-[85%] lg:max-w-[75%] ${message.type === "user" ? "order-2" : "order-1"}`}>
+                  {message.type === "ai" && (
                     <div className="flex items-center gap-3 mb-3">
-                      <div className="w-10 h-10 bg-[#1D6FA3] rounded-lg flex items-center justify-center">
-                        <Sparkles className="h-5 w-5 text-white" />
+                      <div className="w-8 h-8 bg-[#1D6FA3] rounded-lg flex items-center justify-center">
+                        <Sparkles className="h-4 w-4 text-white" />
                       </div>
-                      <span className="text-sm font-medium text-[#1F2937]">AI Assistant</span>
+                      <span className="text-sm font-semibold text-[#1F2937]">AI Assistant</span>
                     </div>
-                    <div className="rounded-lg px-5 py-4 bg-[#F5F7FA] text-[#1F2937] border border-[#E5E7EB] flex items-center gap-3">
-                      <Loader2 className="h-5 w-5 animate-spin text-[#1D6FA3]" />
-                      <p className="text-base text-gray-500">Searching handbook and generating answer...</p>
+                  )}
+                  
+                  <div
+                    className={`rounded-2xl px-5 py-4 shadow-sm ${
+                      message.type === "user"
+                        ? "bg-[#1D6FA3] text-white rounded-tr-sm"
+                        : "bg-[#F9FAFB] text-[#1F2937] border border-[#E5E7EB] rounded-tl-sm"
+                    }`}
+                  >
+                    <p className="whitespace-pre-wrap text-[15px] leading-relaxed">{message.content}</p>
+                  </div>
+
+                  {message.sources && message.sources.length > 0 && (
+                    <div className="mt-3 ml-2 space-y-2">
+                      <p className="text-xs font-semibold text-[#6B7280] uppercase tracking-wider">Sources</p>
+                      {message.sources.map((source, index) => (
+                        <div
+                          key={index}
+                          className="flex items-center justify-between bg-white border border-[#E5E7EB] rounded-lg p-3 hover:border-[#1D6FA3] transition-colors shadow-sm"
+                        >
+                          <div className="flex items-center gap-3">
+                            <FileText className="h-4 w-4 text-[#1D6FA3]" />
+                            <span className="text-sm font-medium text-[#374151]">{source.name}</span>
+                          </div>
+                          <div className="flex items-center gap-3 hidden sm:flex">
+                            <div className="w-16 bg-gray-200 rounded-full h-1.5">
+                              <div
+                                className="bg-[#10B981] h-1.5 rounded-full"
+                                style={{ width: `${source.relevance}%` }}
+                              ></div>
+                            </div>
+                            <span className="text-xs font-medium text-[#6B7280] min-w-[32px]">{source.relevance}%</span>
+                          </div>
+                        </div>
+                      ))}
+                      
+                      <div className="flex items-center gap-2 mt-2">
+                        <button className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-[#6B7280] hover:text-[#10B981] hover:bg-green-50 rounded-md transition-colors border border-transparent hover:border-green-100">
+                          <ThumbsUp className="h-3.5 w-3.5" />
+                          Helpful
+                        </button>
+                        <button className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-[#6B7280] hover:text-[#EF4444] hover:bg-red-50 rounded-md transition-colors border border-transparent hover:border-red-100">
+                          <ThumbsDown className="h-3.5 w-3.5" />
+                          Not Helpful
+                        </button>
+                      </div>
                     </div>
+                  )}
+
+                  <span className={`text-[11px] text-[#9CA3AF] mt-2 block ${message.type === "user" ? "text-right mr-1" : "ml-1"}`}>
+                    {message.timestamp}
+                  </span>
+                </div>
+              </div>
+            ))}
+
+            {/* Loading Indicator */}
+            {isLoading && (
+              <div className="flex justify-start">
+                <div className="max-w-[75%] order-1">
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="w-8 h-8 bg-[#1D6FA3] rounded-lg flex items-center justify-center">
+                      <Sparkles className="h-4 w-4 text-white" />
+                    </div>
+                    <span className="text-sm font-semibold text-[#1F2937]">AI Assistant</span>
+                  </div>
+                  <div className="rounded-2xl rounded-tl-sm px-5 py-4 bg-[#F9FAFB] border border-[#E5E7EB] flex items-center gap-3 shadow-sm">
+                    <Loader2 className="h-5 w-5 animate-spin text-[#1D6FA3]" />
+                    <p className="text-[15px] text-[#6B7280]">Searching knowledge base...</p>
                   </div>
                 </div>
-              )}
-              <div ref={messagesEndRef} />
-            </div>
-
-            {/* Input Area */}
-            <div className="border-t border-[#E5E7EB] p-6 bg-white">
-              <div className="flex gap-3 items-end">
-                <div className="flex-1">
-                  <textarea
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    onKeyPress={(e) => {
-                      if (e.key === "Enter" && !e.shiftKey) {
-                        e.preventDefault();
-                        handleSendMessage();
-                      }
-                    }}
-                    placeholder="Ask a question about policies, procedures, or guidelines..."
-                    className="w-full px-5 py-4 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-base text-[#1F2937] placeholder-[#9CA3AF] focus:outline-none focus:ring-2 focus:ring-[#1D6FA3] focus:border-transparent resize-none"
-                    rows={3}
-                  />
-                </div>
-                <button
-                  onClick={handleSendMessage}
-                  disabled={isLoading || !query.trim()}
-                  className="px-6 py-4 bg-[#1D6FA3] text-white rounded-lg hover:bg-[#0B3C5D] disabled:opacity-50 transition-colors flex items-center gap-2 font-medium h-[72px]"
-                >
-                  <Send className="h-5 w-5" />
-                  Send
-                </button>
               </div>
-              <p className="text-xs text-[#6B7280] mt-3">
-                AI responses are generated based on institutional documents. Always verify critical information.
-              </p>
+            )}
+            <div ref={messagesEndRef} />
+          </div>
+
+          {/* Input Area - Locked at the bottom */}
+          <div className="shrink-0 border-t border-[#E5E7EB] p-4 sm:p-6 bg-white">
+            <div className="flex gap-3 items-end">
+              <div className="flex-1 relative">
+                <textarea
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  onKeyPress={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      handleSendMessage();
+                    }
+                  }}
+                  placeholder="Ask a question about policies, procedures, or guidelines..."
+                  className="w-full pl-5 pr-12 py-4 bg-[#F5F7FA] border border-[#E5E7EB] rounded-xl text-[15px] text-[#1F2937] placeholder-[#9CA3AF] focus:outline-none focus:ring-2 focus:ring-[#1D6FA3] focus:border-transparent resize-none shadow-inner"
+                  rows={2}
+                />
+              </div>
+              <button
+                onClick={handleSendMessage}
+                disabled={isLoading || !query.trim()}
+                className="px-6 py-4 bg-[#1D6FA3] text-white rounded-xl hover:bg-[#0B3C5D] disabled:opacity-50 transition-all flex items-center gap-2 font-medium h-[62px] shadow-sm active:scale-[0.98]"
+              >
+                <Send className="h-5 w-5" />
+                <span className="hidden sm:inline">Send</span>
+              </button>
             </div>
+            <p className="text-[11px] text-[#9CA3AF] mt-3 text-center">
+              AI can make mistakes. Always verify critical information against official documents.
+            </p>
           </div>
         </div>
       </div>
