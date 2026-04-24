@@ -343,7 +343,8 @@ def get_documents():
                 "category": item['metadata'].get('category'),
                 "office": item['metadata'].get('office'),
                 "version": item['metadata'].get('version'),
-                "date": item['metadata'].get('effectivity_date')
+                # FIX: Change "date" to "effectivity_date" right here:
+                "effectivity_date": item['metadata'].get('effectivity_date', 'N/A')
             })
             seen.add(doc_name)
             
