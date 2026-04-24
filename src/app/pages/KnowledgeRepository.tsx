@@ -17,6 +17,10 @@ export function KnowledgeRepository() {
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedCategory, setSelectedCategory] = useState("all")
   const [selectedOffice, setSelectedOffice] = useState("all") // NEW: Office Filter State
+  // --- DELETE MODAL STATE ---
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [docToDelete, setDocToDelete] = useState<any>(null)
+  const [deleteConfirmText, setDeleteConfirmText] = useState("")
 
   const [formData, setFormData] = useState({
     name: "",
@@ -164,19 +168,29 @@ export function KnowledgeRepository() {
     }
   }
 
-  const handleArchive = async (doc: any) => {
-    // Native browser confirmation popup
-    if (window.confirm(`Are you sure you want to archive "${doc.name}"? This will permanently remove it from the AI's knowledge base.`)) {
-      try {
-        await axios.delete(`http://localhost:8000/documents/${encodeURIComponent(doc.name)}`)
-        alert("Document successfully archived!")
-        
-        // Refresh table
-        const res = await axios.get("http://localhost:8000/documents")
-        setDocuments(res.data)
-      } catch (error) {
-        alert("Failed to archive document.")
-      }
+  const handleArchiveClick = (doc: any) => {
+    setDocToDelete(doc)
+    setDeleteConfirmText("") // Clear the input field
+    setShowDeleteModal(true)
+  }
+
+  const executeArchive = async () => {
+    if (!docToDelete) return
+
+    try {
+      await axios.delete(`http://localhost:8000/documents/${encodeURIComponent(docToDelete.name)}`)
+      alert("Document successfully archived!")
+      
+      // Close modal and clean up
+      setShowDeleteModal(false)
+      setDocToDelete(null)
+      setDeleteConfirmText("")
+
+      // Refresh table
+      const res = await axios.get("http://localhost:8000/documents")
+      setDocuments(res.data)
+    } catch (error) {
+      alert("Failed to archive document.")
     }
   }
 
@@ -390,7 +404,7 @@ export function KnowledgeRepository() {
                               <Edit className="h-4 w-4" />
                             </button>
                             <button 
-                              onClick={() => handleArchive(doc)}
+                              onClick={() => handleArchiveClick(doc)} // <-- UPDATE THIS LINE
                               className="text-[#6B7280] hover:text-[#EF4444] transition-colors" 
                               title="Archive Document"
                             >
@@ -613,6 +627,63 @@ export function KnowledgeRepository() {
                 className="px-5 py-2.5 text-sm font-semibold bg-[#1D6FA3] text-white rounded-lg hover:bg-[#0B3C5D] transition-colors"
               >
                 Save Changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Type-to-Confirm Delete Modal */}
+      {showDeleteModal && docToDelete && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl max-w-md w-full shadow-2xl overflow-hidden">
+            <div className="p-6 border-b border-[#E5E7EB] bg-red-50">
+              <h2 className="text-xl font-semibold text-red-700 flex items-center gap-2">
+                <Archive className="h-5 w-5" />
+                Archive Document
+              </h2>
+            </div>
+            
+            <div className="p-6 space-y-4">
+              <p className="text-sm text-[#4B5563]">
+                This action will permanently remove this document from the AI's knowledge base. It cannot be undone.
+              </p>
+              
+              <div className="bg-[#F9FAFB] p-3 rounded-md border border-[#E5E7EB]">
+                <p className="text-xs text-[#6B7280] mb-1">Document to archive:</p>
+                <p className="text-sm font-bold text-[#1F2937]">{docToDelete.name}</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-[#1F2937] mb-2">
+                  Please type <span className="font-bold select-none">{docToDelete.name}</span> to confirm.
+                </label>
+                <input
+                  type="text"
+                  value={deleteConfirmText}
+                  onChange={(e) => setDeleteConfirmText(e.target.value)}
+                  className="w-full px-4 py-2.5 bg-white border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
+                  placeholder="Type document name here..."
+                />
+              </div>
+            </div>
+
+            <div className="p-6 border-t border-[#E5E7EB] bg-[#F9FAFB] flex justify-end gap-3">
+              <button
+                onClick={() => {
+                  setShowDeleteModal(false)
+                  setDocToDelete(null)
+                }}
+                className="px-5 py-2.5 text-sm font-semibold text-[#4B5563] bg-white border border-[#E5E7EB] rounded-lg hover:bg-[#F3F4F6] transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={executeArchive}
+                disabled={deleteConfirmText !== docToDelete.name}
+                className="px-5 py-2.5 text-sm font-semibold text-white rounded-lg transition-colors disabled:bg-red-200 disabled:cursor-not-allowed bg-red-600 hover:bg-red-700"
+              >
+                Archive Document
               </button>
             </div>
           </div>
