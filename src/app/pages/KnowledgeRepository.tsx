@@ -72,6 +72,57 @@ export function KnowledgeRepository() {
     return matchesCategory && matchesOffice && matchesSearch;
   });
 
+  // --- ACTION HANDLERS ---
+  const handleView = (doc: any) => {
+    if (doc.file_url) {
+      // Opens the PDF in a new browser tab
+      window.open(doc.file_url, "_blank");
+    } else {
+      alert("Document link not found! Ensure your backend is saving the Supabase Storage public URL.");
+    }
+  };
+
+  const handleDownload = async (doc: any) => {
+    if (!doc.file_url) {
+      alert("Document link not found!");
+      return;
+    }
+
+    try {
+      // 1. Fetch the actual file data from Supabase
+      const response = await fetch(doc.file_url);
+      
+      if (!response.ok) throw new Error("Network response was not ok");
+      
+      // 2. Convert the data into a local Blob
+      const blob = await response.blob();
+      
+      // 3. Create a temporary local URL for this blob
+      const blobUrl = window.URL.createObjectURL(blob);
+      
+      // 4. Force the download using the local URL
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      
+      // Clean up the document name so it saves nicely
+      const safeName = doc.name.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+      link.download = `${safeName}_v${doc.version || '1.0'}.pdf`; 
+      
+      document.body.appendChild(link);
+      link.click();
+      
+      // 5. Clean up the temporary URL and element
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(blobUrl);
+      
+    } catch (error) {
+      console.error("Download failed:", error);
+      // Fallback: If the fetch fails (sometimes due to strict CORS rules), 
+      // just open it in a new tab like it used to.
+      window.open(doc.file_url, "_blank"); 
+    }
+  };
+
   // Drag and Drop Handlers
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault()
@@ -248,10 +299,19 @@ export function KnowledgeRepository() {
                     </td>
                     <td className="px-6 py-4 text-center">
                       <div className="flex items-center justify-center gap-3">
-                        <button className="text-[#6B7280] hover:text-[#1D6FA3] transition-colors" title="View Document">
+                        <button 
+                          onClick={() => handleView(doc)}
+                          className="text-[#6B7280] hover:text-[#1D6FA3] transition-colors" 
+                          title="View Document"
+                        >
                           <Eye className="h-4 w-4" />
                         </button>
-                        <button className="text-[#6B7280] hover:text-[#1D6FA3] transition-colors" title="Download">
+                        
+                        <button 
+                          onClick={() => handleDownload(doc)}
+                          className="text-[#6B7280] hover:text-[#1D6FA3] transition-colors" 
+                          title="Download"
+                        >
                           <Download className="h-4 w-4" />
                         </button>
                         {canEdit && (

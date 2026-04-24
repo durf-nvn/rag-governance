@@ -163,14 +163,34 @@ async def upload_document(
         if not extracted_text.strip():
             raise HTTPException(status_code=400, detail="Could not extract text from PDF.")
 
-        # 2. Prepare Metadata
+        # --- NEW: SUPABASE STORAGE UPLOAD ---
+        from vector_store import supabase
+        import time
+        
+        # Create a safe, unique filename so files don't overwrite each other
+        safe_filename = file.filename.replace(" ", "_")
+        unique_filename = f"{int(time.time())}_{safe_filename}"
+        
+        # Upload the physical PDF to your 'documents' bucket
+        supabase.storage.from_("documents").upload(
+            file=contents,
+            path=unique_filename,
+            file_options={"content-type": "application/pdf"}
+        )
+        
+        # Ask Supabase for the permanent public URL
+        public_url = supabase.storage.from_("documents").get_public_url(unique_filename)
+        # ------------------------------------
+
+        # 2. Prepare Metadata (Now including the URL!)
         metadata = {
             "name": name,
             "category": category,
             "office": office,
             "version": version,
             "effectivity_date": effectivity_date,
-            "uploaded_at": datetime.now().isoformat() # CHANGED THIS LINE
+            "uploaded_at": datetime.now().isoformat(),
+            "file_url": public_url # <-- WE ADDED THE LINK HERE
         }
 
         # 3. Process into Vector Store (Supabase)
@@ -178,7 +198,7 @@ async def upload_document(
 
         return {
             "message": f"Successfully processed {name}!",
-            "details": f"Created {chunks_count} searchable vector chunks in Supabase."
+            "details": f"Created {chunks_count} searchable vector chunks and saved file to Storage."
         }
 
     except Exception as e:
@@ -328,10 +348,8 @@ def ask_policy(request: QuestionRequest):
 @app.get("/documents")
 def get_documents():
     from vector_store import supabase
-    # This grabs only the metadata column from your Supabase vector table
     response = supabase.table("document_sections").select("metadata").execute()
     
-    # Filter to show only unique document names
     seen = set()
     unique_docs = []
     for item in response.data:
@@ -343,8 +361,10 @@ def get_documents():
                 "category": item['metadata'].get('category'),
                 "office": item['metadata'].get('office'),
                 "version": item['metadata'].get('version'),
-                # FIX: Change "date" to "effectivity_date" right here:
-                "effectivity_date": item['metadata'].get('effectivity_date', 'N/A')
+                "effectivity_date": item['metadata'].get('effectivity_date', 'N/A'),
+                
+                # ADD THIS LINE: Try to grab the URL (adjust 'file_url' if your DB uses 'source' or 'url')
+                "file_url": item['metadata'].get('file_url') or item['metadata'].get('source')
             })
             seen.add(doc_name)
             
