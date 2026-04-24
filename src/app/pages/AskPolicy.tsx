@@ -119,7 +119,7 @@ export function AskPolicy() {
       const formattedSources = response.data.sources.map((src: any) => ({
         name: src.name,       // Now pulling the name from the object
         snippet: src.snippet, // Pulling our new snippet!
-        relevance: Math.floor(Math.random() * (99 - 85 + 1) + 85) 
+        relevance: src.relevance
       }));
 
       const aiMessage: Message = {
@@ -256,19 +256,33 @@ export function AskPolicy() {
                           className="group bg-white border border-[#E5E7EB] rounded-lg overflow-hidden mb-2 shadow-sm [&_summary::-webkit-details-marker]:hidden"
                         >
                           <summary className="flex items-center justify-between p-3 cursor-pointer hover:bg-[#F5F7FA] transition-colors list-none">
+                            {/* THIS IS THE PART THAT WENT MISSING */}
                             <div className="flex items-center gap-3">
                               <FileText className="h-4 w-4 text-[#1D6FA3]" />
                               <span className="text-sm font-medium text-[#374151]">{source.name}</span>
                             </div>
+                            
                             <div className="flex items-center gap-4">
-                              {/* Mocked Relevance Bar */}
+                              {/* Dynamic Confidence Score Bar */}
                               <div className="flex items-center gap-2 hidden sm:flex">
-                                <div className="w-16 bg-gray-200 rounded-full h-1.5">
-                                  <div className="bg-[#10B981] h-1.5 rounded-full" style={{ width: `${source.relevance}%` }}></div>
+                                <div className="w-16 bg-gray-200 rounded-full h-1.5 overflow-hidden">
+                                  <div 
+                                    className={`h-1.5 rounded-full transition-all duration-500 ${
+                                      source.relevance >= 80 ? 'bg-[#10B981]' : 
+                                      source.relevance >= 60 ? 'bg-[#F59E0B]' : 
+                                      'bg-[#EF4444]'                            
+                                    }`} 
+                                    style={{ width: `${source.relevance}%` }}
+                                  ></div>
                                 </div>
-                                <span className="text-xs font-medium text-[#6B7280] min-w-[32px]">{source.relevance}%</span>
+                                <span className={`text-xs font-bold min-w-[32px] ${
+                                  source.relevance >= 80 ? 'text-[#10B981]' : 
+                                  source.relevance >= 60 ? 'text-[#F59E0B]' : 
+                                  'text-[#EF4444]'
+                                }`}>
+                                  {source.relevance}%
+                                </span>
                               </div>
-                              {/* Dropdown Arrow that rotates when opened */}
                               <ChevronDown className="h-4 w-4 text-[#6B7280] group-open:rotate-180 transition-transform duration-200" />
                             </div>
                           </summary>

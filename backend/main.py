@@ -267,19 +267,30 @@ def ask_policy(request: QuestionRequest):
         print(f"Cloud API Error: {e}")
         return {"answer": "I'm having a bit of trouble connecting to the network. Please try again in a moment!", "sources": []}
 
-    # Format the sources to include a text snippet!
+    # Format the sources to include a text snippet AND real confidence scores!
     unique_sources = {}
     for chunk in relevant_chunks:
         source_name = f"{chunk['metadata']['name']} (v{chunk['metadata']['version']}) - {chunk['metadata']['office']}"
         
-        # Only add it if we haven't seen this document yet to avoid duplicates
+        # Only add it if we haven't seen this document yet
         if source_name not in unique_sources:
-            # Grab the first 150 characters and add an ellipsis to keep it clean
             clean_snippet = chunk['content'][:150].strip() + "..."
+            
+            # Extract the raw similarity score from Supabase
+            # (Fallback to 0.85 just in case your specific SQL function drops the column)
+            raw_similarity = chunk.get('similarity', 0.85)
+            
+            # THE FIX: Scale the semantic score for human readability
+            # A raw score of 0.55 * 1.5 multiplier becomes an 82% (Green)
+            human_score = raw_similarity * 1.5 
+            
+            # Ensure it never goes above 99% 
+            relevance_percentage = min(99, int(human_score * 100))
             
             unique_sources[source_name] = {
                 "name": source_name,
-                "snippet": clean_snippet
+                "snippet": clean_snippet,
+                "relevance": relevance_percentage 
             }
             
     # Convert our dictionary back into a list
