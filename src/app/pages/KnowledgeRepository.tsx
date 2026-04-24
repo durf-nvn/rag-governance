@@ -14,6 +14,7 @@ export function KnowledgeRepository() {
   const [showUploadModal, setShowUploadModal] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedCategory, setSelectedCategory] = useState("all")
+  const [selectedOffice, setSelectedOffice] = useState("all") // NEW: Office Filter State
 
   const [formData, setFormData] = useState({
     name: "",
@@ -52,19 +53,26 @@ export function KnowledgeRepository() {
 
   const accessBadge = getAccessBadge()
 
-  // --- NEW: FILTERING LOGIC ---
+  // --- SUPERCHARGED FILTERING LOGIC ---
   const filteredDocuments = documents.filter((doc) => {
     // 1. Check Category Dropdown
     const matchesCategory = selectedCategory === "all" || doc.category === selectedCategory;
     
-    // 2. Check Search Bar (searches by document name)
-    const matchesSearch = doc.name.toLowerCase().includes(searchQuery.toLowerCase());
+    // 2. Check Office Dropdown
+    const matchesOffice = selectedOffice === "all" || doc.office === selectedOffice;
     
-    // Only show the document if it passes both filters
-    return matchesCategory && matchesSearch;
+    // 3. Deep Search (Checks Name, Category, Office, and Date)
+    const searchLower = searchQuery.toLowerCase();
+    const matchesSearch = 
+      doc.name.toLowerCase().includes(searchLower) ||
+      doc.category.toLowerCase().includes(searchLower) ||
+      doc.office.toLowerCase().includes(searchLower) ||
+      (doc.effectivity_date && doc.effectivity_date.toLowerCase().includes(searchLower));
+    
+    return matchesCategory && matchesOffice && matchesSearch;
   });
-  // ----------------------------
 
+  // Drag and Drop Handlers
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault()
     setIsDragging(true)
@@ -119,7 +127,6 @@ export function KnowledgeRepository() {
       setSelectedFile(null)
       setFormData({ name: "", category: "Policy", office: "Academic Affairs", version: "", effectivityDate: "" })
       
-      // Refresh documents list after successful upload
       const res = await axios.get("http://localhost:8000/documents");
       setDocuments(res.data);
     } catch (error) {
@@ -131,6 +138,7 @@ export function KnowledgeRepository() {
 
   return (
     <div className="space-y-6">
+      {/* Page Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-[#1F2937]">Knowledge Repository</h1>
@@ -153,43 +161,44 @@ export function KnowledgeRepository() {
         </div>
       </div>
 
-      {/* Search and Filter Bar */}
-      <div className="bg-white p-5 rounded-lg border border-[#E5E7EB] space-y-4 shadow-sm">
-        <div className="flex flex-col sm:flex-row gap-4">
+      {/* NEW: Cleaned Up Search and Filter Bar */}
+      <div className="bg-white p-5 rounded-lg border border-[#E5E7EB] shadow-sm">
+        <div className="flex flex-col lg:flex-row gap-4">
           <div className="flex-1 relative">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-[#9CA3AF]" />
             <input
               type="text"
-              placeholder="Search by document name..."
+              placeholder="Search by document name, category, office, or date..."
               className="w-full pl-11 pr-4 py-2.5 bg-[#F9FAFB] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1D6FA3] transition-colors"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
-          <select
-            className="sm:w-64 px-4 py-2.5 bg-[#F9FAFB] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1D6FA3] text-[#374151] cursor-pointer"
-            value={selectedCategory}
-            onChange={(e) => setSelectedCategory(e.target.value)}
-          >
-            <option value="all">All Categories</option>
-            <option value="Policy">Policy</option>
-            <option value="Procedure">Procedure</option>
-            <option value="Guideline">Guideline</option>
-            <option value="Memorandum">Memorandum</option>
-          </select>
-        </div>
-        
-        <div className="flex items-center gap-3 pt-1">
-          <button className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-[#4B5563] border border-[#E5E7EB] rounded-md hover:bg-[#F9FAFB] hover:text-[#1F2937] transition-colors">
-            <Filter className="h-4 w-4" />
-            More Filters
-          </button>
-          <span className="px-3 py-1 text-xs font-medium bg-blue-50 text-[#1D6FA3] border border-blue-100 rounded-full">
-            Office: All
-          </span>
-          <span className="px-3 py-1 text-xs font-medium bg-green-50 text-[#10B981] border border-green-100 rounded-full">
-            Status: Active
-          </span>
+          <div className="flex flex-col sm:flex-row gap-4">
+            <select
+              className="sm:w-48 px-4 py-2.5 bg-[#F9FAFB] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1D6FA3] text-[#374151] cursor-pointer"
+              value={selectedCategory}
+              onChange={(e) => setSelectedCategory(e.target.value)}
+            >
+              <option value="all">All Categories</option>
+              <option value="Policy">Policy</option>
+              <option value="Procedure">Procedure</option>
+              <option value="Guideline">Guideline</option>
+              <option value="Memorandum">Memorandum</option>
+            </select>
+            
+            <select
+              className="sm:w-48 px-4 py-2.5 bg-[#F9FAFB] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1D6FA3] text-[#374151] cursor-pointer"
+              value={selectedOffice}
+              onChange={(e) => setSelectedOffice(e.target.value)}
+            >
+              <option value="all">All Offices</option>
+              <option value="Academic Affairs">Academic Affairs</option>
+              <option value="Student Affairs">Student Affairs</option>
+              <option value="Research Office">Research Office</option>
+              <option value="Quality Assurance">Quality Assurance</option>
+            </select>
+          </div>
         </div>
       </div>
 
@@ -209,11 +218,10 @@ export function KnowledgeRepository() {
               </tr>
             </thead>
             <tbody className="divide-y divide-[#E5E7EB]">
-              {/* UPDATED: We now map over filteredDocuments instead of documents */}
               {filteredDocuments.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="px-6 py-8 text-center text-sm text-[#6B7280]">
-                    No documents found matching your filters.
+                    No documents found matching your search criteria.
                   </td>
                 </tr>
               ) : (
@@ -227,7 +235,7 @@ export function KnowledgeRepository() {
                     <td className="px-6 py-4 text-sm text-[#4B5563]">{doc.office}</td>
                     <td className="px-6 py-4">
                       <span className="text-sm font-medium text-[#1D6FA3]">
-                        {doc.version || "v1.0"}
+                        v{doc.version}
                       </span>
                     </td>
                     <td className="px-6 py-4 text-sm text-[#4B5563]">
@@ -251,7 +259,7 @@ export function KnowledgeRepository() {
                             <button className="text-[#6B7280] hover:text-[#1D6FA3] transition-colors" title="Edit Metadata">
                               <Edit className="h-4 w-4" />
                             </button>
-                            <button className="text-[#6B7280] hover:text-[#1D6FA3] transition-colors" title="Archive Document">
+                            <button className="text-[#6B7280] hover:text-[#EF4444] transition-colors" title="Archive Document">
                               <Archive className="h-4 w-4" />
                             </button>
                           </>
@@ -265,10 +273,9 @@ export function KnowledgeRepository() {
           </table>
         </div>
       </div>
-      
-      
 
-      {/* Upload Modal with Full Form */}
+      {/* Upload Modal (unchanged) */}
+      {/* ... [Upload Modal code remains exactly the same] ... */}
       {showUploadModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl max-w-2xl w-full max-h-[90vh] flex flex-col shadow-2xl">
