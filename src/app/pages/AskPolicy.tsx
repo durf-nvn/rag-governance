@@ -397,9 +397,7 @@ export function AskPolicy() {
                 <span className="hidden sm:inline">Send</span>
               </button>
             </div>
-            <p className="text-[11px] text-[#9CA3AF] mt-3 text-center">
-              AI can make mistakes. Always verify critical information against official documents.
-            </p>
+            
           </div>
         </div>
       </div>
