@@ -216,7 +216,7 @@ def ask_policy(request: QuestionRequest):
     # 2. AUGMENT: Prepare the context string
     context_text = "\n\n".join([chunk['content'] for chunk in relevant_chunks])
     
-    # 3. GENERATE: The "Hybrid" System Prompt
+    # 3. GENERATE: The "Hybrid" System Prompt with Follow-Up Instructions
     system_prompt = f"""You are the friendly and professional AI Policy Assistant for Cebu Technological University (CTU) Argao Campus.
     
     YOUR PERSONALITY:
@@ -224,10 +224,13 @@ def ask_policy(request: QuestionRequest):
     - You represent the CTU Argao brand.
 
     INSTRUCTIONS:
-    1. GREETINGS: If the user says "Hello", "Hi", "Good morning", or asks "How are you?", respond warmly and introduce yourself. Ask how you can assist them with university policies today.
-    2. POLICY QUESTIONS: If the question is about university rules, grades, research, or handbooks, use the CONTEXT provided below to answer.
-    3. NO CONTEXT: If a question is asked that is NOT in the context, say: "I'm sorry, I don't have the specific details for that in our current records. You might want to visit the relevant campus office for more info!"
-    4. STAY IN CHARACTER: Even when you can't find an answer, remain professional and polite.
+    1. POLICY QUESTIONS: If the question is about university rules, grades, research, or handbooks, use the CONTEXT provided below to answer.
+    2. NO CONTEXT: If a question is asked that is NOT in the context, say: "I'm sorry, I don't have the specific details for that in our current records. You might want to visit the relevant campus office for more info!"
+    3. FOLLOW-UPS: At the very end of your response, you MUST generate exactly 3 logical follow-up questions the user might want to ask next based on the topic.
+    
+    FORMATTING RULE:
+    You must separate your main answer from the follow-up questions using exactly this string: |FOLLOWUPS|
+    Put each follow-up question on a new line. Do not number them.
 
     CONTEXT FROM HANDBOOKS:
     {context_text}
@@ -243,29 +246,29 @@ def ask_policy(request: QuestionRequest):
             temperature=0.3 # Increased slightly to make it more "conversational"
         )
         
-        answer = response.choices[0].message.content
+        # Extract the raw text from the AI
+        raw_answer = response.choices[0].message.content
 
-        try:
-            from vector_store import supabase
-            # 1. Save the User's question
-            supabase.table("chat_history").insert({
-                "user_email": request.user_email,
-                "role": "user",
-                "content": request.question
-            }).execute()
-            
-            # 2. Save the AI's answer
-            supabase.table("chat_history").insert({
-                "user_email": request.user_email,
-                "role": "ai",
-                "content": answer
-            }).execute()
-        except Exception as e:
-            print(f"Failed to save chat history: {e}")
+        # Split the text using our special delimiter
+        parts = raw_answer.split("|FOLLOWUPS|")
+        answer = parts[0].strip()
+
+        # Clean up the follow-up questions
+        follow_ups = []
+        if len(parts) > 1:
+            raw_questions = parts[1].strip().split('\n')
+            for q in raw_questions:
+                # Remove any numbers, dashes, or spaces the AI might have accidentally added
+                clean_q = q.strip().lstrip('1234567890.- ')
+                if clean_q:
+                    follow_ups.append(clean_q)
+                    if len(follow_ups) == 3: break
+        
+        
         
     except Exception as e:
         print(f"Cloud API Error: {e}")
-        return {"answer": "I'm having a bit of trouble connecting to the network. Please try again in a moment!", "sources": []}
+        return {"answer": "I'm having a bit of trouble connecting to the network. Please try again in a moment!", "sources": [], "follow_ups": []}
 
     # Format the sources to include a text snippet AND real confidence scores!
     unique_sources = {}
@@ -299,9 +302,27 @@ def ask_policy(request: QuestionRequest):
     # If it was just a greeting, clear the sources
     final_sources = sources if "I cannot find" not in answer and len(context_text) > 10 else []
 
+    try:
+        from vector_store import supabase
+        supabase.table("chat_history").insert({
+            "user_email": request.user_email,
+            "role": "user",
+            "content": request.question
+        }).execute()
+        
+        supabase.table("chat_history").insert({
+            "user_email": request.user_email,
+            "role": "ai",
+            "content": answer # Only save the clean answer
+        }).execute()
+    except Exception as e:
+        print(f"Failed to save chat history: {e}")
+    # ---------------------------------
+
     return {
         "answer": answer,
-        "sources": final_sources
+        "sources": final_sources,
+        "follow_ups": follow_ups # NEW: Send the questions to React!
     }
 
 @app.get("/documents")

@@ -9,6 +9,7 @@ interface Message {
   sources?: { name: string; relevance: number; snippet?: string }[];
   timestamp: string;
   feedback?: "helpful" | "not-helpful"; // ADD THIS LINE
+  followUps?: string[];
 }
 
 export function AskPolicy() {
@@ -127,6 +128,7 @@ export function AskPolicy() {
         type: "ai",
         content: response.data.answer,
         sources: formattedSources.length > 0 ? formattedSources : undefined,
+        followUps: response.data.follow_ups, // ADD THIS LINE
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       };
 
@@ -326,6 +328,23 @@ export function AskPolicy() {
                     </div>
                   )}
 
+                  {/* Smart Follow-Up Chips */}
+                  {message.followUps && message.followUps.length > 0 && (
+                    <div className="mt-4 ml-2 flex flex-wrap gap-2">
+                      {message.followUps.map((fq, idx) => (
+                        <button
+                          key={idx}
+                          onClick={() => handleSendMessage(fq)}
+                          disabled={isLoading}
+                          className="px-4 py-2 bg-white border border-[#E5E7EB] hover:border-[#1D6FA3] text-[#1D6FA3] hover:bg-[#F5F7FA] text-xs font-medium rounded-full transition-all shadow-sm disabled:opacity-50 text-left"
+                        >
+                          {fq}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Existing Timestamp Code */}
                   <span className={`text-[11px] text-[#9CA3AF] mt-2 block ${message.type === "user" ? "text-right mr-1" : "ml-1"}`}>
                     {message.timestamp}
                   </span>
