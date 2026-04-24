@@ -267,16 +267,25 @@ def ask_policy(request: QuestionRequest):
         print(f"Cloud API Error: {e}")
         return {"answer": "I'm having a bit of trouble connecting to the network. Please try again in a moment!", "sources": []}
 
-    # Format the sources
-    sources = [
-        f"{chunk['metadata']['name']} (v{chunk['metadata']['version']}) - {chunk['metadata']['office']}"
-        for chunk in relevant_chunks
-    ]
-    # Remove duplicates
-    sources = list(set(sources))
+    # Format the sources to include a text snippet!
+    unique_sources = {}
+    for chunk in relevant_chunks:
+        source_name = f"{chunk['metadata']['name']} (v{chunk['metadata']['version']}) - {chunk['metadata']['office']}"
+        
+        # Only add it if we haven't seen this document yet to avoid duplicates
+        if source_name not in unique_sources:
+            # Grab the first 150 characters and add an ellipsis to keep it clean
+            clean_snippet = chunk['content'][:150].strip() + "..."
+            
+            unique_sources[source_name] = {
+                "name": source_name,
+                "snippet": clean_snippet
+            }
+            
+    # Convert our dictionary back into a list
+    sources = list(unique_sources.values())
     
-    # If it was just a greeting, the LLM will likely ignore the context, 
-    # so we can clear the sources for a cleaner UI
+    # If it was just a greeting, clear the sources
     final_sources = sources if "I cannot find" not in answer and len(context_text) > 10 else []
 
     return {

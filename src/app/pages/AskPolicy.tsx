@@ -1,12 +1,12 @@
 import { useState, useRef, useEffect } from "react";
-import { Send, Sparkles, FileText, ThumbsUp, ThumbsDown, Loader2 } from "lucide-react";
+import { Send, Sparkles, FileText, ThumbsUp, ThumbsDown, Loader2, ChevronDown } from "lucide-react";
 import axios from "axios";
 
 interface Message {
   id: number;
   type: "user" | "ai";
   content: string;
-  sources?: { name: string; relevance: number }[];
+  sources?: { name: string; relevance: number; snippet?: string }[];
   timestamp: string;
   feedback?: "helpful" | "not-helpful"; // ADD THIS LINE
 }
@@ -115,8 +115,10 @@ export function AskPolicy() {
         user_email: userEmail // <-- ADD THIS LINE
       });
 
-      const formattedSources = response.data.sources.map((src: string) => ({
-        name: src,
+      // Update this mapping!
+      const formattedSources = response.data.sources.map((src: any) => ({
+        name: src.name,       // Now pulling the name from the object
+        snippet: src.snippet, // Pulling our new snippet!
         relevance: Math.floor(Math.random() * (99 - 85 + 1) + 85) 
       }));
 
@@ -249,24 +251,35 @@ export function AskPolicy() {
                     <div className="mt-3 ml-2 space-y-2">
                       <p className="text-xs font-semibold text-[#6B7280] uppercase tracking-wider">Sources</p>
                       {message.sources.map((source, index) => (
-                        <div
-                          key={index}
-                          className="flex items-center justify-between bg-white border border-[#E5E7EB] rounded-lg p-3 hover:border-[#1D6FA3] transition-colors shadow-sm"
+                        <details 
+                          key={index} 
+                          className="group bg-white border border-[#E5E7EB] rounded-lg overflow-hidden mb-2 shadow-sm [&_summary::-webkit-details-marker]:hidden"
                         >
-                          <div className="flex items-center gap-3">
-                            <FileText className="h-4 w-4 text-[#1D6FA3]" />
-                            <span className="text-sm font-medium text-[#374151]">{source.name}</span>
-                          </div>
-                          <div className="flex items-center gap-3 hidden sm:flex">
-                            <div className="w-16 bg-gray-200 rounded-full h-1.5">
-                              <div
-                                className="bg-[#10B981] h-1.5 rounded-full"
-                                style={{ width: `${source.relevance}%` }}
-                              ></div>
+                          <summary className="flex items-center justify-between p-3 cursor-pointer hover:bg-[#F5F7FA] transition-colors list-none">
+                            <div className="flex items-center gap-3">
+                              <FileText className="h-4 w-4 text-[#1D6FA3]" />
+                              <span className="text-sm font-medium text-[#374151]">{source.name}</span>
                             </div>
-                            <span className="text-xs font-medium text-[#6B7280] min-w-[32px]">{source.relevance}%</span>
-                          </div>
-                        </div>
+                            <div className="flex items-center gap-4">
+                              {/* Mocked Relevance Bar */}
+                              <div className="flex items-center gap-2 hidden sm:flex">
+                                <div className="w-16 bg-gray-200 rounded-full h-1.5">
+                                  <div className="bg-[#10B981] h-1.5 rounded-full" style={{ width: `${source.relevance}%` }}></div>
+                                </div>
+                                <span className="text-xs font-medium text-[#6B7280] min-w-[32px]">{source.relevance}%</span>
+                              </div>
+                              {/* Dropdown Arrow that rotates when opened */}
+                              <ChevronDown className="h-4 w-4 text-[#6B7280] group-open:rotate-180 transition-transform duration-200" />
+                            </div>
+                          </summary>
+                          
+                          {/* The Hidden Snippet Content */}
+                          {source.snippet && (
+                            <div className="p-3 bg-[#F9FAFB] border-t border-[#E5E7EB] text-xs text-[#4B5563] leading-relaxed italic">
+                              "{source.snippet}"
+                            </div>
+                          )}
+                        </details>
                       ))}
                       
                       <div className="flex items-center gap-2 mt-2">
