@@ -26,6 +26,14 @@ class FeedbackRequest(BaseModel):
     answer: str
     is_helpful: bool
 
+class UpdateDocumentRequest(BaseModel):
+    old_name: str
+    new_name: str
+    category: str
+    office: str
+    version: str
+    effectivity_date: str
+
 models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
@@ -491,3 +499,40 @@ def get_chat_history(email: str):
     except Exception as e:
         print(f"Error fetching history: {e}")
         return []
+    
+@app.put("/documents/update")
+def update_document(request: UpdateDocumentRequest):
+    from vector_store import supabase
+    try:
+        # 1. Fetch one chunk to get the base metadata (so we don't lose the file_url!)
+        res = supabase.table("document_sections").select("metadata").eq("metadata->>name", request.old_name).limit(1).execute()
+        if not res.data:
+            raise HTTPException(status_code=404, detail="Document not found")
+        
+        base_metadata = res.data[0]['metadata']
+        
+        # 2. Update the specific fields
+        base_metadata["name"] = request.new_name
+        base_metadata["category"] = request.category
+        base_metadata["office"] = request.office
+        base_metadata["version"] = request.version
+        base_metadata["effectivity_date"] = request.effectivity_date
+        
+        # 3. Save the updated metadata back to ALL chunks that belong to this document
+        supabase.table("document_sections").update({"metadata": base_metadata}).eq("metadata->>name", request.old_name).execute()
+        
+        return {"message": "Document metadata updated successfully!"}
+    except Exception as e:
+        print(f"Update error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to update document")
+
+@app.delete("/documents/{doc_name}")
+def delete_document(doc_name: str):
+    from vector_store import supabase
+    try:
+        # Delete ALL chunks matching this document name from the AI's brain
+        supabase.table("document_sections").delete().eq("metadata->>name", doc_name).execute()
+        return {"message": "Document archived and removed from AI knowledge base!"}
+    except Exception as e:
+        print(f"Delete error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to delete document")

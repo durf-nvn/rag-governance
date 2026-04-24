@@ -11,6 +11,8 @@ export function KnowledgeRepository() {
   const canEdit = ["ADMIN", "FACULTY"].includes(currentRole)
   const canDelete = currentRole === "ADMIN"
 
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [editingDocName, setEditingDocName] = useState("")
   const [showUploadModal, setShowUploadModal] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedCategory, setSelectedCategory] = useState("all")
@@ -123,6 +125,61 @@ export function KnowledgeRepository() {
     }
   };
 
+  const handleEditClick = (doc: any) => {
+    // Pre-fill the form with the document's current data
+    setFormData({
+      name: doc.name,
+      category: doc.category,
+      office: doc.office,
+      version: doc.version,
+      effectivityDate: doc.effectivity_date !== "N/A" ? doc.effectivity_date : ""
+    })
+    setEditingDocName(doc.name) // Save the original name so the backend knows which one to update
+    setShowEditModal(true)
+  }
+
+  const handleEditSubmit = async () => {
+    if (!formData.name || !formData.version || !formData.effectivityDate) {
+      alert("Please fill out all fields.")
+      return
+    }
+    try {
+      await axios.put("http://localhost:8000/documents/update", {
+        old_name: editingDocName,
+        new_name: formData.name,
+        category: formData.category,
+        office: formData.office,
+        version: formData.version,
+        effectivity_date: formData.effectivityDate
+      })
+      alert("Document updated successfully!")
+      setShowEditModal(false)
+      setFormData({ name: "", category: "Policy", office: "Academic Affairs", version: "", effectivityDate: "" })
+      
+      // Refresh table
+      const res = await axios.get("http://localhost:8000/documents")
+      setDocuments(res.data)
+    } catch (error) {
+      alert("Failed to update document.")
+    }
+  }
+
+  const handleArchive = async (doc: any) => {
+    // Native browser confirmation popup
+    if (window.confirm(`Are you sure you want to archive "${doc.name}"? This will permanently remove it from the AI's knowledge base.`)) {
+      try {
+        await axios.delete(`http://localhost:8000/documents/${encodeURIComponent(doc.name)}`)
+        alert("Document successfully archived!")
+        
+        // Refresh table
+        const res = await axios.get("http://localhost:8000/documents")
+        setDocuments(res.data)
+      } catch (error) {
+        alert("Failed to archive document.")
+      }
+    }
+  }
+
   // Drag and Drop Handlers
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault()
@@ -188,76 +245,84 @@ export function KnowledgeRepository() {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Page Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold text-[#1F2937]">Knowledge Repository</h1>
-          <p className="text-sm text-[#6B7280] mt-1">Centralized storage for institutional documents and policies</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <div className={`flex items-center gap-2 px-4 py-2 rounded-lg border ${accessBadge.color}`}>
-            <accessBadge.icon className="h-4 w-4" />
-            <span className="text-sm font-medium">{accessBadge.label}</span>
+    <div className="space-y-6 flex flex-col h-[calc(100vh-6rem)]">
+      
+      {/* FIXED TOP SECTION (Title + Filters) */}
+      <div className="flex-none space-y-6">
+        {/* Page Header */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-semibold text-[#1F2937]">Knowledge Repository</h1>
+            <p className="text-sm text-[#6B7280] mt-1">Centralized storage for institutional documents and policies</p>
           </div>
-          {canUpload && (
-            <button
-              onClick={() => setShowUploadModal(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-[#1D6FA3] text-white rounded-lg hover:bg-[#0B3C5D] transition-colors"
-            >
-              <Upload className="h-4 w-4" />
-              <span className="text-sm font-medium">Upload Document</span>
-            </button>
-          )}
+          <div className="flex items-center gap-3">
+            <div className={`flex items-center gap-2 px-4 py-2 rounded-lg border ${accessBadge.color}`}>
+              <accessBadge.icon className="h-4 w-4" />
+              <span className="text-sm font-medium">{accessBadge.label}</span>
+            </div>
+            {canUpload && (
+              <button
+                onClick={() => setShowUploadModal(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-[#1D6FA3] text-white rounded-lg hover:bg-[#0B3C5D] transition-colors"
+              >
+                <Upload className="h-4 w-4" />
+                <span className="text-sm font-medium">Upload Document</span>
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Search and Filter Bar */}
+        <div className="bg-white p-5 rounded-lg border border-[#E5E7EB] shadow-sm">
+          <div className="flex flex-col lg:flex-row gap-4">
+            <div className="flex-1 relative">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-[#9CA3AF]" />
+              <input
+                type="text"
+                placeholder="Search by document name, category, office, or date..."
+                className="w-full pl-11 pr-4 py-2.5 bg-[#F9FAFB] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1D6FA3] transition-colors"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
+            <div className="flex flex-col sm:flex-row gap-4">
+              <select
+                className="sm:w-48 px-4 py-2.5 bg-[#F9FAFB] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1D6FA3] text-[#374151] cursor-pointer"
+                value={selectedCategory}
+                onChange={(e) => setSelectedCategory(e.target.value)}
+              >
+                <option value="all">All Categories</option>
+                <option value="Policy">Policy</option>
+                <option value="Procedure">Procedure</option>
+                <option value="Guideline">Guideline</option>
+                <option value="Memorandum">Memorandum</option>
+              </select>
+              
+              <select
+                className="sm:w-48 px-4 py-2.5 bg-[#F9FAFB] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1D6FA3] text-[#374151] cursor-pointer"
+                value={selectedOffice}
+                onChange={(e) => setSelectedOffice(e.target.value)}
+              >
+                <option value="all">All Offices</option>
+                <option value="Academic Affairs">Academic Affairs</option>
+                <option value="Student Affairs">Student Affairs</option>
+                <option value="Research Office">Research Office</option>
+                <option value="Quality Assurance">Quality Assurance</option>
+              </select>
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* NEW: Cleaned Up Search and Filter Bar */}
-      <div className="bg-white p-5 rounded-lg border border-[#E5E7EB] shadow-sm">
-        <div className="flex flex-col lg:flex-row gap-4">
-          <div className="flex-1 relative">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-[#9CA3AF]" />
-            <input
-              type="text"
-              placeholder="Search by document name, category, office, or date..."
-              className="w-full pl-11 pr-4 py-2.5 bg-[#F9FAFB] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1D6FA3] transition-colors"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-          </div>
-          <div className="flex flex-col sm:flex-row gap-4">
-            <select
-              className="sm:w-48 px-4 py-2.5 bg-[#F9FAFB] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1D6FA3] text-[#374151] cursor-pointer"
-              value={selectedCategory}
-              onChange={(e) => setSelectedCategory(e.target.value)}
-            >
-              <option value="all">All Categories</option>
-              <option value="Policy">Policy</option>
-              <option value="Procedure">Procedure</option>
-              <option value="Guideline">Guideline</option>
-              <option value="Memorandum">Memorandum</option>
-            </select>
+      {/* SCROLLABLE TABLE SECTION */}
+      <div className="flex-1 h-auto bg-white rounded-lg border border-[#E5E7EB] shadow-sm flex flex-col min-h-0 overflow-hidden">
+        {/* This inner div handles the vertical scrolling! */}
+        <div className="flex-1 h-auto overflow-auto">
+          <table className="w-full whitespace-nowrap relative">
             
-            <select
-              className="sm:w-48 px-4 py-2.5 bg-[#F9FAFB] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1D6FA3] text-[#374151] cursor-pointer"
-              value={selectedOffice}
-              onChange={(e) => setSelectedOffice(e.target.value)}
-            >
-              <option value="all">All Offices</option>
-              <option value="Academic Affairs">Academic Affairs</option>
-              <option value="Student Affairs">Student Affairs</option>
-              <option value="Research Office">Research Office</option>
-              <option value="Quality Assurance">Quality Assurance</option>
-            </select>
-          </div>
-        </div>
-      </div>
-
-      {/* Documents Table */}
-      <div className="bg-white rounded-lg border border-[#E5E7EB] overflow-hidden shadow-sm">
-        <div className="overflow-x-auto">
-          <table className="w-full whitespace-nowrap">
-            <thead className="bg-[#1D6FA3] text-white">
+            {/* STICKY TABLE HEADER */}
+            {/* Added: sticky, top-0, z-20, and a shadow-md so the rows slide beautifully underneath */}
+            <thead className="bg-[#1D6FA3] text-white sticky top-0 z-20 shadow-md outline outline-1 outline-[#1D6FA3]">
               <tr>
                 <th className="px-6 py-3.5 text-left text-xs font-semibold uppercase tracking-wider">Document Name</th>
                 <th className="px-6 py-3.5 text-left text-xs font-semibold uppercase tracking-wider">Category</th>
@@ -268,7 +333,8 @@ export function KnowledgeRepository() {
                 <th className="px-6 py-3.5 text-center text-xs font-semibold uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#E5E7EB]">
+            
+            <tbody className="h-auto divide-y divide-[#E5E7EB]">
               {filteredDocuments.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="px-6 py-8 text-center text-sm text-[#6B7280]">
@@ -316,10 +382,18 @@ export function KnowledgeRepository() {
                         </button>
                         {canEdit && (
                           <>
-                            <button className="text-[#6B7280] hover:text-[#1D6FA3] transition-colors" title="Edit Metadata">
+                            <button 
+                              onClick={() => handleEditClick(doc)}
+                              className="text-[#6B7280] hover:text-[#1D6FA3] transition-colors" 
+                              title="Edit Metadata"
+                            >
                               <Edit className="h-4 w-4" />
                             </button>
-                            <button className="text-[#6B7280] hover:text-[#EF4444] transition-colors" title="Archive Document">
+                            <button 
+                              onClick={() => handleArchive(doc)}
+                              className="text-[#6B7280] hover:text-[#EF4444] transition-colors" 
+                              title="Archive Document"
+                            >
                               <Archive className="h-4 w-4" />
                             </button>
                           </>
@@ -334,11 +408,11 @@ export function KnowledgeRepository() {
         </div>
       </div>
 
-      {/* Upload Modal (unchanged) */}
-      {/* ... [Upload Modal code remains exactly the same] ... */}
+      {/* Upload Modal */}
       {showUploadModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl max-w-2xl w-full max-h-[90vh] flex flex-col shadow-2xl">
+            {/* ... Your existing modal code remains exactly the same ... */}
+            <div className="bg-white rounded-xl max-w-2xl w-full max-h-[90vh] flex flex-col shadow-2xl">
             <div className="p-6 border-b border-[#E5E7EB]">
               <h2 className="text-xl font-semibold text-[#1F2937]">Upload New Document</h2>
             </div>
@@ -461,6 +535,90 @@ export function KnowledgeRepository() {
           </div>
         </div>
       )}
+
+      {/* Edit Modal */}
+      {showEditModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl max-w-2xl w-full shadow-2xl">
+            <div className="p-6 border-b border-[#E5E7EB]">
+              <h2 className="text-xl font-semibold text-[#1F2937]">Edit Document Metadata</h2>
+            </div>
+            
+            <div className="p-6 space-y-5">
+              <div>
+                <label className="block text-sm font-medium text-[#1F2937] mb-2">Document Name</label>
+                <input
+                  type="text"
+                  name="name"
+                  value={formData.name}
+                  onChange={handleInputChange}
+                  className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1D6FA3]"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-[#1F2937] mb-2">Category</label>
+                  <select name="category" value={formData.category} onChange={handleInputChange} className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1D6FA3]">
+                    <option>Policy</option>
+                    <option>Procedure</option>
+                    <option>Guideline</option>
+                    <option>Memorandum</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-[#1F2937] mb-2">Office</label>
+                  <select name="office" value={formData.office} onChange={handleInputChange} className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1D6FA3]">
+                    <option>Academic Affairs</option>
+                    <option>Student Affairs</option>
+                    <option>Research Office</option>
+                    <option>Quality Assurance</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-[#1F2937] mb-2">Version</label>
+                  <input
+                    type="text"
+                    name="version"
+                    value={formData.version}
+                    onChange={handleInputChange}
+                    className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1D6FA3]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-[#1F2937] mb-2">Effectivity Date</label>
+                  <input
+                    type="date"
+                    name="effectivityDate"
+                    value={formData.effectivityDate}
+                    onChange={handleInputChange}
+                    className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1D6FA3]"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="p-6 border-t border-[#E5E7EB] bg-[#F9FAFB] flex justify-end gap-3 rounded-b-xl">
+              <button
+                onClick={() => setShowEditModal(false)}
+                className="px-5 py-2.5 text-sm font-semibold text-[#4B5563] bg-white border border-[#E5E7EB] rounded-lg hover:bg-[#F3F4F6] transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleEditSubmit}
+                className="px-5 py-2.5 text-sm font-semibold bg-[#1D6FA3] text-white rounded-lg hover:bg-[#0B3C5D] transition-colors"
+              >
+                Save Changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
     </div>
   )
 }
