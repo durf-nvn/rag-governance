@@ -31,31 +31,48 @@ export function AskPolicy() {
     scrollToBottom();
   }, [messages]);
 
-  const recentQuestions = [
-    "What is the grading system for undergraduate programs?",
-    "How do I apply for research grants?",
-    "What are the requirements for faculty promotion?",
-    "What is the policy on student absences?",
-    "How to file a grievance?",
-  ];
+  // 1. Change from hardcoded arrays to State variables
+  const [recentQuestions, setRecentQuestions] = useState<string[]>([]);
+  const [popularTopics, setPopularTopics] = useState<{label: string, color: string}[]>([]);
 
-  const handleSendMessage = async () => {
-    if (!query.trim()) return;
+  // 2. Fetch the real data when the component loads
+  useEffect(() => {
+    const fetchAnalytics = async () => {
+      try {
+        const [recentRes, topicsRes] = await Promise.all([
+          axios.get("http://localhost:8000/analytics/recent"),
+          axios.get("http://localhost:8000/analytics/popular")
+        ]);
+        setRecentQuestions(recentRes.data);
+        setPopularTopics(topicsRes.data);
+      } catch (error) {
+        console.error("Failed to load sidebar analytics", error);
+      }
+    };
+    fetchAnalytics();
+  }, []); // The empty array means this runs once when the page opens
+
+  // FIXED: Now accepts an optional string so buttons can trigger it directly!
+  const handleSendMessage = async (quickText?: string) => {
+    // If a button passed text, use it. Otherwise, use what's typed in the input.
+    const textToSend = typeof quickText === 'string' ? quickText : query;
+    
+    if (!textToSend.trim()) return;
 
     const userMessage: Message = {
       id: messages.length + 1,
       type: "user",
-      content: query,
+      content: textToSend,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     };
 
     setMessages((prev) => [...prev, userMessage]);
-    setQuery("");
+    setQuery(""); // Clear the input box instantly
     setIsLoading(true);
 
     try {
       const response = await axios.post("http://localhost:8000/ask-policy", {
-        question: userMessage.content
+        question: textToSend
       });
 
       const formattedSources = response.data.sources.map((src: string) => ({
@@ -86,22 +103,17 @@ export function AskPolicy() {
     }
   };
 
-  const handleQuickQuestion = (question: string) => {
-    setQuery(question);
-  };
-
   return (
     <div className="h-[calc(100vh-120px)] flex flex-col overflow-hidden">
-      {/* Page Header - Locked at the top */}
+      {/* Page Header */}
       <div className="shrink-0 mb-6">
         <h1 className="text-2xl font-semibold text-[#1F2937]">Ask Policy</h1>
         <p className="text-sm text-[#6B7280] mt-1">Get instant AI-powered answers to your policy and governance questions</p>
       </div>
 
-      {/* Main Layout Grid */}
       <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-12 gap-6">
         
-        {/* Sidebar - Locked outline, internal scroll */}
+        {/* Sidebar */}
         <div className="hidden lg:flex lg:col-span-3 bg-white rounded-lg border border-[#E5E7EB] flex-col overflow-hidden">
           <div className="flex-1 overflow-y-auto p-6">
             <h3 className="text-base font-semibold text-[#1F2937] mb-4">Recent Questions</h3>
@@ -109,8 +121,9 @@ export function AskPolicy() {
               {recentQuestions.map((question, index) => (
                 <button
                   key={index}
-                  onClick={() => handleQuickQuestion(question)}
-                  className="w-full text-left px-4 py-3 text-sm text-[#374151] hover:text-[#1D6FA3] bg-[#F5F7FA] hover:bg-[#E3F2FD] rounded-lg transition-colors border border-transparent"
+                  onClick={() => handleSendMessage(question)} // WIRED UP!
+                  disabled={isLoading}
+                  className="w-full text-left px-4 py-3 text-sm text-[#374151] hover:text-[#1D6FA3] bg-[#F5F7FA] hover:bg-[#E3F2FD] rounded-lg transition-colors border border-transparent disabled:opacity-50"
                 >
                   {question}
                 </button>
@@ -120,27 +133,28 @@ export function AskPolicy() {
             <div className="mt-8 pt-6 border-t border-[#E5E7EB]">
               <h4 className="text-sm font-medium mb-4 text-[#1F2937]">Popular Topics</h4>
               <div className="flex flex-wrap gap-2">
-                <button className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-medium rounded-lg border border-blue-200 transition-colors">
-                  Grading
-                </button>
-                <button className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-medium rounded-lg border border-blue-200 transition-colors">
-                  Research
-                </button>
-                <button className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-medium rounded-lg border border-emerald-200 transition-colors">
-                  Admissions
-                </button>
-                <button className="px-3 py-1.5 bg-purple-50 hover:bg-purple-100 text-purple-700 text-xs font-medium rounded-lg border border-purple-200 transition-colors">
-                  Faculty
-                </button>
+                {popularTopics.map((topic, index) => (
+                  <button 
+                    key={index}
+                    onClick={() => handleSendMessage(`What are the policies regarding ${topic.label}?`)} // WIRED UP!
+                    disabled={isLoading}
+                    className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors disabled:opacity-50
+                      ${topic.color === 'blue' ? 'bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-200' : ''}
+                      ${topic.color === 'emerald' ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200' : ''}
+                      ${topic.color === 'purple' ? 'bg-purple-50 hover:bg-purple-100 text-purple-700 border-purple-200' : ''}
+                    `}
+                  >
+                    {topic.label}
+                  </button>
+                ))}
               </div>
             </div>
           </div>
         </div>
 
-        {/* Chat Interface - Locked outline, internal scroll */}
+        {/* Chat Interface */}
         <div className="lg:col-span-9 bg-white rounded-lg border border-[#E5E7EB] flex flex-col overflow-hidden">
           
-          {/* Chat Messages Area - Natively Scrolls */}
           <div className="flex-1 overflow-y-auto p-6 space-y-6">
             {messages.map((message) => (
               <div key={message.id} className={`flex ${message.type === "user" ? "justify-end" : "justify-start"}`}>
@@ -208,7 +222,6 @@ export function AskPolicy() {
               </div>
             ))}
 
-            {/* Loading Indicator */}
             {isLoading && (
               <div className="flex justify-start">
                 <div className="max-w-[75%] order-1">
@@ -228,7 +241,6 @@ export function AskPolicy() {
             <div ref={messagesEndRef} />
           </div>
 
-          {/* Input Area - Locked at the bottom */}
           <div className="shrink-0 border-t border-[#E5E7EB] p-4 sm:p-6 bg-white">
             <div className="flex gap-3 items-end">
               <div className="flex-1 relative">
@@ -238,7 +250,7 @@ export function AskPolicy() {
                   onKeyPress={(e) => {
                     if (e.key === "Enter" && !e.shiftKey) {
                       e.preventDefault();
-                      handleSendMessage();
+                      handleSendMessage(); // Sends current typed query
                     }
                   }}
                   placeholder="Ask a question about policies, procedures, or guidelines..."
@@ -247,7 +259,7 @@ export function AskPolicy() {
                 />
               </div>
               <button
-                onClick={handleSendMessage}
+                onClick={() => handleSendMessage()} // Sends current typed query
                 disabled={isLoading || !query.trim()}
                 className="px-6 py-4 bg-[#1D6FA3] text-white rounded-xl hover:bg-[#0B3C5D] disabled:opacity-50 transition-all flex items-center gap-2 font-medium h-[62px] shadow-sm active:scale-[0.98]"
               >

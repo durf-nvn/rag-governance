@@ -182,6 +182,27 @@ async def upload_document(
 @app.post("/ask-policy")
 def ask_policy(request: QuestionRequest):
     question = request.question
+
+    try:
+        from vector_store import supabase
+        # Simple AI-less categorizer based on keywords
+        topic = "General"
+        q_lower = question.lower()
+        if len(question.split()) <= 2 or any(w in q_lower for w in ["test", "asdf"]):
+            topic = "Ignored"
+        elif "grade" in q_lower or "pass" in q_lower or "fail" in q_lower or "unit" in q_lower: topic = "Grading"
+        elif "research" in q_lower or "publish" in q_lower or "incentive" in q_lower: topic = "Research"
+        elif "faculty" in q_lower or "teacher" in q_lower or "leave" in q_lower: topic = "Faculty"
+        elif "admission" in q_lower or "enroll" in q_lower or "shift" in q_lower: topic = "Admissions"
+        elif "uniform" in q_lower or "dress" in q_lower or "id" in q_lower: topic = "Dress Code"
+
+        # Save to database (fire and forget)
+        supabase.table("query_logs").insert({
+            "query_text": question,
+            "topic_category": topic
+        }).execute()
+    except Exception as e:
+        print(f"Failed to log query: {e}")
     
     # 1. RETRIEVE: Find relevant sections in Supabase
     relevant_chunks = vector_store.search_knowledge(question)
@@ -262,3 +283,90 @@ def get_documents():
             seen.add(doc_name)
             
     return unique_docs
+
+@app.get("/analytics/recent")
+def get_recent_questions():
+    from vector_store import supabase
+    
+    # We fetch 50 just to have a big pool to filter from, but we will ONLY return 5
+    response = supabase.table("query_logs").select("query_text").order("created_at", desc=True).limit(50).execute()
+    
+    seen = set()
+    recent = []
+    
+    # A list of words that usually start a real question
+    question_words = ["what", "how", "when", "where", "why", "who", "is", "are", "can", "do", "does", "will"]
+    # A list of nonsense or negative words to block
+    blocked_words = ["test", "asdf", "fuck", "shit", "stupid", "idiot", "blah"]
+    
+    for row in response.data:
+        q = row['query_text'].strip()
+        q_lower = q.lower()
+        
+        # FILTER 1: Skip if too short (e.g., "hi", "ok", "yes")
+        if len(q.split()) <= 3:
+            continue
+            
+        # FILTER 2: Skip if it contains blocked/nonsense words
+        if any(bad_word in q_lower for bad_word in blocked_words):
+            continue
+            
+        # FILTER 3: Must look like a real question (starts with a question word OR ends with '?')
+        starts_with_q = any(q_lower.startswith(w) for w in question_words)
+        ends_with_q = q.endswith("?")
+        
+        if not (starts_with_q or ends_with_q):
+            continue
+            
+        # Add to our list if it passes all filters and isn't a duplicate
+        if q not in seen:
+            seen.add(q)
+            recent.append(q)
+            
+            # STRICT LIMIT: Stop exactly at 5 questions
+            if len(recent) == 5: 
+                break
+                
+    # Fallback if the database is empty or everything was filtered out
+    if not recent:
+        return [
+            "What is the grading system for undergraduate programs?", 
+            "How do I apply for research grants?",
+            "What are the requirements for faculty promotion?"
+        ]
+    return recent
+
+
+@app.get("/analytics/popular")
+def get_popular_topics():
+    from vector_store import supabase
+    response = supabase.table("query_logs").select("topic_category").execute()
+    
+    counts = {}
+    for row in response.data:
+        cat = row['topic_category']
+        
+        # FILTER: Do not show "General" or "Ignored" in the popular tags
+        if cat in ["General", "Ignored"]:
+            continue
+            
+        counts[cat] = counts.get(cat, 0) + 1
+        
+    # Sort by most popular (highest count first)
+    sorted_cats = sorted(counts.items(), key=lambda x: x[1], reverse=True)
+    
+    colors = ["blue", "emerald", "purple", "orange"]
+    topics = []
+    
+    # STRICT LIMIT: Return exactly the top 4 topics
+    for i, (cat, count) in enumerate(sorted_cats[:4]):
+        topics.append({"label": cat, "color": colors[i % len(colors)]})
+        
+    # Fallback if empty
+    if not topics:
+        return [
+            {"label": "Grading", "color": "blue"}, 
+            {"label": "Research", "color": "emerald"},
+            {"label": "Admissions", "color": "purple"}
+        ]
+    return topics
