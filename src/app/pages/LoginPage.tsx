@@ -1,12 +1,15 @@
-import { Link, useNavigate } from "react-router";
-import { GraduationCap, AlertCircle, Mail, Lock } from "lucide-react";
-import { useState } from "react";
+import { Link, useNavigate, useLocation } from "react-router";
+import { GraduationCap, AlertCircle, Mail, Lock, X, CheckCircle2 } from "lucide-react";
+import { useState, useEffect } from "react";
 import axios from "axios";
 import { useRole } from "../contexts/RoleContext";
+import ResetPasswordModal from "../components/ResetPasswordModal";
 
 export function LoginPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { setUserRole } = useRole();
+  
   const [isLoading, setIsLoading] = useState(false);
   const [apiError, setApiError] = useState("");
   
@@ -15,12 +18,36 @@ export function LoginPage() {
     password: "",
   });
 
+  // State for the "Forgot Password" request modal
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [resetEmail, setResetEmail] = useState("");
+  const [resetLoading, setResetLoading] = useState(false);
+  const [resetStatus, setResetStatus] = useState<{ type: 'success' | 'error', msg: string } | null>(null);
+
+  // State for the "Update Password" modal triggered by the Gmail link
+  const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
+  const [updateEmail, setUpdateEmail] = useState("");
+
+  // EFFECT: Catch the URL parameters from the Gmail link
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const showReset = params.get("showReset");
+    const email = params.get("email");
+
+    if (showReset === "true" && email) {
+      setUpdateEmail(email);
+      setIsUpdateModalOpen(true);
+      
+      // Clean the URL so the parameters don't stay in the address bar
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+  }, [location]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setApiError("");
     setIsLoading(true);
 
-    // FastAPI's OAuth2 requires URL Encoded Form Data, not standard JSON
     const formBody = new URLSearchParams();
     formBody.append('username', formData.email);
     formBody.append('password', formData.password);
@@ -33,7 +60,7 @@ export function LoginPage() {
       localStorage.setItem('token', response.data.access_token);
       localStorage.setItem('userName', response.data.full_name);
       localStorage.setItem('userEmail', response.data.email);
-      localStorage.setItem('userRole', response.data.role); // ADD THIS LINE
+      localStorage.setItem('userRole', response.data.role);
       
       setUserRole(response.data.role);
       navigate("/app");
@@ -45,9 +72,23 @@ export function LoginPage() {
     }
   };
 
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setResetLoading(true);
+    setResetStatus(null);
+    try {
+      const response = await axios.post("http://localhost:8000/send-reset-email", { email: resetEmail });
+      setResetStatus({ type: 'success', msg: response.data.message });
+    } catch (error: any) {
+      setResetStatus({ type: 'error', msg: error.response?.data?.detail || "Failed to send reset email." });
+    } finally {
+      setResetLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-white flex overflow-hidden">
-      {/* Left Side - Branding */}
+      {/* Left Branding Section */}
       <div className="hidden lg:flex lg:w-1/2 bg-[#1D6FA3] flex-col items-center justify-center p-12 relative">
         <div className="absolute inset-0 bg-[#0B3C5D] opacity-10"></div>
         <div className="relative z-10 text-center">
@@ -69,10 +110,9 @@ export function LoginPage() {
         </div>
       </div>
 
-      {/* Right Side - Login Form */}
+      {/* Right Login Section */}
       <div className="w-full lg:w-1/2 flex items-center justify-center p-8 bg-[#F5F7FA]">
         <div className="w-full max-w-md">
-          {/* Mobile Logo */}
           <div className="lg:hidden text-center mb-6">
             <div className="flex justify-center mb-4">
               <div className="w-16 h-16 bg-[#1D6FA3] rounded-xl flex items-center justify-center">
@@ -82,7 +122,6 @@ export function LoginPage() {
             <h1 className="text-xl font-bold text-[#1F2937]">CTU Knowledge System</h1>
           </div>
 
-          {/* Login Card */}
           <div className="bg-white rounded-xl shadow-sm border border-[#E5E7EB] p-8">
             <div className="mb-6">
               <h2 className="text-2xl font-semibold text-[#1F2937] mb-2">Welcome Back</h2>
@@ -90,15 +129,12 @@ export function LoginPage() {
             </div>
             
             <form onSubmit={handleSubmit} className="space-y-5">
-              
-              {/* API Error Message Display */}
               {apiError && (
                 <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-md">
                   <p className="text-sm text-red-700">{apiError}</p>
                 </div>
               )}
 
-              {/* Email Field */}
               <div>
                 <label htmlFor="email" className="block text-sm font-medium mb-2 text-[#1F2937]">
                   Email Address
@@ -117,7 +153,6 @@ export function LoginPage() {
                 </div>
               </div>
 
-              {/* Password Field */}
               <div>
                 <label htmlFor="password" className="block text-sm font-medium mb-2 text-[#1F2937]">
                   Password
@@ -136,18 +171,20 @@ export function LoginPage() {
                 </div>
               </div>
 
-              {/* Remember Me and Forgot Password */}
               <div className="flex items-center justify-between">
                 <label className="flex items-center">
                   <input type="checkbox" className="mr-2 w-4 h-4 rounded border-[#E5E7EB] text-[#1D6FA3] focus:ring-[#1D6FA3]" />
                   <span className="text-sm text-[#6B7280]">Remember me</span>
                 </label>
-                <a href="#" className="text-sm text-[#1D6FA3] hover:text-[#0B3C5D] font-medium">
+                <button 
+                  type="button" 
+                  onClick={() => setIsModalOpen(true)}
+                  className="text-sm text-[#1D6FA3] hover:text-[#0B3C5D] font-medium"
+                >
                   Forgot password?
-                </a>
+                </button>
               </div>
 
-              {/* Submit Button */}
               <button
                 type="submit"
                 disabled={isLoading}
@@ -163,7 +200,6 @@ export function LoginPage() {
               </button>
             </form>
 
-            {/* Don't have account */}
             <div className="mt-6 text-center pt-6 border-t border-[#E5E7EB]">
               <p className="text-sm text-[#6B7280]">
                 Don't have an account?{" "}
@@ -174,18 +210,15 @@ export function LoginPage() {
             </div>
           </div>
 
-          {/* Security Notice */}
           <div className="mt-6 bg-[#FFC107]/10 rounded-lg p-4 border-l-4 border-[#FFC107]">
             <div className="flex items-start gap-3">
               <AlertCircle className="h-5 w-5 text-[#FFC107] flex-shrink-0 mt-0.5" />
               <p className="text-sm text-[#1F2937]">
                 <strong>Security Notice:</strong> Unauthorized access is strictly prohibited. 
-                All activities are logged and monitored.
               </p>
             </div>
           </div>
 
-          {/* Back to Home */}
           <div className="mt-6 text-center">
             <Link to="/" className="text-sm text-[#1D6FA3] hover:text-[#0B3C5D] font-medium">
               ← Back to Home
@@ -193,6 +226,61 @@ export function LoginPage() {
           </div>
         </div>
       </div>
+
+      {/* MODAL 1: Request Email Modal */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-xl shadow-xl border border-[#E5E7EB] w-full max-w-md overflow-hidden">
+            <div className="flex items-center justify-between p-6 border-b border-[#E5E7EB]">
+              <h3 className="text-lg font-semibold text-[#1F2937]">Reset Password</h3>
+              <button onClick={() => { setIsModalOpen(false); setResetStatus(null); }} className="text-[#6B7280] hover:text-[#1F2937]">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            
+            <form onSubmit={handleForgotPassword} className="p-6 space-y-4">
+              <p className="text-sm text-[#6B7280]">Enter your email address and we'll send you a link to reset your password.</p>
+              
+              {resetStatus && (
+                <div className={`p-4 rounded-md flex items-start gap-3 ${resetStatus.type === 'success' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
+                  {resetStatus.type === 'success' ? <CheckCircle2 className="h-5 w-5 flex-shrink-0" /> : <AlertCircle className="h-5 w-5 flex-shrink-0" />}
+                  <p className="text-sm">{resetStatus.msg}</p>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-sm font-medium mb-2 text-[#1F2937]">Email Address</label>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-[#6B7280]" />
+                  <input
+                    type="email"
+                    required
+                    value={resetEmail}
+                    onChange={(e) => setResetEmail(e.target.value)}
+                    className="w-full pl-10 pr-4 py-3 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1D6FA3]"
+                    placeholder="your.email@ctu.edu.ph"
+                  />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={resetLoading}
+                className="w-full py-3 bg-[#1D6FA3] text-white rounded-lg hover:bg-[#0B3C5D] font-medium disabled:opacity-70 flex justify-center items-center"
+              >
+                {resetLoading ? 'Sending...' : 'Send Reset Link'}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 2: The actual Update Password Modal (triggered from Gmail) */}
+      <ResetPasswordModal 
+        isOpen={isUpdateModalOpen} 
+        email={updateEmail} 
+        onClose={() => setIsUpdateModalOpen(false)} 
+      />
     </div>
   );
 }

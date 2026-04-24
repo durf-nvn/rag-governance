@@ -15,10 +15,8 @@ class User(Base):
     is_verified = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
-    # This creates the link to the profile!
     student_profile = relationship("StudentProfile", back_populates="user", uselist=False)
 
-# NEW: The separate table just for student data
 class StudentProfile(Base):
     __tablename__ = "student_profiles"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
