@@ -169,7 +169,7 @@ export function DashboardLayout() {
 
       {/* Sidebar */}
       <aside
-        className={`fixed left-0 top-[65px] bottom-0 bg-white border-r border-[#E5E7EB] transition-all duration-300 z-20 ${
+        className={`fixed left-0 top-20 bottom-0 bg-white border-r border-[#E5E7EB] transition-all duration-300 z-20 ${
           sidebarCollapsed ? "w-16" : "w-64"
         }`}
       >
