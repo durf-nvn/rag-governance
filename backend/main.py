@@ -55,6 +55,14 @@ class UpdatePasswordRequest(BaseModel):
     new_password: str
 # --------------------------------
 
+# --- NEW: ADD USER FROM ADMIN DASHBOARD ---
+class UserCreateRequest(BaseModel):
+    full_name: str
+    email: str
+    role: str
+    password: str
+# ------------------------------------------
+
 models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
@@ -189,6 +197,52 @@ def verify_user(user_id: str, db: Session = Depends(get_db)):
     user.is_verified = True
     db.commit()
     return {"message": "User approved successfully!"}
+
+@app.delete("/users/{user_id}")
+def delete_user(user_id: str, db: Session = Depends(get_db)):
+    # Find the user and completely remove them from the database
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    db.delete(user)
+    db.commit()
+    return {"message": "User rejected and removed successfully!"}
+
+@app.post("/users")
+def create_user_admin(request: UserCreateRequest, db: Session = Depends(get_db)):
+    # 1. Check if email exists
+    existing_user = db.query(models.User).filter(models.User.email == request.email).first()
+    if existing_user:
+        raise HTTPException(status_code=400, detail="User with that email already exists.")
+
+    # 2. Hash the password using your existing utils
+    hashed_pwd = utils.hash_password(request.password)
+
+    # 3. Create the user (Auto-verified because an Admin created them)
+    new_user = models.User(
+        email=request.email,
+        full_name=request.full_name,
+        hashed_password=hashed_pwd,
+        role=request.role.upper(),
+        is_verified=True 
+    )
+    
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+
+    # 4. If it's a student, create a default profile so the database doesn't break
+    if request.role.upper() == "STUDENT":
+        new_student_profile = models.StudentProfile(
+            user_id=new_user.id,
+            course="BSIT", # Default placeholder
+            year_level=1   # Default placeholder
+        )
+        db.add(new_student_profile)
+        db.commit()
+
+    return {"message": f"{request.role.capitalize()} {request.full_name} created successfully!"}
 
 @app.post("/upload-document")
 async def upload_document(

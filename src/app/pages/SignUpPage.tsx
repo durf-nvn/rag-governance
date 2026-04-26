@@ -70,12 +70,20 @@ export function SignUpPage() {
   };
 
   const courses = [
+    "Bachelor of Elementary Education",
+    "Bachelor of Secondary Education major in Mathematics",
+    "Bachelor of Secondary Education major in English",
+    "Bachelor of Technology and Livelihood Education major in Home Economics",
+    "Bachelor of Arts in English Language Studies",
+    "Bachelor of Arts in Literature",
+    "Bachelor of Arts in Psychology",
+    "Bachelor of Science in Industrial Engineering",
     "Bachelor of Science in Information Technology",
-    "Bachelor of Science in Computer Science",
-    "Bachelor of Science in Business Administration",
-    "Bachelor of Science in Hospitality Management",
-    "Bachelor of Secondary Education",
-    "Bachelor of Elementary Education"
+    "Bachelor in Industrial Technology major in Automotive Technology",
+    "Bachelor in Industrial Technology major in Computer Technology",
+    "Bachelor in Industrial Technology major in Drafting Technology",
+    "Bachelor in Industrial Technology major in Electronics Technology",
+    "Bachelor in Industrial Technology major in Garments Technology"
   ];
 
   const years = ["1st Year", "2nd Year", "3rd Year", "4th Year"];
