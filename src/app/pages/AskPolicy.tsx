@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { Send, Sparkles, FileText, ThumbsUp, ThumbsDown, Loader2, ChevronDown } from "lucide-react";
 import axios from "axios";
+import { useRole } from "../contexts/RoleContext";
 
 interface Message {
   id: number;
@@ -13,6 +14,9 @@ interface Message {
 }
 
 export function AskPolicy() {
+  const { userRole } = useRole();
+  const currentRole = userRole || "STUDENT";
+
   const [query, setQuery] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [messages, setMessages] = useState<Message[]>([
@@ -113,7 +117,8 @@ export function AskPolicy() {
       // Update this request to include the user_email!
       const response = await axios.post("http://localhost:8000/ask-policy", {
         question: textToSend,
-        user_email: userEmail // <-- ADD THIS LINE
+        user_email: userEmail, // <-- ADD THIS LINE
+        user_role: currentRole,
       });
 
       // Update this mapping!

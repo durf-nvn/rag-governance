@@ -74,6 +74,14 @@ export function KnowledgeRepository() {
       doc.category.toLowerCase().includes(searchLower) ||
       doc.office.toLowerCase().includes(searchLower) ||
       (doc.effectivity_date && doc.effectivity_date.toLowerCase().includes(searchLower));
+
+    const safeDocuments = documents.filter(doc => {
+      // If the user is a student, do NOT show them Accreditation Evidence
+      if (userRole === "STUDENT" && doc.category === "Accreditation Evidence") {
+        return false;
+      }
+      return true; // Show everything else
+    });
     
     return matchesCategory && matchesOffice && matchesSearch;
   });
@@ -307,9 +315,12 @@ export function KnowledgeRepository() {
               >
                 <option value="all">All Categories</option>
                 <option value="Policy">Policy</option>
-                <option value="Procedure">Procedure</option>
-                <option value="Guideline">Guideline</option>
+                <option value="Procedure / Guideline">Procedure / Guideline</option>
                 <option value="Memorandum">Memorandum</option>
+                <option value="Resolution">Resolution</option>
+                <option value="Accreditation Evidence">Accreditation Evidence</option>
+                <option value="Forms / Templates">Forms / Templates</option>
+                <option value="Other">Other</option>
               </select>
               
               <select
@@ -450,9 +461,12 @@ export function KnowledgeRepository() {
                     <label className="block text-sm font-medium text-[#1F2937] mb-2">Category</label>
                     <select name="category" value={formData.category} onChange={handleInputChange} className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1D6FA3]">
                       <option>Policy</option>
-                      <option>Procedure</option>
-                      <option>Guideline</option>
+                      <option>Procedure / Guideline</option>
                       <option>Memorandum</option>
+                      <option>Resolution</option>
+                      <option>Accreditation Evidence</option>
+                      <option>Forms / Templates</option>
+                      <option>Other</option>
                     </select>
                   </div>
 
@@ -575,9 +589,12 @@ export function KnowledgeRepository() {
                   <label className="block text-sm font-medium text-[#1F2937] mb-2">Category</label>
                   <select name="category" value={formData.category} onChange={handleInputChange} className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1D6FA3]">
                     <option>Policy</option>
-                    <option>Procedure</option>
-                    <option>Guideline</option>
+                    <option>Procedure / Guideline</option>
                     <option>Memorandum</option>
+                    <option>Resolution</option>
+                    <option>Accreditation Evidence</option>
+                    <option>Forms / Templates</option>
+                    <option>Other</option>
                   </select>
                 </div>
                 <div>

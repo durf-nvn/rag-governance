@@ -32,6 +32,7 @@ groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 class QuestionRequest(BaseModel):
     question: str
     user_email: str
+    user_role: str
 
 class FeedbackRequest(BaseModel):
     question: str
@@ -330,6 +331,17 @@ def ask_policy(request: QuestionRequest):
         print(f"Failed to log query: {e}")
     
     relevant_chunks = vector_store.search_knowledge(question)
+    
+    # --- NEW: ROLE-BASED VECTOR FILTERING ---
+    # If the user is a student, strip out any sensitive accreditation chunks 
+    # before the AI is allowed to read them.
+    if request.user_role.upper() == "STUDENT":
+        safe_chunks = []
+        for chunk in relevant_chunks:
+            if chunk.get('metadata', {}).get('category') != "Accreditation Evidence":
+                safe_chunks.append(chunk)
+        relevant_chunks = safe_chunks
+    # ----------------------------------------
     
     context_text = "\n\n".join([chunk['content'] for chunk in relevant_chunks])
     
