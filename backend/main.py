@@ -499,6 +499,37 @@ def get_popular_topics():
         ]
     return topics
 
+@app.get("/system-stats")
+def get_system_stats(db: Session = Depends(get_db)):
+    from vector_store import supabase
+    try:
+        # 1. Get total registered users
+        users_count = db.query(models.User).count()
+
+        # 2. Get total AI queries asked
+        queries_res = supabase.table("query_logs").select("id").execute()
+        queries_count = len(queries_res.data) if queries_res.data else 0
+
+        # 3. Get total unique documents
+        docs_res = supabase.table("document_sections").select("metadata").execute()
+        unique_docs = set()
+        if docs_res.data:
+            for item in docs_res.data:
+                doc_name = item.get('metadata', {}).get('name')
+                if doc_name:
+                    unique_docs.add(doc_name)
+        docs_count = len(unique_docs)
+
+        return {
+            "users": users_count,
+            "queries": queries_count,
+            "documents": docs_count
+        }
+    except Exception as e:
+        print(f"Error fetching stats: {e}")
+        # Fallback values in case the database is empty or still initializing
+        return {"users": 0, "queries": 0, "documents": 0}
+
 @app.post("/feedback")
 def submit_feedback(request: FeedbackRequest):
     from vector_store import supabase
