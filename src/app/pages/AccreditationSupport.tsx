@@ -1,755 +1,418 @@
-import { useState } from "react";
-import { Search, CheckCircle, AlertCircle, FileText, Download, Award, ClipboardCheck, TrendingUp, Calendar, Target, BookOpen } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { Search, CheckCircle, AlertCircle, FileText, Download, Award, Target, Upload, ChevronDown, X, Loader2 } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "../components/ui/tabs";
+import axios from "axios";
 
 export function AccreditationSupport() {
-  const [selectedArea, setSelectedArea] = useState<string | null>(null);
+  const [selectedProgram, setSelectedProgram] = useState("BSIT");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
+  
+  // --- UPLOAD MODAL STATE ---
+  const [showUploadModal, setShowUploadModal] = useState(false);
+  const [uploadTargetArea, setUploadTargetArea] = useState<any>(null);
+  const [uploadForm, setUploadForm] = useState({ fileName: "" });
+  const [isUploading, setIsUploading] = useState(false);
 
-  // AACCUP Areas
-  const accreditationAreas = [
-    {
-      id: "1",
-      code: "Area I",
-      title: "Vision, Mission, Goals and Outcomes",
-      compliance: 92,
-      status: "compliant",
-      evidenceCount: 15,
-      gaps: 2
-    },
-    {
-      id: "2",
-      code: "Area II",
-      title: "Faculty",
-      compliance: 88,
-      status: "compliant",
-      evidenceCount: 23,
-      gaps: 3
-    },
-    {
-      id: "3",
-      code: "Area III",
-      title: "Curriculum and Instruction",
-      compliance: 85,
-      status: "needs-improvement",
-      evidenceCount: 31,
-      gaps: 5
-    },
-    {
-      id: "4",
-      code: "Area IV",
-      title: "Support for Student Development",
-      compliance: 95,
-      status: "compliant",
-      evidenceCount: 18,
-      gaps: 1
-    },
-    {
-      id: "5",
-      code: "Area V",
-      title: "Research",
-      compliance: 78,
-      status: "needs-improvement",
-      evidenceCount: 12,
-      gaps: 7
-    },
-    {
-      id: "6",
-      code: "Area VI",
-      title: "Extension and Community Involvement",
-      compliance: 82,
-      status: "needs-improvement",
-      evidenceCount: 14,
-      gaps: 6
-    },
-    {
-      id: "7",
-      code: "Area VII",
-      title: "Library",
-      compliance: 90,
-      status: "compliant",
-      evidenceCount: 16,
-      gaps: 3
-    },
-    {
-      id: "8",
-      code: "Area VIII",
-      title: "Physical Plant and Facilities",
-      compliance: 86,
-      status: "compliant",
-      evidenceCount: 20,
-      gaps: 4
-    },
-    {
-      id: "9",
-      code: "Area IX",
-      title: "Laboratories",
-      compliance: 80,
-      status: "needs-improvement",
-      evidenceCount: 17,
-      gaps: 6
-    },
-    {
-      id: "10",
-      code: "Area X",
-      title: "Administration",
-      compliance: 93,
-      status: "compliant",
-      evidenceCount: 25,
-      gaps: 2
-    },
-  ];
+  // --- NEW: REAL FILE UPLOAD STATE ---
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const complianceChecklist = [
-    { item: "Program Educational Objectives (PEOs) documented", status: "complete" },
-    { item: "Student Outcomes (SOs) aligned with PEOs", status: "complete" },
-    { item: "Assessment tools and rubrics available", status: "complete" },
-    { item: "Faculty qualifications meet minimum standards", status: "incomplete" },
-    { item: "Regular curriculum review process documented", status: "incomplete" },
-  ];
+  const [currentData, setCurrentData] = useState<any>({
+    level: "Loading...",
+    overall: 0,
+    gaps: 0,
+    evidence: 0,
+    recentEvidence: [],
+    areas: []
+  });
 
-  const recentEvidence = [
-    { name: "Faculty Credentials Summary 2025-2026", date: "March 5, 2026", area: "Area II" },
-    { name: "Student Learning Outcomes Assessment Report", date: "March 3, 2026", area: "Area III" },
-    { name: "Research Output Summary 2025", date: "March 1, 2026", area: "Area V" },
-  ];
-
-  // ISO Standards Data
-  const isoStandards = [
-    {
-      id: "iso9001",
-      name: "ISO 9001:2015",
-      title: "Quality Management Systems",
-      compliance: 85,
-      status: "compliant",
-      clauses: 10,
-      auditDate: "January 15, 2026",
-      certificationStatus: "Certified"
-    },
-    {
-      id: "iso21001",
-      name: "ISO 21001:2018",
-      title: "Educational Organizations Management Systems",
-      compliance: 78,
-      status: "needs-improvement",
-      clauses: 10,
-      auditDate: "February 20, 2026",
-      certificationStatus: "In Progress"
+  const fetchAccreditationData = async () => {
+    setIsLoading(true);
+    try {
+      const response = await axios.get(`http://localhost:8000/accreditation-status/${selectedProgram}`);
+      setCurrentData(response.data);
+    } catch (error) {
+      console.error("Failed to fetch accreditation data:", error);
+    } finally {
+      setIsLoading(false);
     }
-  ];
+  };
 
-  // CHED Monitoring Data
-  const chedRequirements = [
-    {
-      id: "ched1",
-      category: "CMO No. 46, s. 2012",
-      title: "Policy-Standard to Enhance Quality Assurance (QA)",
-      compliance: 90,
-      status: "compliant",
-      lastReview: "March 10, 2026",
-      documents: 12
-    },
-    {
-      id: "ched2",
-      category: "CMO No. 52, s. 2007",
-      title: "Institutional Quality Assurance Monitoring",
-      compliance: 88,
-      status: "compliant",
-      lastReview: "February 28, 2026",
-      documents: 15
-    },
-    {
-      id: "ched3",
-      category: "CMO No. 04, s. 2020",
-      title: "Guidelines on Flexible Learning",
-      compliance: 82,
-      status: "needs-improvement",
-      lastReview: "March 5, 2026",
-      documents: 8
-    }
-  ];
+  useEffect(() => {
+    fetchAccreditationData();
+  }, [selectedProgram]);
 
-  // Accreditation Results Data
-  const accreditationHistory = [
-    {
-      id: "1",
-      program: "Bachelor of Science in Computer Science",
-      accreditor: "AACCUP",
-      level: "Level III",
-      date: "June 2024",
-      validUntil: "June 2027",
-      status: "Accredited"
-    },
-    {
-      id: "2",
-      program: "Bachelor of Science in Information Technology",
-      accreditor: "AACCUP",
-      level: "Level II",
-      date: "August 2024",
-      validUntil: "August 2027",
-      status: "Accredited"
-    },
-    {
-      id: "3",
-      program: "Bachelor of Science in Business Administration",
-      accreditor: "AACCUP",
-      level: "Level II",
-      date: "November 2023",
-      validUntil: "November 2026",
-      status: "Accredited"
-    }
-  ];
+  const filteredAreas = currentData.areas.filter((area: any) => 
+    area.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
+    area.code.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
-  const upcomingAccreditations = [
-    {
-      id: "1",
-      program: "Bachelor of Science in Civil Engineering",
-      accreditor: "AACCUP",
-      scheduledDate: "July 2026",
-      targetLevel: "Level III",
-      preparedness: 75
-    },
-    {
-      id: "2",
-      program: "Bachelor of Science in Computer Science",
-      accreditor: "AACCUP",
-      scheduledDate: "June 2027",
-      targetLevel: "Level IV (Re-accreditation)",
-      preparedness: 60
+  // --- NEW: DRAG AND DROP HANDLERS ---
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      setSelectedFile(e.dataTransfer.files[0]);
     }
-  ];
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      setSelectedFile(e.target.files[0]);
+    }
+  };
+
+  // --- UPDATED: SENDING REAL FILES ---
+  const handleUploadSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!uploadForm.fileName || !selectedFile) {
+      alert("Please provide a name and select a file.");
+      return;
+    }
+    
+    setIsUploading(true);
+
+    // Using FormData because we are sending a real physical file now
+    const submitData = new FormData();
+    submitData.append("file", selectedFile);
+    submitData.append("document_name", uploadForm.fileName);
+    submitData.append("program", selectedProgram);
+    submitData.append("area_code", uploadTargetArea.code);
+
+    try {
+      await axios.post("http://localhost:8000/upload-accreditation-evidence", submitData, {
+        headers: { "Content-Type": "multipart/form-data" }
+      });
+
+      await fetchAccreditationData();
+
+      setShowUploadModal(false);
+      setUploadForm({ fileName: "" });
+      setSelectedFile(null); // Reset the file state
+      
+    } catch (error) {
+      console.error("Upload failed:", error);
+      alert("Failed to save evidence. Is the backend running?");
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const openUploadModal = (area: any) => {
+    setUploadTargetArea(area);
+    setShowUploadModal(true);
+    setSelectedFile(null); // Clear previous files when opening
+  };
+
+  if (isLoading && currentData.areas.length === 0) {
+    return <div className="flex justify-center items-center h-64 text-gray-500"><Loader2 className="h-8 w-8 animate-spin" /></div>;
+  }
 
   return (
-    <div className="space-y-6">
-      {/* Page Header */}
+    <div className="space-y-6 relative">
       <div>
         <h1 className="text-3xl text-gray-900 mb-2">QA & Accreditation Support</h1>
         <p className="text-gray-600">Comprehensive quality assurance tracking across AACCUP, ISO, CHED monitoring, and accreditation results</p>
       </div>
 
-      {/* Tabs for different accreditation types */}
       <Tabs defaultValue="aaccup" className="w-full">
         <TabsList className="grid w-full grid-cols-4 bg-gray-100 p-1">
-          <TabsTrigger value="aaccup" className="data-[state=active]:bg-[#CE0000] data-[state=active]:text-white">
-            AACCUP
-          </TabsTrigger>
-          <TabsTrigger value="iso" className="data-[state=active]:bg-[#CE0000] data-[state=active]:text-white">
-            ISO Standards
-          </TabsTrigger>
-          <TabsTrigger value="ched" className="data-[state=active]:bg-[#CE0000] data-[state=active]:text-white">
-            CHED Monitoring
-          </TabsTrigger>
-          <TabsTrigger value="results" className="data-[state=active]:bg-[#CE0000] data-[state=active]:text-white">
-            Accreditation Results
-          </TabsTrigger>
+          <TabsTrigger value="aaccup" className="data-[state=active]:bg-[#CE0000] data-[state=active]:text-white">AACCUP</TabsTrigger>
+          <TabsTrigger value="iso" className="data-[state=active]:bg-[#CE0000] data-[state=active]:text-white">ISO Standards</TabsTrigger>
+          <TabsTrigger value="ched" className="data-[state=active]:bg-[#CE0000] data-[state=active]:text-white">CHED Monitoring</TabsTrigger>
+          <TabsTrigger value="results" className="data-[state=active]:bg-[#CE0000] data-[state=active]:text-white">Accreditation Results</TabsTrigger>
         </TabsList>
 
-        {/* AACCUP Tab Content */}
         <TabsContent value="aaccup" className="space-y-6 mt-6">
-          {/* Overall Compliance Summary */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-            <div className="bg-white rounded-lg shadow-md p-6 border-t-4 border-[#006837]">
-              <h3 className="text-3xl text-[#006837] mb-2">87%</h3>
-              <p className="text-gray-700">Overall Compliance</p>
+          <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">Program Evaluation Context</h2>
+              <p className="text-sm text-gray-500">Tracking compliance templates per degree program.</p>
             </div>
-            <div className="bg-white rounded-lg shadow-md p-6 border-t-4 border-[#CE0000]">
-              <h3 className="text-3xl text-[#CE0000] mb-2">39</h3>
-              <p className="text-gray-700">Total Gaps Identified</p>
-            </div>
-            <div className="bg-white rounded-lg shadow-md p-6 border-t-4 border-[#FDB913]">
-              <h3 className="text-3xl text-[#FDB913] mb-2">191</h3>
-              <p className="text-gray-700">Evidence Documents</p>
-            </div>
-            <div className="bg-white rounded-lg shadow-md p-6 border-t-4 border-[#D4AF37]">
-              <h3 className="text-3xl text-[#D4AF37] mb-2">10</h3>
-              <p className="text-gray-700">Accreditation Areas</p>
-            </div>
-          </div>
-
-          {/* Evidence Locator */}
-          <div className="bg-white rounded-lg shadow-md p-6">
-            <h2 className="text-xl mb-4 text-[#CE0000]">Evidence Locator</h2>
-            <div className="flex gap-4">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-                <input
-                  type="text"
-                  placeholder="Search for evidence by area, parameter, or keyword..."
-                  className="w-full pl-10 pr-4 py-3 bg-[#F5F5F5] border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FDB913]"
-                />
-              </div>
-              <button className="px-6 py-3 bg-[#FDB913] text-gray-900 rounded-lg hover:bg-[#e5a610] transition-colors">
-                Search
-              </button>
-            </div>
-          </div>
-
-          {/* Accreditation Areas */}
-          <div className="bg-white rounded-lg shadow-md p-6">
-            <h2 className="text-xl mb-4 text-[#CE0000]">AACCUP Accreditation Areas</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {accreditationAreas.map((area) => (
-                <div
-                  key={area.id}
-                  className="border-2 border-[#D4AF37]/30 rounded-lg p-4 hover:border-[#D4AF37] transition-colors cursor-pointer"
-                  onClick={() => setSelectedArea(area.id)}
+            
+            <div className="flex flex-col sm:flex-row items-center gap-4">
+              <div className="relative w-full sm:w-64">
+                <select 
+                  value={selectedProgram}
+                  onChange={(e) => {
+                    setSelectedProgram(e.target.value);
+                    setSearchQuery(""); 
+                  }}
+                  className="appearance-none w-full px-4 py-3 bg-[#F5F7FA] border border-gray-300 rounded-lg text-sm font-medium text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#CE0000] pr-10 cursor-pointer"
                 >
-                  <div className="flex items-start justify-between mb-3">
+                  <option value="BSIT">BS Information Technology</option>
+                  <option value="BSCE">BS Civil Engineering</option>
+                </select>
+                <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-500 pointer-events-none" />
+              </div>
+
+              <div className="flex items-center gap-2 px-5 py-3 bg-gradient-to-r from-[#D4AF37] to-[#FDB913] text-white rounded-lg shadow-md border border-[#D4AF37]/50 w-full sm:w-auto justify-center">
+                <Award className="h-5 w-5 drop-shadow-sm" />
+                <span className="font-semibold tracking-wide text-shadow-sm">{currentData.level}</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+            <div className="bg-white rounded-xl shadow-sm p-6 border-t-4 border-[#006837]">
+              <h3 className="text-4xl font-semibold text-[#006837] mb-2">{currentData.overall}%</h3>
+              <p className="text-gray-600 text-sm">Overall Compliance</p>
+            </div>
+            <div className="bg-white rounded-xl shadow-sm p-6 border-t-4 border-[#CE0000]">
+              <h3 className="text-4xl font-semibold text-[#CE0000] mb-2">{currentData.gaps}</h3>
+              <p className="text-gray-600 text-sm">Total Gaps Identified</p>
+            </div>
+            <div className="bg-white rounded-xl shadow-sm p-6 border-t-4 border-[#1D6FA3]">
+              <h3 className="text-4xl font-semibold text-[#1D6FA3] mb-2">{currentData.evidence}</h3>
+              <p className="text-gray-600 text-sm">Evidence Documents</p>
+            </div>
+            <div className="bg-white rounded-xl shadow-sm p-6 border-t-4 border-[#D4AF37]">
+              <h3 className="text-4xl font-semibold text-[#D4AF37] mb-2">{currentData.areas.length}</h3>
+              <p className="text-gray-600 text-sm">Active Areas Monitored</p>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl shadow-sm p-6">
+            <div className="flex flex-col md:flex-row md:items-center justify-between mb-4 gap-4">
+              <h2 className="text-xl font-semibold text-[#CE0000]">Evidence Locator</h2>
+            </div>
+            <div className="relative">
+              <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search areas by keyword..."
+                className="w-full pl-12 pr-4 py-4 bg-[#F5F7FA] border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#FDB913] text-gray-900 transition-all"
+              />
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl shadow-sm p-6">
+            <h2 className="text-xl font-semibold mb-6 text-[#CE0000]">AACCUP Area Compliance</h2>
+            
+            {filteredAreas.length === 0 ? (
+              <div className="text-center py-12 border-2 border-dashed border-gray-200 rounded-xl">
+                <p className="text-gray-500 font-medium">No requirements template found.</p>
+                <p className="text-sm text-gray-400 mt-1">Make sure the database template is configured for this program.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                {filteredAreas.map((area: any) => (
+                  <div key={area.id} className="border border-gray-200 rounded-xl p-5 hover:border-[#D4AF37] hover:shadow-md transition-all flex flex-col justify-between bg-white">
                     <div>
-                      <h3 className="text-lg text-gray-900 mb-1">
-                        {area.code}: {area.title}
-                      </h3>
-                      <div className="flex items-center gap-2">
-                        {area.status === "compliant" ? (
-                          <CheckCircle className="h-4 w-4 text-[#006837]" />
-                        ) : (
-                          <AlertCircle className="h-4 w-4 text-[#FDB913]" />
-                        )}
-                        <span
-                          className={`text-sm ${
-                            area.status === "compliant" ? "text-[#006837]" : "text-[#FDB913]"
+                      <div className="flex items-start justify-between mb-4">
+                        <div className="pr-4">
+                          <h3 className="text-lg font-semibold text-gray-900 mb-1 leading-tight">
+                            {area.code}: {area.title}
+                          </h3>
+                          <div className="flex items-center gap-2 mt-2">
+                            {area.compliance === 100 ? (
+                              <CheckCircle className="h-4 w-4 text-[#006837]" />
+                            ) : (
+                              <AlertCircle className="h-4 w-4 text-[#CE0000]" />
+                            )}
+                            <span className={`text-sm font-medium ${area.compliance === 100 ? "text-[#006837]" : "text-[#CE0000]"}`}>
+                              {area.gaps > 0 ? `${area.gaps} Missing Requirements` : "Fully Compliant"}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className={`text-3xl font-semibold ${area.compliance === 100 ? "text-[#006837]" : "text-[#CE0000]"}`}>
+                            {area.compliance}%
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="w-full bg-gray-100 rounded-full h-2.5 mb-4 overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all duration-1000 ease-out ${
+                            area.compliance >= 85 ? "bg-[#006837]" : area.compliance >= 50 ? "bg-[#FDB913]" : "bg-[#CE0000]"
                           }`}
-                        >
-                          {area.status === "compliant" ? "Compliant" : "Needs Improvement"}
-                        </span>
+                          style={{ width: `${area.compliance}%` }}
+                        ></div>
                       </div>
                     </div>
-                    <div className="text-right">
-                      <div className="text-2xl text-[#CE0000]">{area.compliance}%</div>
-                      <div className="text-xs text-gray-500">Compliance</div>
+
+                    <div className="flex items-center justify-between mt-2 pt-4 border-t border-gray-100">
+                      <div className="flex items-center gap-2 text-sm text-gray-600">
+                        <FileText className="h-4 w-4 text-gray-400" />
+                        <span className="font-medium">{area.evidenceCount} / {area.required} Uploaded</span>
+                      </div>
+                      
+                      <button 
+                        onClick={() => openUploadModal(area)}
+                        className="flex items-center gap-2 px-4 py-2 bg-[#1D6FA3]/10 text-[#1D6FA3] rounded-lg hover:bg-[#1D6FA3] hover:text-white transition-all text-sm font-semibold"
+                      >
+                        <Upload className="h-4 w-4" />
+                        Add Evidence
+                      </button>
                     </div>
-                  </div>
-
-                  <div className="w-full bg-gray-200 rounded-full h-2 mb-3">
-                    <div
-                      className={`h-2 rounded-full ${
-                        area.compliance >= 85 ? "bg-[#006837]" : "bg-[#FDB913]"
-                      }`}
-                      style={{ width: `${area.compliance}%` }}
-                    ></div>
-                  </div>
-
-                  <div className="flex items-center justify-between text-sm text-gray-600">
-                    <span>{area.evidenceCount} Evidence Documents</span>
-                    <span className="text-[#CE0000]">{area.gaps} Gaps</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Compliance Checklist */}
-            <div className="bg-white rounded-lg shadow-md p-6">
-              <h2 className="text-xl mb-4 text-[#CE0000]">Compliance Checklist</h2>
-              <div className="space-y-3">
-                {complianceChecklist.map((item, index) => (
-                  <div
-                    key={index}
-                    className="flex items-start gap-3 p-3 rounded-lg hover:bg-[#F5F5F5] transition-colors"
-                  >
-                    {item.status === "complete" ? (
-                      <CheckCircle className="h-5 w-5 text-[#006837] flex-shrink-0 mt-0.5" />
-                    ) : (
-                      <AlertCircle className="h-5 w-5 text-[#FDB913] flex-shrink-0 mt-0.5" />
-                    )}
-                    <span className="text-gray-900">{item.item}</span>
                   </div>
                 ))}
               </div>
-            </div>
+            )}
+          </div>
 
-            {/* Recent Evidence */}
-            <div className="bg-white rounded-lg shadow-md p-6">
-              <h2 className="text-xl mb-4 text-[#CE0000]">Recent Evidence Added</h2>
-              <div className="space-y-3">
-                {recentEvidence.map((evidence, index) => (
-                  <div
-                    key={index}
-                    className="flex items-start justify-between p-3 border border-gray-200 rounded-lg hover:border-[#FDB913] transition-colors"
-                  >
-                    <div className="flex items-start gap-3">
-                      <FileText className="h-5 w-5 text-[#CE0000] flex-shrink-0 mt-0.5" />
+          <div className="bg-white rounded-xl shadow-sm p-6">
+            <h2 className="text-xl font-semibold mb-4 text-[#CE0000]">Recent Evidence Log</h2>
+            <div className="space-y-3">
+              {currentData.recentEvidence.length === 0 ? (
+                <div className="text-center py-6 text-gray-500 text-sm">No evidence uploaded yet.</div>
+              ) : (
+                currentData.recentEvidence.map((evidence: any, index: number) => (
+                  <div key={index} className="flex items-start justify-between p-4 border border-gray-100 bg-[#F5F7FA] rounded-xl hover:border-[#1D6FA3]/30 transition-colors">
+                    <div className="flex items-start gap-4">
+                      <div className="p-2 bg-white rounded-lg shadow-sm">
+                        <FileText className="h-6 w-6 text-[#1D6FA3]" />
+                      </div>
                       <div>
-                        <p className="text-gray-900 mb-1">{evidence.name}</p>
-                        <div className="flex items-center gap-2 text-sm text-gray-600">
+                        <p className="font-semibold text-gray-900 mb-1">{evidence.name}</p>
+                        <div className="flex items-center gap-2 text-sm text-gray-500">
                           <span>{evidence.date}</span>
                           <span>•</span>
-                          <span className="text-[#D4AF37]">{evidence.area}</span>
+                          <span className="text-[#D4AF37] bg-[#D4AF37]/10 px-2 py-0.5 rounded-full text-xs font-medium">{evidence.area}</span>
                         </div>
                       </div>
                     </div>
-                    <button className="p-2 text-gray-600 hover:text-[#CE0000] transition-colors">
-                      <Download className="h-4 w-4" />
+                    <button className="p-2 text-gray-400 hover:text-[#1D6FA3] transition-colors bg-white shadow-sm rounded-lg hover:shadow-md">
+                      <Download className="h-5 w-5" />
                     </button>
                   </div>
-                ))}
-              </div>
+                ))
+              )}
             </div>
           </div>
         </TabsContent>
 
-        {/* ISO Standards Tab Content */}
         <TabsContent value="iso" className="space-y-6 mt-6">
-          {/* ISO Summary Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="bg-white rounded-lg shadow-md p-6 border-t-4 border-[#006837]">
-              <div className="flex items-center gap-3 mb-2">
-                <Award className="h-6 w-6 text-[#006837]" />
-                <h3 className="text-3xl text-[#006837]">2</h3>
-              </div>
-              <p className="text-gray-700">Active ISO Certifications</p>
-            </div>
-            <div className="bg-white rounded-lg shadow-md p-6 border-t-4 border-[#FDB913]">
-              <div className="flex items-center gap-3 mb-2">
-                <ClipboardCheck className="h-6 w-6 text-[#FDB913]" />
-                <h3 className="text-3xl text-[#FDB913]">82%</h3>
-              </div>
-              <p className="text-gray-700">Average ISO Compliance</p>
-            </div>
-            <div className="bg-white rounded-lg shadow-md p-6 border-t-4 border-[#CE0000]">
-              <div className="flex items-center gap-3 mb-2">
-                <Calendar className="h-6 w-6 text-[#CE0000]" />
-                <h3 className="text-3xl text-[#CE0000]">Next</h3>
-              </div>
-              <p className="text-gray-700">Audit: June 2026</p>
-            </div>
-          </div>
-
-          {/* ISO Standards Details */}
-          <div className="bg-white rounded-lg shadow-md p-6">
-            <h2 className="text-xl mb-4 text-[#CE0000]">ISO Standards Tracking</h2>
-            <div className="space-y-4">
-              {isoStandards.map((standard) => (
-                <div
-                  key={standard.id}
-                  className="border-2 border-[#D4AF37]/30 rounded-lg p-5 hover:border-[#D4AF37] transition-colors"
-                >
-                  <div className="flex items-start justify-between mb-4">
-                    <div>
-                      <h3 className="text-lg text-gray-900 mb-1">{standard.name}</h3>
-                      <p className="text-gray-600">{standard.title}</p>
-                    </div>
-                    <span
-                      className={`px-3 py-1 rounded-full text-sm ${
-                        standard.certificationStatus === "Certified"
-                          ? "bg-[#006837] text-white"
-                          : "bg-[#FDB913] text-gray-900"
-                      }`}
-                    >
-                      {standard.certificationStatus}
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-                    <div>
-                      <p className="text-sm text-gray-600 mb-1">Compliance</p>
-                      <div className="flex items-center gap-2">
-                        <div className="text-2xl text-[#CE0000]">{standard.compliance}%</div>
-                      </div>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-600 mb-1">Total Clauses</p>
-                      <div className="text-xl text-gray-900">{standard.clauses} Clauses</div>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-600 mb-1">Last Audit</p>
-                      <div className="text-xl text-gray-900">{standard.auditDate}</div>
-                    </div>
-                  </div>
-
-                  <div className="w-full bg-gray-200 rounded-full h-2">
-                    <div
-                      className={`h-2 rounded-full ${
-                        standard.compliance >= 80 ? "bg-[#006837]" : "bg-[#FDB913]"
-                      }`}
-                      style={{ width: `${standard.compliance}%` }}
-                    ></div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* ISO Documentation */}
-          <div className="bg-white rounded-lg shadow-md p-6">
-            <h2 className="text-xl mb-4 text-[#CE0000]">ISO Documentation</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="border border-gray-200 rounded-lg p-4 hover:border-[#FDB913] transition-colors">
-                <div className="flex items-start gap-3">
-                  <FileText className="h-5 w-5 text-[#CE0000] flex-shrink-0 mt-1" />
-                  <div>
-                    <h3 className="text-gray-900 mb-1">Quality Manual ISO 9001:2015</h3>
-                    <p className="text-sm text-gray-600 mb-2">Updated: March 15, 2026</p>
-                    <button className="text-sm text-[#CE0000] hover:underline">Download PDF</button>
-                  </div>
-                </div>
-              </div>
-              <div className="border border-gray-200 rounded-lg p-4 hover:border-[#FDB913] transition-colors">
-                <div className="flex items-start gap-3">
-                  <FileText className="h-5 w-5 text-[#CE0000] flex-shrink-0 mt-1" />
-                  <div>
-                    <h3 className="text-gray-900 mb-1">ISO 21001 Implementation Plan</h3>
-                    <p className="text-sm text-gray-600 mb-2">Updated: March 10, 2026</p>
-                    <button className="text-sm text-[#CE0000] hover:underline">Download PDF</button>
-                  </div>
-                </div>
-              </div>
-            </div>
+          <div className="bg-white rounded-xl shadow-sm p-12 text-center">
+             <Target className="h-12 w-12 text-gray-300 mx-auto mb-4" />
+             <h3 className="text-lg font-semibold text-gray-900 mb-2">ISO Standards Module</h3>
+             <p className="text-gray-500">ISO institutional tracking will be available in Phase 2 deployment.</p>
           </div>
         </TabsContent>
-
-        {/* CHED Monitoring Tab Content */}
         <TabsContent value="ched" className="space-y-6 mt-6">
-          {/* CHED Summary */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="bg-white rounded-lg shadow-md p-6 border-t-4 border-[#006837]">
-              <div className="flex items-center gap-3 mb-2">
-                <Target className="h-6 w-6 text-[#006837]" />
-                <h3 className="text-3xl text-[#006837]">87%</h3>
-              </div>
-              <p className="text-gray-700">CHED Compliance Rate</p>
-            </div>
-            <div className="bg-white rounded-lg shadow-md p-6 border-t-4 border-[#FDB913]">
-              <div className="flex items-center gap-3 mb-2">
-                <BookOpen className="h-6 w-6 text-[#FDB913]" />
-                <h3 className="text-3xl text-[#FDB913]">35</h3>
-              </div>
-              <p className="text-gray-700">Supporting Documents</p>
-            </div>
-            <div className="bg-white rounded-lg shadow-md p-6 border-t-4 border-[#CE0000]">
-              <div className="flex items-center gap-3 mb-2">
-                <TrendingUp className="h-6 w-6 text-[#CE0000]" />
-                <h3 className="text-3xl text-[#CE0000]">3</h3>
-              </div>
-              <p className="text-gray-700">Active CMO Requirements</p>
-            </div>
-          </div>
-
-          {/* CHED Requirements */}
-          <div className="bg-white rounded-lg shadow-md p-6">
-            <h2 className="text-xl mb-4 text-[#CE0000]">CHED Memorandum Orders (CMO) Compliance</h2>
-            <div className="space-y-4">
-              {chedRequirements.map((req) => (
-                <div
-                  key={req.id}
-                  className="border-2 border-[#D4AF37]/30 rounded-lg p-5 hover:border-[#D4AF37] transition-colors"
-                >
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-2">
-                        <span className="px-2 py-1 bg-[#CE0000] text-white text-xs rounded">
-                          {req.category}
-                        </span>
-                        {req.status === "compliant" ? (
-                          <CheckCircle className="h-4 w-4 text-[#006837]" />
-                        ) : (
-                          <AlertCircle className="h-4 w-4 text-[#FDB913]" />
-                        )}
-                      </div>
-                      <h3 className="text-lg text-gray-900 mb-1">{req.title}</h3>
-                    </div>
-                    <div className="text-right ml-4">
-                      <div className="text-2xl text-[#CE0000]">{req.compliance}%</div>
-                      <div className="text-xs text-gray-500">Compliance</div>
-                    </div>
-                  </div>
-
-                  <div className="w-full bg-gray-200 rounded-full h-2 mb-3">
-                    <div
-                      className={`h-2 rounded-full ${
-                        req.compliance >= 85 ? "bg-[#006837]" : "bg-[#FDB913]"
-                      }`}
-                      style={{ width: `${req.compliance}%` }}
-                    ></div>
-                  </div>
-
-                  <div className="flex items-center justify-between text-sm text-gray-600">
-                    <span>{req.documents} Supporting Documents</span>
-                    <span>Last Review: {req.lastReview}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* CHED Reporting */}
-          <div className="bg-white rounded-lg shadow-md p-6">
-            <h2 className="text-xl mb-4 text-[#CE0000]">CHED Reporting & Submissions</h2>
-            <div className="space-y-3">
-              <div className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:border-[#FDB913] transition-colors">
-                <div className="flex items-center gap-3">
-                  <FileText className="h-5 w-5 text-[#CE0000]" />
-                  <div>
-                    <p className="text-gray-900">Annual Accomplishment Report 2025</p>
-                    <p className="text-sm text-gray-600">Due: April 30, 2026</p>
-                  </div>
-                </div>
-                <span className="px-3 py-1 bg-[#FDB913] text-gray-900 text-sm rounded-full">
-                  In Progress
-                </span>
-              </div>
-              <div className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:border-[#FDB913] transition-colors">
-                <div className="flex items-center gap-3">
-                  <FileText className="h-5 w-5 text-[#CE0000]" />
-                  <div>
-                    <p className="text-gray-900">Student Enrollment Data (SY 2025-2026)</p>
-                    <p className="text-sm text-gray-600">Submitted: March 1, 2026</p>
-                  </div>
-                </div>
-                <span className="px-3 py-1 bg-[#006837] text-white text-sm rounded-full">
-                  Submitted
-                </span>
-              </div>
-              <div className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:border-[#FDB913] transition-colors">
-                <div className="flex items-center gap-3">
-                  <FileText className="h-5 w-5 text-[#CE0000]" />
-                  <div>
-                    <p className="text-gray-900">Faculty Roster & Qualifications</p>
-                    <p className="text-sm text-gray-600">Submitted: February 15, 2026</p>
-                  </div>
-                </div>
-                <span className="px-3 py-1 bg-[#006837] text-white text-sm rounded-full">
-                  Submitted
-                </span>
-              </div>
-            </div>
+           <div className="bg-white rounded-xl shadow-sm p-12 text-center">
+             <Award className="h-12 w-12 text-gray-300 mx-auto mb-4" />
+             <h3 className="text-lg font-semibold text-gray-900 mb-2">CHED Monitoring Module</h3>
+             <p className="text-gray-500">CHED reporting and submissions will be available in Phase 2 deployment.</p>
           </div>
         </TabsContent>
-
-        {/* Accreditation Results Tab Content */}
         <TabsContent value="results" className="space-y-6 mt-6">
-          {/* Results Summary */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-            <div className="bg-white rounded-lg shadow-md p-6 border-t-4 border-[#006837]">
-              <h3 className="text-3xl text-[#006837] mb-2">3</h3>
-              <p className="text-gray-700">Accredited Programs</p>
-            </div>
-            <div className="bg-white rounded-lg shadow-md p-6 border-t-4 border-[#D4AF37]">
-              <h3 className="text-3xl text-[#D4AF37] mb-2">Level III</h3>
-              <p className="text-gray-700">Highest Accreditation</p>
-            </div>
-            <div className="bg-white rounded-lg shadow-md p-6 border-t-4 border-[#FDB913]">
-              <h3 className="text-3xl text-[#FDB913] mb-2">2</h3>
-              <p className="text-gray-700">Upcoming Visits</p>
-            </div>
-            <div className="bg-white rounded-lg shadow-md p-6 border-t-4 border-[#CE0000]">
-              <h3 className="text-3xl text-[#CE0000] mb-2">100%</h3>
-              <p className="text-gray-700">Success Rate</p>
-            </div>
-          </div>
-
-          {/* Accreditation History */}
-          <div className="bg-white rounded-lg shadow-md p-6">
-            <h2 className="text-xl mb-4 text-[#CE0000]">Accreditation History</h2>
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b-2 border-gray-200">
-                    <th className="text-left py-3 px-4 text-gray-700">Program</th>
-                    <th className="text-left py-3 px-4 text-gray-700">Accreditor</th>
-                    <th className="text-left py-3 px-4 text-gray-700">Level</th>
-                    <th className="text-left py-3 px-4 text-gray-700">Date Awarded</th>
-                    <th className="text-left py-3 px-4 text-gray-700">Valid Until</th>
-                    <th className="text-left py-3 px-4 text-gray-700">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {accreditationHistory.map((item) => (
-                    <tr key={item.id} className="border-b border-gray-100 hover:bg-[#F5F5F5] transition-colors">
-                      <td className="py-4 px-4 text-gray-900">{item.program}</td>
-                      <td className="py-4 px-4 text-gray-600">{item.accreditor}</td>
-                      <td className="py-4 px-4">
-                        <span className="px-2 py-1 bg-[#D4AF37] text-white text-sm rounded">
-                          {item.level}
-                        </span>
-                      </td>
-                      <td className="py-4 px-4 text-gray-600">{item.date}</td>
-                      <td className="py-4 px-4 text-gray-600">{item.validUntil}</td>
-                      <td className="py-4 px-4">
-                        <span className="px-2 py-1 bg-[#006837] text-white text-sm rounded">
-                          {item.status}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          {/* Upcoming Accreditations */}
-          <div className="bg-white rounded-lg shadow-md p-6">
-            <h2 className="text-xl mb-4 text-[#CE0000]">Upcoming Accreditation Visits</h2>
-            <div className="space-y-4">
-              {upcomingAccreditations.map((visit) => (
-                <div
-                  key={visit.id}
-                  className="border-2 border-[#D4AF37]/30 rounded-lg p-5 hover:border-[#D4AF37] transition-colors"
-                >
-                  <div className="flex items-start justify-between mb-4">
-                    <div>
-                      <h3 className="text-lg text-gray-900 mb-1">{visit.program}</h3>
-                      <div className="flex items-center gap-4 text-sm text-gray-600">
-                        <span className="flex items-center gap-1">
-                          <Calendar className="h-4 w-4" />
-                          {visit.scheduledDate}
-                        </span>
-                        <span>Accreditor: {visit.accreditor}</span>
-                      </div>
-                    </div>
-                    <span className="px-3 py-1 bg-[#FDB913] text-gray-900 text-sm rounded-full">
-                      {visit.targetLevel}
-                    </span>
-                  </div>
-
-                  <div className="mb-2">
-                    <div className="flex items-center justify-between text-sm mb-1">
-                      <span className="text-gray-600">Preparedness</span>
-                      <span className="text-[#CE0000]">{visit.preparedness}%</span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div
-                        className={`h-2 rounded-full ${
-                          visit.preparedness >= 75 ? "bg-[#006837]" : "bg-[#FDB913]"
-                        }`}
-                        style={{ width: `${visit.preparedness}%` }}
-                      ></div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Recommendations */}
-          <div className="bg-white rounded-lg shadow-md p-6">
-            <h2 className="text-xl mb-4 text-[#CE0000]">Action Items & Recommendations</h2>
-            <div className="space-y-3">
-              <div className="flex items-start gap-3 p-4 bg-[#FFF9E6] border-l-4 border-[#FDB913] rounded">
-                <AlertCircle className="h-5 w-5 text-[#FDB913] flex-shrink-0 mt-0.5" />
-                <div>
-                  <p className="text-gray-900 mb-1">Complete faculty qualifications documentation for BSCE</p>
-                  <p className="text-sm text-gray-600">Target completion: May 2026</p>
-                </div>
-              </div>
-              <div className="flex items-start gap-3 p-4 bg-[#FFF9E6] border-l-4 border-[#FDB913] rounded">
-                <AlertCircle className="h-5 w-5 text-[#FDB913] flex-shrink-0 mt-0.5" />
-                <div>
-                  <p className="text-gray-900 mb-1">Update research output evidence for BSCS re-accreditation</p>
-                  <p className="text-sm text-gray-600">Target completion: January 2027</p>
-                </div>
-              </div>
-              <div className="flex items-start gap-3 p-4 bg-[#E6F7ED] border-l-4 border-[#006837] rounded">
-                <CheckCircle className="h-5 w-5 text-[#006837] flex-shrink-0 mt-0.5" />
-                <div>
-                  <p className="text-gray-900 mb-1">All laboratory equipment inventories up to date</p>
-                  <p className="text-sm text-gray-600">Completed: March 2026</p>
-                </div>
-              </div>
-            </div>
+           <div className="bg-white rounded-xl shadow-sm p-12 text-center">
+             <CheckCircle className="h-12 w-12 text-gray-300 mx-auto mb-4" />
+             <h3 className="text-lg font-semibold text-gray-900 mb-2">Accreditation Results Module</h3>
+             <p className="text-gray-500">Historical accreditation results viewing will be available in Phase 2 deployment.</p>
           </div>
         </TabsContent>
       </Tabs>
+
+      {/* --- UPDATED SMART UPLOAD MODAL --- */}
+      {showUploadModal && uploadTargetArea && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl max-w-xl w-full shadow-2xl overflow-hidden">
+            <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-[#F5F7FA]">
+              <div>
+                <h2 className="text-xl font-semibold text-[#1F2937]">Upload Accreditation Evidence</h2>
+                <p className="text-sm text-gray-500 mt-1">Tagging evidence for {selectedProgram}</p>
+              </div>
+              <button onClick={() => setShowUploadModal(false)} className="p-2 hover:bg-gray-200 rounded-full transition-colors">
+                <X className="h-5 w-5 text-gray-500" />
+              </button>
+            </div>
+            
+            <form onSubmit={handleUploadSubmit} className="p-6 space-y-5">
+              <div className="grid grid-cols-2 gap-4 mb-6 p-4 bg-blue-50/50 rounded-xl border border-blue-100">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Target Area (Locked)</label>
+                  <div className="text-sm font-medium text-[#1D6FA3]">{uploadTargetArea.code}</div>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Category (Locked)</label>
+                  <div className="text-sm font-medium text-[#1D6FA3]">Accreditation Evidence</div>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Document Name</label>
+                <input
+                  type="text"
+                  required
+                  value={uploadForm.fileName}
+                  onChange={(e) => setUploadForm({...uploadForm, fileName: e.target.value})}
+                  className="w-full px-4 py-3 bg-[#F5F7FA] border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1D6FA3] transition-all"
+                  placeholder="e.g., Faculty Credentials Summary 2026.pdf"
+                />
+              </div>
+
+              {/* REAL DRAG AND DROP ZONE */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">File Upload</label>
+                <div 
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  onDrop={handleDrop}
+                  onClick={() => fileInputRef.current?.click()}
+                  className={`border-2 border-dashed rounded-xl p-8 text-center transition-all cursor-pointer ${
+                    isDragging ? "border-[#1D6FA3] bg-[#E3F2FD]" : "border-gray-300 hover:border-[#1D6FA3] bg-gray-50 hover:bg-gray-100"
+                  }`}
+                >
+                  {selectedFile ? (
+                    <div className="flex flex-col items-center">
+                      <FileText className="h-10 w-10 text-[#1D6FA3] mb-3" />
+                      <p className="text-sm font-semibold text-[#1F2937]">{selectedFile.name}</p>
+                      <p className="text-xs text-[#6B7280] mt-1">{(selectedFile.size / 1024 / 1024).toFixed(2)} MB</p>
+                    </div>
+                  ) : (
+                    <div>
+                      <Upload className="h-8 w-8 text-gray-400 mx-auto mb-3" />
+                      <p className="text-sm font-medium text-gray-700">Click to browse or drag PDF here</p>
+                      <p className="text-xs text-gray-500 mt-1">Maximum file size: 50MB</p>
+                    </div>
+                  )}
+                  <input 
+                    type="file" 
+                    accept=".pdf"
+                    className="hidden" 
+                    ref={fileInputRef}
+                    onChange={handleFileSelect}
+                  />
+                </div>
+              </div>
+
+              <div className="pt-4 flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowUploadModal(false)}
+                  className="flex-1 px-5 py-3 text-sm font-semibold text-gray-600 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={!uploadForm.fileName || !selectedFile || isUploading}
+                  className="flex-1 px-5 py-3 text-sm font-semibold bg-[#006837] text-white rounded-xl hover:bg-[#00542c] disabled:opacity-50 transition-colors flex justify-center items-center gap-2"
+                >
+                  {isUploading ? <><Loader2 className="h-4 w-4 animate-spin"/> Processing...</> : "Upload & Verify"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -47,6 +47,12 @@ class UpdateDocumentRequest(BaseModel):
     version: str
     effectivity_date: str
 
+class AccreditationUploadRequest(BaseModel):
+    document_name: str
+    program: str
+    area_code: str
+    category: str = "Accreditation Evidence"
+
 class ForgotPasswordRequest(BaseModel):
     email: EmailStr
 
@@ -606,3 +612,149 @@ def delete_document(doc_name: str):
     except Exception as e:
         print(f"Delete error: {e}")
         raise HTTPException(status_code=500, detail="Failed to delete document")
+    
+@app.post("/upload-accreditation-evidence")
+async def upload_accreditation_evidence(
+    file: UploadFile = File(...),
+    document_name: str = Form(...),
+    program: str = Form(...),
+    area_code: str = Form(...)
+):
+    import time
+    from vector_store import supabase
+    from datetime import datetime
+
+    contents = await file.read()
+    extracted_text = ""
+    
+    try:
+        # 1. Extract text from the PDF
+        if file.filename.endswith(".pdf"):
+            pdf_reader = PyPDF2.PdfReader(io.BytesIO(contents))
+            for page in pdf_reader.pages:
+                text = page.extract_text()
+                if text:
+                    extracted_text += text + "\n"
+        else:
+            raise HTTPException(status_code=400, detail="Only PDF files are supported.")
+
+        if not extracted_text.strip():
+            raise HTTPException(status_code=400, detail="Could not extract text from PDF.")
+
+        # 2. Upload the physical file to Supabase Storage
+        safe_filename = file.filename.replace(" ", "_")
+        unique_filename = f"accreditation_{int(time.time())}_{safe_filename}"
+        
+        supabase.storage.from_("documents").upload(
+            file=contents,
+            path=unique_filename,
+            file_options={"content-type": "application/pdf"}
+        )
+        
+        public_url = supabase.storage.from_("documents").get_public_url(unique_filename)
+
+        # 3. Save the vectors and metadata to the database
+        metadata = {
+            "name": document_name,
+            "category": "Accreditation Evidence",
+            "program": program,
+            "area": area_code,
+            "office": "Quality Assurance", # Default for accreditation
+            "version": "1.0",
+            "effectivity_date": "N/A",
+            "upload_date": datetime.now().isoformat(),
+            "file_url": public_url
+        }
+
+        # Vector chunking for AI
+        vector_store.add_to_vector_db(extracted_text, metadata)
+
+        return {"message": "Evidence securely uploaded, chunked, and logged!"}
+
+    except Exception as e:
+        print(f"Accreditation upload error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to save evidence")
+
+@app.get("/accreditation-status/{program}")
+def get_accreditation_status(program: str):
+    from vector_store import supabase
+    
+    try:
+        # 1. Fetch the requirements template for this program
+        templates_res = supabase.table("accreditation_templates").select("*").eq("program", program).execute()
+        templates = templates_res.data or []
+
+        # 2. Fetch the actually uploaded evidence for this program
+        evidence_res = supabase.table("document_sections") \
+            .select("metadata") \
+            .eq("metadata->>category", "Accreditation Evidence") \
+            .eq("metadata->>program", program) \
+            .execute()
+        
+        raw_metadata_list = [doc['metadata'] for doc in evidence_res.data] if evidence_res.data else []
+
+        # --- THE FIX: FILTER OUT DUPLICATE CHUNKS ---
+        # Group by document name so a 20-chunk PDF only counts as 1 document
+        unique_docs = {}
+        for meta in raw_metadata_list:
+            doc_name = meta.get("name")
+            if doc_name and doc_name not in unique_docs:
+                unique_docs[doc_name] = meta
+        # --------------------------------------------
+
+        # 3. Calculate math per area
+        area_dict = {}
+        for t in templates:
+            area = t['area']
+            if area not in area_dict:
+                area_dict[area] = {
+                    "id": area, "code": area, "title": f"{area} Requirements", 
+                    "required": 0, "evidenceCount": 0, "gaps": 0, "compliance": 0, "status": "needs-improvement"
+                }
+            area_dict[area]["required"] += 1
+
+        # Count unique evidence matches
+        for doc_name, meta in unique_docs.items():
+            area = meta.get("area")
+            if area in area_dict:
+                area_dict[area]["evidenceCount"] += 1
+
+        # 4. Finalize the percentages
+        total_required = 0
+        total_evidence = 0
+        areas_list = []
+        
+        for area_name, data in area_dict.items():
+            # Cap evidence for math purposes (so 2 uploads for 1 requirement doesn't make it 200%)
+            capped_evidence = min(data["evidenceCount"], data["required"])
+            data["gaps"] = data["required"] - capped_evidence
+            data["compliance"] = int((capped_evidence / data["required"]) * 100) if data["required"] > 0 else 0
+            data["status"] = "compliant" if data["compliance"] == 100 else "needs-improvement"
+            
+            total_required += data["required"]
+            total_evidence += capped_evidence
+            areas_list.append(data)
+            
+        overall_compliance = int((total_evidence / total_required) * 100) if total_required > 0 else 0
+        overall_gaps = total_required - total_evidence
+
+        # Format recent evidence using ONLY the unique documents
+        unique_docs_list = list(unique_docs.values())
+        recent = sorted(unique_docs_list, key=lambda x: x.get('upload_date', ''), reverse=True)[:5]
+        recent_formatted = [{
+            "name": d.get("name", "Unknown Document"),
+            "date": d.get("upload_date", "").split("T")[0] if "upload_date" in d else "Recently",
+            "area": d.get("area", "General")
+        } for d in recent]
+
+        return {
+            "level": "Level III" if program == "BSIT" else "Level II",
+            "overall": overall_compliance,
+            "gaps": overall_gaps,
+            "evidence": len(unique_docs_list),
+            "areas": sorted(areas_list, key=lambda x: x['code']),
+            "recentEvidence": recent_formatted
+        }
+    except Exception as e:
+        print(f"Fetch error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch accreditation status")

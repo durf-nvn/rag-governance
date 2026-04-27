@@ -61,27 +61,25 @@ export function KnowledgeRepository() {
 
   // --- SUPERCHARGED FILTERING LOGIC ---
   const filteredDocuments = documents.filter((doc) => {
-    // 1. Check Category Dropdown
+    // 1. SECURITY CHECK (The Digital Wall)
+    // If the user is a student, instantly hide Accreditation Evidence
+    if (currentRole === "STUDENT" && doc.category === "Accreditation Evidence") {
+      return false; 
+    }
+
+    // 2. Check Category Dropdown
     const matchesCategory = selectedCategory === "all" || doc.category === selectedCategory;
     
-    // 2. Check Office Dropdown
+    // 3. Check Office Dropdown
     const matchesOffice = selectedOffice === "all" || doc.office === selectedOffice;
     
-    // 3. Deep Search (Checks Name, Category, Office, and Date)
+    // 4. Deep Search (Checks Name, Category, Office, and Date)
     const searchLower = searchQuery.toLowerCase();
     const matchesSearch = 
       doc.name.toLowerCase().includes(searchLower) ||
       doc.category.toLowerCase().includes(searchLower) ||
       doc.office.toLowerCase().includes(searchLower) ||
       (doc.effectivity_date && doc.effectivity_date.toLowerCase().includes(searchLower));
-
-    const safeDocuments = documents.filter(doc => {
-      // If the user is a student, do NOT show them Accreditation Evidence
-      if (userRole === "STUDENT" && doc.category === "Accreditation Evidence") {
-        return false;
-      }
-      return true; // Show everything else
-    });
     
     return matchesCategory && matchesOffice && matchesSearch;
   });
