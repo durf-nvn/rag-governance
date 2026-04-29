@@ -379,13 +379,13 @@ export function AccreditationSupport() {
                   ) : (
                     <div>
                       <Upload className="h-8 w-8 text-gray-400 mx-auto mb-3" />
-                      <p className="text-sm font-medium text-gray-700">Click to browse or drag PDF here</p>
+                      <p className="text-sm font-medium text-gray-700">Click to browse or drag your PDF, Word, or TXT here</p>
                       <p className="text-xs text-gray-500 mt-1">Maximum file size: 50MB</p>
                     </div>
                   )}
                   <input 
                     type="file" 
-                    accept=".pdf"
+                    accept=".pdf,.docx,.txt"
                     className="hidden" 
                     ref={fileInputRef}
                     onChange={handleFileSelect}

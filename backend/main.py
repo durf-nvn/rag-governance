@@ -264,17 +264,31 @@ async def upload_document(
     extracted_text = ""
     
     try:
-        if file.filename.endswith(".pdf"):
+        # 1. Extract text based on file type
+        filename_lower = file.filename.lower()
+        
+        if filename_lower.endswith(".pdf"):
             pdf_reader = PyPDF2.PdfReader(io.BytesIO(contents))
             for page in pdf_reader.pages:
                 text = page.extract_text()
                 if text:
                     extracted_text += text + "\n"
+                    
+        elif filename_lower.endswith(".txt"):
+            extracted_text = contents.decode("utf-8")
+            
+        elif filename_lower.endswith(".docx"):
+            import docx
+            doc = docx.Document(io.BytesIO(contents))
+            extracted_text = "\n".join([paragraph.text for paragraph in doc.paragraphs])
+            
         else:
-            raise HTTPException(status_code=400, detail="Only PDF files are supported currently.")
+            raise HTTPException(status_code=400, detail="Unsupported file format. Please upload PDF, DOCX, or TXT.")
 
         if not extracted_text.strip():
-            raise HTTPException(status_code=400, detail="Could not extract text from PDF.")
+            raise HTTPException(status_code=400, detail="Could not extract text from document.")
+
+        # --- NEW: SUPABASE STORAGE UPLOAD ---
 
         # --- NEW: SUPABASE STORAGE UPLOAD ---
         from vector_store import supabase
@@ -628,18 +642,32 @@ async def upload_accreditation_evidence(
     extracted_text = ""
     
     try:
-        # 1. Extract text from the PDF
-        if file.filename.endswith(".pdf"):
+        # 1. Extract text based on file type
+        filename_lower = file.filename.lower()
+        
+        if filename_lower.endswith(".pdf"):
+            # PDF Extraction
             pdf_reader = PyPDF2.PdfReader(io.BytesIO(contents))
             for page in pdf_reader.pages:
                 text = page.extract_text()
                 if text:
                     extracted_text += text + "\n"
+                    
+        elif filename_lower.endswith(".txt"):
+            # TXT Extraction (Super easy, just decode it)
+            extracted_text = contents.decode("utf-8")
+            
+        elif filename_lower.endswith(".docx"):
+            # DOCX Extraction
+            import docx
+            doc = docx.Document(io.BytesIO(contents))
+            extracted_text = "\n".join([paragraph.text for paragraph in doc.paragraphs])
+            
         else:
-            raise HTTPException(status_code=400, detail="Only PDF files are supported.")
+            raise HTTPException(status_code=400, detail="Unsupported file format. Please upload PDF, DOCX, or TXT.")
 
         if not extracted_text.strip():
-            raise HTTPException(status_code=400, detail="Could not extract text from PDF.")
+            raise HTTPException(status_code=400, detail="Could not extract text from the document. It might be empty or an image-based file.")
 
         # 2. Upload the physical file to Supabase Storage
         safe_filename = file.filename.replace(" ", "_")
