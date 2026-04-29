@@ -18,6 +18,9 @@ export function LoginPage() {
     password: "",
   });
 
+  // --- NEW: Remember Me State ---
+  const [rememberMe, setRememberMe] = useState(false);
+
   // State for the "Forgot Password" request modal
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [resetEmail, setResetEmail] = useState("");
@@ -27,6 +30,15 @@ export function LoginPage() {
   // State for the "Update Password" modal triggered by the Gmail link
   const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
   const [updateEmail, setUpdateEmail] = useState("");
+
+  // --- NEW: Load saved email on component mount ---
+  useEffect(() => {
+    const savedEmail = localStorage.getItem("rememberedEmail");
+    if (savedEmail) {
+      setFormData(prev => ({ ...prev, email: savedEmail }));
+      setRememberMe(true);
+    }
+  }, []);
 
   // EFFECT: Catch the URL parameters from the Gmail link
   useEffect(() => {
@@ -56,6 +68,14 @@ export function LoginPage() {
       const response = await axios.post("http://localhost:8000/login", formBody, {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       });
+
+      // --- NEW: Save or Clear the remembered email based on checkbox ---
+      if (rememberMe) {
+        localStorage.setItem("rememberedEmail", formData.email);
+      } else {
+        localStorage.removeItem("rememberedEmail");
+      }
+      // -----------------------------------------------------------------
 
       localStorage.setItem('token', response.data.access_token);
       localStorage.setItem('userName', response.data.full_name);
@@ -172,9 +192,15 @@ export function LoginPage() {
               </div>
 
               <div className="flex items-center justify-between">
-                <label className="flex items-center">
-                  <input type="checkbox" className="mr-2 w-4 h-4 rounded border-[#E5E7EB] text-[#1D6FA3] focus:ring-[#1D6FA3]" />
-                  <span className="text-sm text-[#6B7280]">Remember me</span>
+                <label className="flex items-center cursor-pointer">
+                  {/* --- NEW: Wired the checkbox to the React state --- */}
+                  <input 
+                    type="checkbox" 
+                    checked={rememberMe}
+                    onChange={(e) => setRememberMe(e.target.checked)}
+                    className="mr-2 w-4 h-4 rounded border-[#E5E7EB] text-[#1D6FA3] focus:ring-[#1D6FA3] cursor-pointer" 
+                  />
+                  <span className="text-sm text-[#6B7280] select-none">Remember me</span>
                 </label>
                 <button 
                   type="button" 
@@ -188,7 +214,7 @@ export function LoginPage() {
               <button
                 type="submit"
                 disabled={isLoading}
-                className="w-full py-3 bg-[#1D6FA3] text-white rounded-lg hover:bg-[#0B3C5D] transition-colors font-medium disabled:opacity-70 disabled:cursor-not-allowed flex justify-center items-center"
+                className="w-full py-3 bg-[#1D6FA3] text-white rounded-lg hover:bg-[#0B3C5D] transition-colors font-medium disabled:opacity-70 disabled:cursor-not-allowed flex justify-center items-center cursor-pointer active:scale-[0.98]"
               >
                 {isLoading ? (
                   <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -233,7 +259,7 @@ export function LoginPage() {
           <div className="bg-white rounded-xl shadow-xl border border-[#E5E7EB] w-full max-w-md overflow-hidden">
             <div className="flex items-center justify-between p-6 border-b border-[#E5E7EB]">
               <h3 className="text-lg font-semibold text-[#1F2937]">Reset Password</h3>
-              <button onClick={() => { setIsModalOpen(false); setResetStatus(null); }} className="text-[#6B7280] hover:text-[#1F2937]">
+              <button onClick={() => { setIsModalOpen(false); setResetStatus(null); }} className="text-[#6B7280] hover:text-[#1F2937] cursor-pointer">
                 <X className="h-5 w-5" />
               </button>
             </div>
@@ -266,7 +292,7 @@ export function LoginPage() {
               <button
                 type="submit"
                 disabled={resetLoading}
-                className="w-full py-3 bg-[#1D6FA3] text-white rounded-lg hover:bg-[#0B3C5D] font-medium disabled:opacity-70 flex justify-center items-center"
+                className="w-full py-3 bg-[#1D6FA3] text-white rounded-lg hover:bg-[#0B3C5D] font-medium disabled:opacity-70 disabled:cursor-not-allowed flex justify-center items-center cursor-pointer active:scale-[0.98]"
               >
                 {resetLoading ? 'Sending...' : 'Send Reset Link'}
               </button>
