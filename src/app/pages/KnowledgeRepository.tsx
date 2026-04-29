@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react"
-import { Search, Filter, Upload, Download, Edit, Archive, Clock, Eye, CheckCircle, FileText, UploadCloud, X, Loader2 } from "lucide-react"
+import { Search, Filter, Upload, Download, Edit, Archive, Clock, Eye, CheckCircle, FileText, UploadCloud, X, Loader2, AlertCircle } from "lucide-react"
 import axios from "axios"
 import { useRole } from "../contexts/RoleContext"
 
@@ -13,16 +13,30 @@ export function KnowledgeRepository() {
 
   const [documents, setDocuments] = useState<any[]>([])
   
+  // --- NEW: TOAST NOTIFICATION STATE ---
+  const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' } | null>(null)
+  
+  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+    setToast({ message, type })
+    setTimeout(() => setToast(null), 3000)
+  }
+
   // Modals State
   const [showEditModal, setShowEditModal] = useState(false)
   const [editingDocName, setEditingDocName] = useState("")
+  const [isEditing, setIsEditing] = useState(false) // NEW: Loading state for editing
+
   const [showUploadModal, setShowUploadModal] = useState(false)
+  const [isUploading, setIsUploading] = useState(false)
+
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [docToDelete, setDocToDelete] = useState<any>(null)
   const [deleteConfirmText, setDeleteConfirmText] = useState("")
+  const [isArchiving, setIsArchiving] = useState(false) // NEW: Loading state for archiving
+  
   const [showArchived, setShowArchived] = useState(false)
 
-  // --- NEW: UPDATE VERSION MODAL STATE ---
+  // Update Version Modal State
   const [showUpdateModal, setShowUpdateModal] = useState(false)
   const [docToUpdate, setDocToUpdate] = useState<any>(null)
   const [updateFormData, setUpdateFormData] = useState({ version: "", effectivityDate: "" })
@@ -45,7 +59,6 @@ export function KnowledgeRepository() {
 
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [isDragging, setIsDragging] = useState(false)
-  const [isUploading, setIsUploading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -74,7 +87,6 @@ export function KnowledgeRepository() {
     if (currentRole === "STUDENT" && doc.category === "Accreditation Evidence") {
       return false; 
     }
-    // NEW: Hide archived documents from the main view (they will still exist in the database)
     if (doc.status === "Archived" && !showArchived) {
       return false;
     }
@@ -95,13 +107,13 @@ export function KnowledgeRepository() {
     if (doc.file_url) {
       window.open(doc.file_url, "_blank");
     } else {
-      alert("Document link not found! Ensure your backend is saving the Supabase Storage public URL.");
+      showToast("Document link not found!", "error");
     }
   };
 
   const handleDownload = async (doc: any) => {
     if (!doc.file_url) {
-      alert("Document link not found!");
+      showToast("Document link not found!", "error");
       return;
     }
     try {
@@ -137,9 +149,10 @@ export function KnowledgeRepository() {
 
   const handleEditSubmit = async () => {
     if (!formData.name || !formData.version || !formData.effectivityDate) {
-      alert("Please fill out all fields.")
+      showToast("Please fill out all fields.", "error")
       return
     }
+    setIsEditing(true) // Start loading
     try {
       await axios.put("http://localhost:8000/documents/update", {
         old_name: editingDocName,
@@ -153,8 +166,11 @@ export function KnowledgeRepository() {
       setFormData({ name: "", category: "Policy", office: "Academic Affairs", version: "", effectivityDate: "" })
       const res = await axios.get("http://localhost:8000/documents")
       setDocuments(res.data)
+      showToast("Metadata successfully updated!", "success")
     } catch (error) {
-      alert("Failed to update document.")
+      showToast("Failed to update document.", "error")
+    } finally {
+      setIsEditing(false) // Stop loading
     }
   }
 
@@ -166,6 +182,7 @@ export function KnowledgeRepository() {
 
   const executeArchive = async () => {
     if (!docToDelete) return
+    setIsArchiving(true) // Start loading
     try {
       await axios.delete(`http://localhost:8000/documents/${encodeURIComponent(docToDelete.name)}`)
       setShowDeleteModal(false)
@@ -173,12 +190,14 @@ export function KnowledgeRepository() {
       setDeleteConfirmText("")
       const res = await axios.get("http://localhost:8000/documents")
       setDocuments(res.data)
+      showToast("Document successfully archived!", "success")
     } catch (error) {
-      alert("Failed to archive document.")
+      showToast("Failed to archive document.", "error")
+    } finally {
+      setIsArchiving(false) // Stop loading
     }
   }
 
-  // --- NEW: UPLOAD NEW VERSION HANDLERS ---
   const handleUpdateVersionClick = (doc: any) => {
     setDocToUpdate(doc)
     setUpdateFormData({ version: "", effectivityDate: "" })
@@ -189,13 +208,12 @@ export function KnowledgeRepository() {
   const handleUpdateVersionSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!updateFile || !updateFormData.version || !updateFormData.effectivityDate) {
-      alert("Please provide the new file, version, and effectivity date.");
+      showToast("Please provide the new file, version, and effectivity date.", "error");
       return;
     }
 
     setIsUpdatingVersion(true);
     
-    // We will build this backend route next!
     const submitData = new FormData();
     submitData.append("file", updateFile);
     submitData.append("old_document_name", docToUpdate.name);
@@ -203,7 +221,7 @@ export function KnowledgeRepository() {
     submitData.append("new_effectivity_date", updateFormData.effectivityDate);
 
     try {
-      const response = await axios.post("http://localhost:8000/upload-new-version", submitData, {
+      await axios.post("http://localhost:8000/upload-new-version", submitData, {
         headers: { "Content-Type": "multipart/form-data" }
       });
       
@@ -211,12 +229,12 @@ export function KnowledgeRepository() {
       setUpdateFile(null);
       setDocToUpdate(null);
       
-      // Refresh the table to see the changes
       const res = await axios.get("http://localhost:8000/documents");
       setDocuments(res.data);
+      showToast("New version successfully published!", "success");
     } catch (error) {
       console.error("Failed to update version:", error);
-      alert("Failed to upload the new version. Is the backend route ready?");
+      showToast("Failed to upload the new version.", "error");
     } finally {
       setIsUpdatingVersion(false);
     }
@@ -247,7 +265,7 @@ export function KnowledgeRepository() {
 
   const handleUploadSubmit = async () => {
     if (!selectedFile || !formData.name || !formData.version || !formData.effectivityDate) {
-      alert("Please fill out all fields and select a file.")
+      showToast("Please fill out all fields and select a file.", "error")
       return
     }
     setIsUploading(true)
@@ -260,7 +278,7 @@ export function KnowledgeRepository() {
     submitData.append("effectivity_date", formData.effectivityDate)
 
     try {
-      const response = await axios.post("http://localhost:8000/upload-document", submitData, {
+      await axios.post("http://localhost:8000/upload-document", submitData, {
         headers: { "Content-Type": "multipart/form-data" }
       })
       setShowUploadModal(false)
@@ -268,16 +286,29 @@ export function KnowledgeRepository() {
       setFormData({ name: "", category: "Policy", office: "Academic Affairs", version: "", effectivityDate: "" })
       const res = await axios.get("http://localhost:8000/documents");
       setDocuments(res.data);
+      showToast("Document successfully uploaded!", "success")
     } catch (error) {
-      alert("Upload failed. Please check your connection.")
+      showToast("Upload failed. Please check your connection.", "error")
     } finally {
       setIsUploading(false)
     }
   }
 
   return (
-    <div className="space-y-6 flex flex-col h-[calc(100vh-6rem)]">
+    <div className="space-y-6 flex flex-col h-[calc(100vh-6rem)] relative">
       
+      {/* --- TOAST NOTIFICATION --- */}
+      {toast && (
+        <div className={`fixed bottom-8 right-8 px-6 py-4 rounded-xl shadow-xl flex items-center gap-3 text-sm font-bold z-[100] transition-all duration-300 animate-in slide-in-from-bottom-5 fade-in ${
+          toast.type === 'success' 
+            ? 'bg-[#E6F7ED] text-[#006837] border-2 border-[#006837]/20' 
+            : 'bg-red-50 text-red-700 border-2 border-red-200'
+        }`}>
+          {toast.type === 'success' ? <CheckCircle className="h-5 w-5" /> : <AlertCircle className="h-5 w-5" />}
+          {toast.message}
+        </div>
+      )}
+
       <div className="flex-none space-y-6">
         <div className="flex items-center justify-between">
           <div>
@@ -290,28 +321,26 @@ export function KnowledgeRepository() {
               <span className="text-sm font-medium">{accessBadge.label}</span>
             </div>
             
-            {/* NEW: Archive Toggle Button */}
             {canEdit && (
               <button
                 onClick={() => setShowArchived(!showArchived)}
-                className={`flex items-center justify-center w-40 gap-2 px-4 py-2 rounded-lg border transition-colors ${
+                className={`flex items-center justify-center w-40 gap-2 px-4 py-2 rounded-lg border transition-all cursor-pointer ${
                   showArchived 
                     ? "bg-gray-800 text-white border-gray-800 hover:bg-gray-700" 
                     : "bg-white text-gray-700 border-[#E5E7EB] hover:bg-gray-50"
                 }`}
               >
-                <Archive className="h-4 w-4" />
-                <span className="text-sm font-medium">
+                <Archive className="h-4 w-4 flex-shrink-0" />
+                <span className="text-sm font-medium whitespace-nowrap">
                   {showArchived ? "Hide Archived" : "Show Archived"}
                 </span>
               </button>
             )}
 
-            {/* Existing Upload Button */}
             {canUpload && (
               <button
                 onClick={() => setShowUploadModal(true)}
-                className="flex items-center gap-2 px-4 py-2 bg-[#1D6FA3] text-white rounded-lg hover:bg-[#0B3C5D] transition-colors"
+                className="flex items-center gap-2 px-4 py-2 bg-[#1D6FA3] text-white rounded-lg hover:bg-[#0B3C5D] transition-all cursor-pointer shadow-sm active:scale-95"
               >
                 <Upload className="h-4 w-4" />
                 <span className="text-sm font-medium">Upload Document</span>
@@ -334,7 +363,7 @@ export function KnowledgeRepository() {
             </div>
             <div className="flex flex-col sm:flex-row gap-4">
               <select
-                className="sm:w-48 px-4 py-2.5 bg-[#F9FAFB] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1D6FA3] text-[#374151] cursor-pointer"
+                className="sm:w-48 px-4 py-2.5 bg-[#F9FAFB] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1D6FA3] text-[#374151] cursor-pointer hover:bg-gray-50 transition-colors"
                 value={selectedCategory}
                 onChange={(e) => setSelectedCategory(e.target.value)}
               >
@@ -349,7 +378,7 @@ export function KnowledgeRepository() {
               </select>
               
               <select
-                className="sm:w-48 px-4 py-2.5 bg-[#F9FAFB] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1D6FA3] text-[#374151] cursor-pointer"
+                className="sm:w-48 px-4 py-2.5 bg-[#F9FAFB] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1D6FA3] text-[#374151] cursor-pointer hover:bg-gray-50 transition-colors"
                 value={selectedOffice}
                 onChange={(e) => setSelectedOffice(e.target.value)}
               >
@@ -369,7 +398,6 @@ export function KnowledgeRepository() {
           <table className="w-full whitespace-nowrap relative table-fixed">
             <thead className="bg-[#1D6FA3] text-white sticky top-0 z-20 shadow-md outline outline-1 outline-[#1D6FA3]">
               <tr>
-                {/* Notice the w-[%] classes added to each header */}
                 <th className="w-[28%] px-6 py-3.5 text-left text-xs font-semibold uppercase tracking-wider">Document Name</th>
                 <th className="w-[16%] px-6 py-3.5 text-left text-xs font-semibold uppercase tracking-wider">Category</th>
                 <th className="w-[16%] px-6 py-3.5 text-left text-xs font-semibold uppercase tracking-wider">Office</th>
@@ -389,15 +417,14 @@ export function KnowledgeRepository() {
               ) : (
                 filteredDocuments.map((doc) => (
                   <tr key={doc.id} className="hover:bg-[#F9FAFB] transition-colors">
-                    {/* Add overflow-hidden and truncate so long text doesn't break the fixed width */}
                     <td className="px-6 py-4 overflow-hidden">
                       <div className="text-sm font-semibold text-[#1F2937] truncate" title={doc.name}>{doc.name}</div>
-                      <div className="text-[11px] text-[#6B7280] mt-0.5 truncate">Active File</div>
+                      <div className="text-[11px] text-[#6B7280] mt-0.5 truncate">{doc.status === "Archived" ? "Historical Record" : "Active File"}</div>
                     </td>
                     <td className="px-6 py-4 text-sm text-[#4B5563] truncate" title={doc.category}>{doc.category}</td>
                     <td className="px-6 py-4 text-sm text-[#4B5563] truncate" title={doc.office}>{doc.office}</td>
                     <td className="px-6 py-4">
-                      <span className="text-sm font-medium text-[#1D6FA3]">
+                      <span className={`text-sm font-bold ${doc.status === "Archived" ? "text-gray-400" : "text-[#1D6FA3]"}`}>
                         v{doc.version}
                       </span>
                     </td>
@@ -415,22 +442,21 @@ export function KnowledgeRepository() {
                     </td>
                     <td className="px-6 py-4 text-center">
                       <div className="flex items-center justify-center gap-3">
-                        <button onClick={() => handleView(doc)} className="text-[#6B7280] hover:text-[#1D6FA3] transition-colors" title="View Document">
+                        <button onClick={() => handleView(doc)} className="text-[#6B7280] hover:text-[#1D6FA3] transition-colors cursor-pointer" title="View Document">
                           <Eye className="h-4 w-4" />
                         </button>
-                        <button onClick={() => handleDownload(doc)} className="text-[#6B7280] hover:text-[#1D6FA3] transition-colors" title="Download">
+                        <button onClick={() => handleDownload(doc)} className="text-[#6B7280] hover:text-[#1D6FA3] transition-colors cursor-pointer" title="Download">
                           <Download className="h-4 w-4" />
                         </button>
                         {canEdit && doc.status !== "Archived" && (
                           <>
-                            {/* NEW: Upload New Version Button */}
-                            <button onClick={() => handleUpdateVersionClick(doc)} className="text-[#6B7280] hover:text-[#10B981] transition-colors" title="Upload New Version">
+                            <button onClick={() => handleUpdateVersionClick(doc)} className="text-[#6B7280] hover:text-[#10B981] transition-colors cursor-pointer" title="Upload New Version">
                               <UploadCloud className="h-4 w-4" />
                             </button>
-                            <button onClick={() => handleEditClick(doc)} className="text-[#6B7280] hover:text-[#1D6FA3] transition-colors" title="Edit Metadata">
+                            <button onClick={() => handleEditClick(doc)} className="text-[#6B7280] hover:text-[#1D6FA3] transition-colors cursor-pointer" title="Edit Metadata">
                               <Edit className="h-4 w-4" />
                             </button>
-                            <button onClick={() => handleArchiveClick(doc)} className="text-[#6B7280] hover:text-[#EF4444] transition-colors" title="Archive Document">
+                            <button onClick={() => handleArchiveClick(doc)} className="text-[#6B7280] hover:text-[#EF4444] transition-colors cursor-pointer" title="Archive Document">
                               <Archive className="h-4 w-4" />
                             </button>
                           </>
@@ -445,7 +471,7 @@ export function KnowledgeRepository() {
         </div>
       </div>
 
-      {/* --- NEW: UPLOAD NEW VERSION MODAL --- */}
+      {/* --- NEW VERSION MODAL --- */}
       {showUpdateModal && docToUpdate && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl max-w-xl w-full shadow-2xl overflow-hidden">
@@ -454,7 +480,7 @@ export function KnowledgeRepository() {
                 <h2 className="text-xl font-semibold text-[#1F2937]">Upload New Version</h2>
                 <p className="text-sm text-[#6B7280] mt-1">Supersede the active document</p>
               </div>
-              <button onClick={() => setShowUpdateModal(false)} className="p-2 hover:bg-[#E5E7EB] rounded-full transition-colors">
+              <button onClick={() => setShowUpdateModal(false)} className="p-2 hover:bg-[#E5E7EB] rounded-full transition-colors cursor-pointer">
                 <X className="h-5 w-5 text-[#6B7280]" />
               </button>
             </div>
@@ -489,7 +515,7 @@ export function KnowledgeRepository() {
                     required
                     value={updateFormData.effectivityDate}
                     onChange={(e) => setUpdateFormData({...updateFormData, effectivityDate: e.target.value})}
-                    className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1D6FA3]"
+                    className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1D6FA3] cursor-pointer"
                   />
                 </div>
               </div>
@@ -530,14 +556,14 @@ export function KnowledgeRepository() {
                 <button
                   type="button"
                   onClick={() => setShowUpdateModal(false)}
-                  className="flex-1 px-5 py-2.5 text-sm font-semibold text-[#4B5563] bg-white border border-[#E5E7EB] rounded-lg hover:bg-[#F3F4F6] transition-colors"
+                  className="flex-1 px-5 py-2.5 text-sm font-semibold text-[#4B5563] bg-white border border-[#E5E7EB] rounded-lg hover:bg-[#F3F4F6] transition-colors cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={!updateFile || isUpdatingVersion}
-                  className="flex-1 px-5 py-2.5 text-sm font-semibold bg-[#1D6FA3] text-white rounded-lg disabled:opacity-50 hover:bg-[#0B3C5D] transition-colors flex justify-center items-center gap-2"
+                  className="flex-1 px-5 py-2.5 text-sm font-semibold bg-[#1D6FA3] text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-[#0B3C5D] transition-colors flex justify-center items-center gap-2 cursor-pointer"
                 >
                   {isUpdatingVersion ? <><Loader2 className="h-4 w-4 animate-spin"/> Processing...</> : "Update Version"}
                 </button>
@@ -547,13 +573,15 @@ export function KnowledgeRepository() {
         </div>
       )}
 
-      {/* --- EXISTING MODALS (Upload, Edit, Delete) --- */}
       {/* Upload Modal */}
       {showUploadModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl max-w-2xl w-full max-h-[90vh] flex flex-col shadow-2xl">
-            <div className="p-6 border-b border-[#E5E7EB]">
+            <div className="p-6 border-b border-[#E5E7EB] flex justify-between items-center">
               <h2 className="text-xl font-semibold text-[#1F2937]">Upload New Document</h2>
+              <button onClick={() => setShowUploadModal(false)} className="p-2 hover:bg-[#E5E7EB] rounded-full transition-colors cursor-pointer">
+                <X className="h-5 w-5 text-[#6B7280]" />
+              </button>
             </div>
             
             <div className="flex-1 overflow-y-auto p-6">
@@ -573,7 +601,7 @@ export function KnowledgeRepository() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-[#1F2937] mb-2">Category</label>
-                    <select name="category" value={formData.category} onChange={handleInputChange} className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1D6FA3]">
+                    <select name="category" value={formData.category} onChange={handleInputChange} className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1D6FA3] cursor-pointer">
                       <option>Policy</option>
                       <option>Procedure / Guideline</option>
                       <option>Memorandum</option>
@@ -586,7 +614,7 @@ export function KnowledgeRepository() {
 
                   <div>
                     <label className="block text-sm font-medium text-[#1F2937] mb-2">Office</label>
-                    <select name="office" value={formData.office} onChange={handleInputChange} className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1D6FA3]">
+                    <select name="office" value={formData.office} onChange={handleInputChange} className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1D6FA3] cursor-pointer">
                       <option>Academic Affairs</option>
                       <option>Student Affairs</option>
                       <option>Research Office</option>
@@ -615,7 +643,7 @@ export function KnowledgeRepository() {
                       name="effectivityDate"
                       value={formData.effectivityDate}
                       onChange={handleInputChange}
-                      className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1D6FA3]"
+                      className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1D6FA3] cursor-pointer"
                     />
                   </div>
                 </div>
@@ -662,16 +690,16 @@ export function KnowledgeRepository() {
                   setShowUploadModal(false)
                   setSelectedFile(null)
                 }}
-                className="px-5 py-2.5 text-sm font-semibold text-[#4B5563] bg-white border border-[#E5E7EB] rounded-lg hover:bg-[#F3F4F6] transition-colors"
+                className="px-5 py-2.5 text-sm font-semibold text-[#4B5563] bg-white border border-[#E5E7EB] rounded-lg hover:bg-[#F3F4F6] transition-colors cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 onClick={handleUploadSubmit}
                 disabled={!selectedFile || isUploading}
-                className="px-5 py-2.5 text-sm font-semibold bg-[#1D6FA3] text-white rounded-lg disabled:opacity-50 hover:bg-[#0B3C5D] transition-colors flex items-center gap-2"
+                className="px-5 py-2.5 text-sm font-semibold bg-[#1D6FA3] text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-[#0B3C5D] transition-colors flex items-center gap-2 cursor-pointer"
               >
-                {isUploading ? "Uploading..." : "Upload Document"}
+                {isUploading ? <><Loader2 className="h-4 w-4 animate-spin"/> Uploading...</> : "Upload Document"}
               </button>
             </div>
           </div>
@@ -682,8 +710,11 @@ export function KnowledgeRepository() {
       {showEditModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl max-w-2xl w-full shadow-2xl">
-            <div className="p-6 border-b border-[#E5E7EB]">
+            <div className="p-6 border-b border-[#E5E7EB] flex justify-between items-center">
               <h2 className="text-xl font-semibold text-[#1F2937]">Edit Document Metadata</h2>
+              <button onClick={() => setShowEditModal(false)} className="p-2 hover:bg-[#E5E7EB] rounded-full transition-colors cursor-pointer">
+                <X className="h-5 w-5 text-[#6B7280]" />
+              </button>
             </div>
             
             <div className="p-6 space-y-5">
@@ -701,7 +732,7 @@ export function KnowledgeRepository() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-[#1F2937] mb-2">Category</label>
-                  <select name="category" value={formData.category} onChange={handleInputChange} className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1D6FA3]">
+                  <select name="category" value={formData.category} onChange={handleInputChange} className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1D6FA3] cursor-pointer">
                     <option>Policy</option>
                     <option>Procedure / Guideline</option>
                     <option>Memorandum</option>
@@ -713,7 +744,7 @@ export function KnowledgeRepository() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-[#1F2937] mb-2">Office</label>
-                  <select name="office" value={formData.office} onChange={handleInputChange} className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1D6FA3]">
+                  <select name="office" value={formData.office} onChange={handleInputChange} className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1D6FA3] cursor-pointer">
                     <option>Academic Affairs</option>
                     <option>Student Affairs</option>
                     <option>Research Office</option>
@@ -740,7 +771,7 @@ export function KnowledgeRepository() {
                     name="effectivityDate"
                     value={formData.effectivityDate}
                     onChange={handleInputChange}
-                    className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1D6FA3]"
+                    className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1D6FA3] cursor-pointer"
                   />
                 </div>
               </div>
@@ -749,15 +780,16 @@ export function KnowledgeRepository() {
             <div className="p-6 border-t border-[#E5E7EB] bg-[#F9FAFB] flex justify-end gap-3 rounded-b-xl">
               <button
                 onClick={() => setShowEditModal(false)}
-                className="px-5 py-2.5 text-sm font-semibold text-[#4B5563] bg-white border border-[#E5E7EB] rounded-lg hover:bg-[#F3F4F6] transition-colors"
+                className="px-5 py-2.5 text-sm font-semibold text-[#4B5563] bg-white border border-[#E5E7EB] rounded-lg hover:bg-[#F3F4F6] transition-colors cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 onClick={handleEditSubmit}
-                className="px-5 py-2.5 text-sm font-semibold bg-[#1D6FA3] text-white rounded-lg hover:bg-[#0B3C5D] transition-colors"
+                disabled={isEditing}
+                className="px-5 py-2.5 text-sm font-semibold bg-[#1D6FA3] text-white rounded-lg hover:bg-[#0B3C5D] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 cursor-pointer"
               >
-                Save Changes
+                {isEditing ? <><Loader2 className="h-4 w-4 animate-spin"/> Saving...</> : "Save Changes"}
               </button>
             </div>
           </div>
@@ -768,11 +800,14 @@ export function KnowledgeRepository() {
       {showDeleteModal && docToDelete && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl max-w-md w-full shadow-2xl overflow-hidden">
-            <div className="p-6 border-b border-[#E5E7EB] bg-red-50">
+            <div className="p-6 border-b border-[#E5E7EB] bg-red-50 flex justify-between items-center">
               <h2 className="text-xl font-semibold text-red-700 flex items-center gap-2">
                 <Archive className="h-5 w-5" />
                 Archive Document
               </h2>
+              <button onClick={() => setShowDeleteModal(false)} className="p-2 hover:bg-red-100 rounded-full transition-colors cursor-pointer">
+                <X className="h-5 w-5 text-red-700" />
+              </button>
             </div>
             
             <div className="p-6 space-y-4">
@@ -805,16 +840,16 @@ export function KnowledgeRepository() {
                   setShowDeleteModal(false)
                   setDocToDelete(null)
                 }}
-                className="px-5 py-2.5 text-sm font-semibold text-[#4B5563] bg-white border border-[#E5E7EB] rounded-lg hover:bg-[#F3F4F6] transition-colors"
+                className="px-5 py-2.5 text-sm font-semibold text-[#4B5563] bg-white border border-[#E5E7EB] rounded-lg hover:bg-[#F3F4F6] transition-colors cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 onClick={executeArchive}
-                disabled={deleteConfirmText !== docToDelete.name}
-                className="px-5 py-2.5 text-sm font-semibold text-white rounded-lg transition-colors disabled:bg-red-200 disabled:cursor-not-allowed bg-red-600 hover:bg-red-700"
+                disabled={deleteConfirmText !== docToDelete.name || isArchiving}
+                className="px-5 py-2.5 text-sm font-semibold text-white rounded-lg transition-colors disabled:bg-red-300 disabled:cursor-not-allowed bg-red-600 hover:bg-red-700 flex items-center gap-2 cursor-pointer"
               >
-                Archive Document
+                 {isArchiving ? <><Loader2 className="h-4 w-4 animate-spin"/> Archiving...</> : "Archive Document"}
               </button>
             </div>
           </div>
