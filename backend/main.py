@@ -313,7 +313,8 @@ async def upload_document(
             "version": version,
             "effectivity_date": effectivity_date,
             "uploaded_at": datetime.now().isoformat(),
-            "file_url": public_url
+            "file_url": public_url,
+            "status": "Active"
         }
 
         chunks_count = vector_store.add_to_vector_db(extracted_text, metadata)
@@ -326,6 +327,92 @@ async def upload_document(
     except Exception as e:
         print(f"Error: {str(e)}")
         raise HTTPException(status_code=500, detail="Internal Server Error during processing.")
+    
+@app.post("/upload-new-version")
+async def upload_new_version(
+    file: UploadFile = File(...),
+    old_document_name: str = Form(...),
+    new_version: str = Form(...),
+    new_effectivity_date: str = Form(...)
+):
+    import time
+    from vector_store import supabase
+    from datetime import datetime
+    import io
+    import PyPDF2
+
+    try:
+        # 1. Fetch the old document to copy its Category and Office
+        res = supabase.table("document_sections").select("metadata").eq("metadata->>name", old_document_name).limit(1).execute()
+        if not res.data:
+            raise HTTPException(status_code=404, detail="Old document not found in database.")
+        
+        old_metadata = res.data[0]['metadata']
+        category = old_metadata.get("category", "Policy")
+        office = old_metadata.get("office", "Academic Affairs")
+
+        # 2. Archive the old version (Update all chunks of the old document)
+        old_chunks_res = supabase.table("document_sections").select("id, metadata").eq("metadata->>name", old_document_name).execute()
+        if old_chunks_res.data:
+            for chunk in old_chunks_res.data:
+                chunk_meta = chunk['metadata']
+                chunk_meta['status'] = "Archived" # Mark as archived!
+                supabase.table("document_sections").update({"metadata": chunk_meta}).eq("id", chunk['id']).execute()
+
+        # 3. Extract text from the new file (Supports PDF, DOCX, TXT)
+        contents = await file.read()
+        extracted_text = ""
+        filename_lower = file.filename.lower()
+        
+        if filename_lower.endswith(".pdf"):
+            pdf_reader = PyPDF2.PdfReader(io.BytesIO(contents))
+            for page in pdf_reader.pages:
+                text = page.extract_text()
+                if text:
+                    extracted_text += text + "\n"
+        elif filename_lower.endswith(".txt"):
+            extracted_text = contents.decode("utf-8")
+        elif filename_lower.endswith(".docx"):
+            import docx
+            doc = docx.Document(io.BytesIO(contents))
+            extracted_text = "\n".join([paragraph.text for paragraph in doc.paragraphs])
+        else:
+            raise HTTPException(status_code=400, detail="Unsupported file format.")
+
+        if not extracted_text.strip():
+            raise HTTPException(status_code=400, detail="Could not extract text.")
+
+        # 4. Upload to Supabase Storage
+        safe_filename = file.filename.replace(" ", "_")
+        unique_filename = f"v{new_version}_{int(time.time())}_{safe_filename}"
+        
+        supabase.storage.from_("documents").upload(
+            file=contents,
+            path=unique_filename,
+            file_options={"content-type": file.content_type}
+        )
+        public_url = supabase.storage.from_("documents").get_public_url(unique_filename)
+
+        # 5. Save the new vectors as "Active"
+        new_metadata = {
+            "name": old_document_name,  # Keep the same name to link them!
+            "category": category,
+            "office": office,
+            "version": new_version,
+            "effectivity_date": new_effectivity_date,
+            "upload_date": datetime.now().isoformat(),
+            "file_url": public_url,
+            "status": "Active" # Make the new one active
+        }
+
+        import vector_store
+        vector_store.add_to_vector_db(extracted_text, new_metadata)
+
+        return {"message": "New version uploaded successfully and old version archived!"}
+
+    except Exception as e:
+        print(f"Update version error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/ask-policy")
 def ask_policy(request: QuestionRequest):
@@ -352,16 +439,23 @@ def ask_policy(request: QuestionRequest):
     
     relevant_chunks = vector_store.search_knowledge(question)
     
-    # --- NEW: ROLE-BASED VECTOR FILTERING ---
-    # If the user is a student, strip out any sensitive accreditation chunks 
-    # before the AI is allowed to read them.
-    if request.user_role.upper() == "STUDENT":
-        safe_chunks = []
-        for chunk in relevant_chunks:
-            if chunk.get('metadata', {}).get('category') != "Accreditation Evidence":
-                safe_chunks.append(chunk)
-        relevant_chunks = safe_chunks
-    # ----------------------------------------
+    # --- SUPERCHARGED AI FILTERING ---
+    safe_chunks = []
+    for chunk in relevant_chunks:
+        chunk_meta = chunk.get('metadata', {})
+        
+        # 1. Version Control Filter: Ignore archived documents
+        if chunk_meta.get('status') == "Archived":
+            continue 
+            
+        # 2. Security Filter: Block students from Accreditation Evidence
+        if request.user_role.upper() == "STUDENT" and chunk_meta.get('category') == "Accreditation Evidence":
+            continue 
+            
+        safe_chunks.append(chunk)
+        
+    relevant_chunks = safe_chunks
+    # ---------------------------------
     
     context_text = "\n\n".join([chunk['content'] for chunk in relevant_chunks])
     
