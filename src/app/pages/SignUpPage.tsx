@@ -1,5 +1,5 @@
 import { Link, useNavigate } from "react-router";
-import { GraduationCap, User, Mail, Lock, IdCard, BookOpen, Calendar } from "lucide-react";
+import { GraduationCap, User, Mail, Lock, FileText, X, ShieldCheck } from "lucide-react";
 import { useState } from "react";
 import axios from "axios";
 import { useRole } from "../contexts/RoleContext";
@@ -10,6 +10,9 @@ export function SignUpPage() {
   const { setUserRole } = useRole();
   const [isLoading, setIsLoading] = useState(false);
   const [apiError, setApiError] = useState("");
+  
+  // NEW: State to control the Terms Modal
+  const [showTermsModal, setShowTermsModal] = useState(false);
   
   const [formData, setFormData] = useState({
     fullName: "",
@@ -40,28 +43,24 @@ export function SignUpPage() {
     setIsLoading(true);
 
     try {
-      // 1. FIXED: Send ALL the required data to FastAPI
       const response = await axios.post("http://localhost:8000/register", {
         email: formData.email,
         password: formData.password,
         role: formData.role,
-        full_name: formData.fullName, // Now we send the name!
-        course: formData.course || null, // Send course (or null if Faculty)
-        year: formData.year || null      // Send year (or null if Faculty)
+        full_name: formData.fullName, 
+        course: formData.course || null, 
+        year: formData.year || null      
       });
 
       setUserRole(formData.role);
       navigate("/login");
 
     } catch (error: any) {
-      // 2. FIXED: A smarter error catcher!
       const detail = error.response?.data?.detail;
       
-      // If FastAPI sends back an array of validation objects (like our error), extract the text message safely
       if (Array.isArray(detail)) {
         setApiError(`Data Error: ${detail[0].loc[1]} - ${detail[0].msg}`);
       } else {
-        // Otherwise, print the standard text error (like "Email already registered")
         setApiError(detail || "Registration failed. Please check your connection.");
       }
     } finally {
@@ -86,7 +85,16 @@ export function SignUpPage() {
     "Bachelor in Industrial Technology major in Garments Technology"
   ];
 
-  const years = ["1st Year", "2nd Year", "3rd Year", "4th Year"];
+  // UPDATED: Expanded demographic options
+  const years = [
+    "1st Year", 
+    "2nd Year", 
+    "3rd Year", 
+    "4th Year",
+    "Irregular",
+    "Graduate / Alumni",
+    "Other"
+  ];
 
   return (
     <div className="min-h-screen bg-white flex overflow-hidden">
@@ -115,7 +123,7 @@ export function SignUpPage() {
       {/* Right Side - Sign Up Form */}
       <div className="w-full lg:w-1/2 flex items-center justify-center p-8 bg-[#F5F7FA] overflow-y-auto">
         <div className="w-full max-w-lg">
-          {/* Mobile Logo */}
+          
           <div className="lg:hidden text-center mb-6">
             <div className="flex justify-center mb-4">
               <div className="w-16 h-16 bg-[#1D6FA3] rounded-xl flex items-center justify-center">
@@ -134,14 +142,12 @@ export function SignUpPage() {
             
             <form onSubmit={handleSubmit} className="space-y-5">
               
-              {/* API Error Message Display */}
               {apiError && (
                 <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-md">
                   <p className="text-sm text-red-700">{apiError}</p>
                 </div>
               )}
 
-              {/* Account Type Selection - ADMIN REMOVED */}
               <div>
                 <label className="block text-sm font-medium mb-3 text-[#1F2937]">
                   Select Account Type
@@ -157,7 +163,7 @@ export function SignUpPage() {
                         key={option.value}
                         type="button"
                         onClick={() => setFormData({ ...formData, role: option.value as UserRole })}
-                        className={`p-3 rounded-lg border-2 transition-all ${
+                        className={`p-3 rounded-lg border-2 transition-all cursor-pointer ${
                           formData.role === option.value
                             ? "border-[#1D6FA3] bg-[#E3F2FD]"
                             : "border-[#E5E7EB] hover:border-[#D1D5DB]"
@@ -179,7 +185,6 @@ export function SignUpPage() {
                 </div>
               </div>
 
-              {/* Full Name */}
               <div>
                 <label htmlFor="fullName" className="block text-sm font-medium mb-2 text-[#1F2937]">
                   Full Name
@@ -198,7 +203,6 @@ export function SignUpPage() {
                 </div>
               </div>
 
-              {/* Email */}
               <div>
                 <label htmlFor="email" className="block text-sm font-medium mb-2 text-[#1F2937]">
                   Email Address
@@ -217,7 +221,6 @@ export function SignUpPage() {
                 </div>
               </div>
 
-              {/* Conditional Fields for Student */}
               {formData.role === "STUDENT" && (
                 <div className="grid grid-cols-2 gap-4">
                   <div>
@@ -229,7 +232,7 @@ export function SignUpPage() {
                       required
                       value={formData.course}
                       onChange={(e) => setFormData({ ...formData, course: e.target.value })}
-                      className="w-full px-4 py-3 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm text-[#1F2937] focus:outline-none focus:ring-2 focus:ring-[#1D6FA3] focus:border-transparent"
+                      className="w-full px-4 py-3 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm text-[#1F2937] focus:outline-none focus:ring-2 focus:ring-[#1D6FA3] focus:border-transparent cursor-pointer"
                     >
                       <option value="">Select Course</option>
                       {courses.map(course => (
@@ -240,14 +243,14 @@ export function SignUpPage() {
 
                   <div>
                     <label htmlFor="year" className="block text-sm font-medium mb-2 text-[#1F2937]">
-                      Year
+                      Status / Year
                     </label>
                     <select
                       id="year"
                       required
                       value={formData.year}
                       onChange={(e) => setFormData({ ...formData, year: e.target.value })}
-                      className="w-full px-4 py-3 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm text-[#1F2937] focus:outline-none focus:ring-2 focus:ring-[#1D6FA3] focus:border-transparent"
+                      className="w-full px-4 py-3 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm text-[#1F2937] focus:outline-none focus:ring-2 focus:ring-[#1D6FA3] focus:border-transparent cursor-pointer"
                     >
                       <option value="">Select Year</option>
                       {years.map(year => (
@@ -258,7 +261,6 @@ export function SignUpPage() {
                 </div>
               )}
 
-              {/* Password Fields */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label htmlFor="password" className="block text-sm font-medium mb-2 text-[#1F2937]">
@@ -297,7 +299,7 @@ export function SignUpPage() {
                 </div>
               </div>
 
-              {/* Terms and Conditions */}
+              {/* UPDATED: Terms and Conditions with Modal Trigger */}
               <div className="flex items-start p-4 bg-[#F5F7FA] rounded-lg">
                 <input
                   id="terms"
@@ -305,25 +307,24 @@ export function SignUpPage() {
                   required
                   checked={formData.agreeToTerms}
                   onChange={(e) => setFormData({ ...formData, agreeToTerms: e.target.checked })}
-                  className="mt-1 mr-3 w-4 h-4 rounded border-[#E5E7EB] text-[#1D6FA3] focus:ring-[#1D6FA3]"
+                  className="mt-1 mr-3 w-4 h-4 rounded border-[#E5E7EB] text-[#1D6FA3] focus:ring-[#1D6FA3] cursor-pointer"
                 />
                 <label htmlFor="terms" className="text-sm text-[#6B7280]">
                   I agree to the{" "}
-                  <a href="#" className="text-[#1D6FA3] hover:text-[#0B3C5D] font-medium">
-                    Terms and Conditions
-                  </a>{" "}
-                  and{" "}
-                  <a href="#" className="text-[#1D6FA3] hover:text-[#0B3C5D] font-medium">
-                    Privacy Policy
-                  </a>
+                  <button 
+                    type="button" 
+                    onClick={() => setShowTermsModal(true)}
+                    className="text-[#1D6FA3] hover:text-[#0B3C5D] text-sm underline-offset-2 hover:underline cursor-pointer"
+                  >
+                    Terms and Conditions & Privacy Policy
+                  </button>
                 </label>
               </div>
 
-              {/* Submit Button */}
               <button
                 type="submit"
                 disabled={isLoading}
-                className="w-full py-3 bg-[#1D6FA3] text-white rounded-lg hover:bg-[#0B3C5D] transition-colors font-medium disabled:opacity-70 disabled:cursor-not-allowed flex justify-center items-center"
+                className="w-full py-3 bg-[#1D6FA3] text-white rounded-lg hover:bg-[#0B3C5D] transition-colors font-medium disabled:opacity-70 disabled:cursor-not-allowed flex justify-center items-center active:scale-[0.98] cursor-pointer"
               >
                 {isLoading ? (
                   <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -335,7 +336,6 @@ export function SignUpPage() {
               </button>
             </form>
 
-            {/* Already have account */}
             <div className="mt-6 text-center pt-6 border-t border-[#E5E7EB]">
               <p className="text-sm text-[#6B7280]">
                 Already have an account?{" "}
@@ -346,7 +346,6 @@ export function SignUpPage() {
             </div>
           </div>
 
-          {/* Back to Home */}
           <div className="mt-6 text-center">
             <Link to="/" className="text-sm text-[#1D6FA3] hover:text-[#0B3C5D] font-medium">
               ← Back to Home
@@ -354,6 +353,88 @@ export function SignUpPage() {
           </div>
         </div>
       </div>
+
+      {/* --- TERMS AND CONDITIONS MODAL --- */}
+      {showTermsModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl border border-[#E5E7EB] w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-6 border-b border-[#E5E7EB] bg-[#F5F7FA]">
+              <div className="flex items-center gap-3">
+                <ShieldCheck className="h-6 w-6 text-[#1D6FA3]" />
+                <h3 className="text-xl font-bold text-[#1F2937]">Terms of Service & Privacy Policy</h3>
+              </div>
+              <button onClick={() => setShowTermsModal(false)} className="text-[#6B7280] hover:text-[#1F2937] transition-colors cursor-pointer bg-white rounded-full p-1 hover:bg-gray-200">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            
+            {/* Modal Body (Scrollable) */}
+            <div className="p-6 overflow-y-auto flex-1 space-y-6 text-[#4B5563] text-sm leading-relaxed">
+              
+              <section>
+                <h4 className="text-base font-bold text-[#1F2937] mb-2">1. Acceptance of Terms</h4>
+                <p>By registering for an account on the CTU Argao Institutional Knowledge System, you agree to abide by these Terms of Service. This platform is strictly for the academic, administrative, and internal use of Cebu Technological University students, faculty, and administrators.</p>
+              </section>
+
+              <section>
+                <h4 className="text-base font-bold text-[#1F2937] mb-2">2. Use of Artificial Intelligence (AskPolicy)</h4>
+                <p>This system utilizes a Retrieval-Augmented Generation (RAG) AI to answer questions based on official university handbooks and memos. While we strive for absolute accuracy, the AI may occasionally misinterpret data. <strong>Users must always verify critical academic or administrative decisions with their respective department heads or official university publications.</strong></p>
+              </section>
+
+              <section>
+                <h4 className="text-base font-bold text-[#1F2937] mb-2">3. User Conduct and Account Security</h4>
+                <ul className="list-disc pl-5 space-y-1">
+                  <li>You are responsible for maintaining the confidentiality of your password.</li>
+                  <li>Account sharing is strictly prohibited and may result in immediate deactivation.</li>
+                  <li>Faculty and Admin users must not upload classified, malicious, or inappropriate files to the Knowledge Repository.</li>
+                  <li>Attempting to bypass the Role-Based Access Control (RBAC) to view unauthorized accreditation evidence is a violation of university policy.</li>
+                </ul>
+              </section>
+
+              <section>
+                <h4 className="text-base font-bold text-[#1F2937] mb-2">4. Data Privacy Policy (Data Collection)</h4>
+                <p>We are committed to protecting your privacy in compliance with the Data Privacy Act of 2012 (R.A. 10173). We collect the following data:</p>
+                <ul className="list-disc pl-5 space-y-1 mt-2">
+                  <li><strong>Personal Identifiers:</strong> Your full name, university email, course, and year level.</li>
+                  <li><strong>System Usage:</strong> We log queries submitted to the AskPolicy AI. These chat logs are securely stored to calculate analytics, identify "Popular Topics," and improve the accuracy of the AI responses.</li>
+                </ul>
+                <p className="mt-2"><strong>We will never sell, rent, or distribute your personal data to third-party entities.</strong> Data is used exclusively for internal institutional improvement.</p>
+              </section>
+
+              <section>
+                <h4 className="text-base font-bold text-[#1F2937] mb-2">5. Account Termination</h4>
+                <p>System Administrators reserve the right to "Disable" any account that violates these terms. Disabled accounts lose access to the system, but historical data (such as uploaded policies) is retained for institutional audit trails.</p>
+              </section>
+
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-6 border-t border-[#E5E7EB] bg-[#F9FAFB] flex justify-end gap-3 rounded-b-2xl">
+              <button
+                type="button"
+                onClick={() => setShowTermsModal(false)}
+                className="px-5 py-2.5 text-sm font-semibold text-[#4B5563] bg-white border border-[#E5E7EB] rounded-lg hover:bg-[#F3F4F6] transition-colors cursor-pointer"
+              >
+                Close
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setFormData({ ...formData, agreeToTerms: true }); // Automatically check the box
+                  setShowTermsModal(false); // Close the modal
+                }}
+                className="px-6 py-2.5 text-sm font-semibold bg-[#1D6FA3] text-white rounded-lg hover:bg-[#0B3C5D] transition-colors cursor-pointer active:scale-95"
+              >
+                I Agree & Close
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
