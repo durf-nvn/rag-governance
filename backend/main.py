@@ -133,6 +133,7 @@ def register_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
 def login_user(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     user = db.query(models.User).filter(models.User.email == form_data.username).first()
     
+    # 1. Check if email exists and password is correct
     if not user or not utils.verify_password(form_data.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -140,12 +141,22 @@ def login_user(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = D
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+    # --- NEW: Check if the account is Disabled ---
+    if user.status == "Disabled":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Your account has been disabled. Please contact the system administrator."
+        )
+    # ---------------------------------------------
+
+    # 3. Check if Faculty account is still pending
     if not user.is_verified:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Your Faculty account is currently pending Admin verification."
         )
 
+    # 4. Generate the login token
     access_token = utils.create_access_token(data={"sub": user.email})
     
     return {
