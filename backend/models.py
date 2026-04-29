@@ -13,6 +13,7 @@ class User(Base):
     hashed_password = Column(Text, nullable=False)
     role = Column(String(50), default="STUDENT")
     is_verified = Column(Boolean, default=False)
+    status = Column(String(50), default="Active")
     created_at = Column(DateTime, default=datetime.utcnow)
 
     student_profile = relationship("StudentProfile", back_populates="user", uselist=False)

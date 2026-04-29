@@ -19,6 +19,7 @@ class UserResponse(BaseModel):
     role: str
     full_name: Optional[str] = None  # NEW
     is_verified: bool                # NEW
+    status: Optional[str] = "Active"
     created_at: datetime
 
     class Config:

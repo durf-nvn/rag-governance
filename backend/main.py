@@ -216,6 +216,17 @@ def delete_user(user_id: str, db: Session = Depends(get_db)):
     db.commit()
     return {"message": "User rejected and removed successfully!"}
 
+@app.put("/users/{user_id}/disable")
+def disable_user(user_id: str, db: Session = Depends(get_db)):
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Perform the Soft Delete
+    user.status = "Disabled"
+    db.commit()
+    return {"message": f"Account for {user.full_name or user.email} has been disabled!"}
+
 @app.post("/users")
 def create_user_admin(request: UserCreateRequest, db: Session = Depends(get_db)):
     # 1. Check if email exists
