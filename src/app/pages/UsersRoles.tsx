@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Search, UserPlus, Ban, UserX, CheckCircle, Clock, XCircle, AlertCircle, X, ShieldAlert } from "lucide-react";
+import { Search, UserPlus, Ban, UserX, CheckCircle, Clock, XCircle, AlertCircle, X, ShieldAlert, Unlock, Loader2 } from "lucide-react";
 import axios from "axios";
 
 export function UsersRoles() {
@@ -25,9 +25,17 @@ export function UsersRoles() {
 
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [userToReject, setUserToReject] = useState<any>(null);
+  const [isRejecting, setIsRejecting] = useState(false);
 
+  // Disable State
   const [showDisableModal, setShowDisableModal] = useState(false);
   const [userToDisable, setUserToDisable] = useState<any>(null);
+  const [isDisabling, setIsDisabling] = useState(false);
+
+  // Enable State
+  const [showEnableModal, setShowEnableModal] = useState(false);
+  const [userToEnable, setUserToEnable] = useState<any>(null);
+  const [isEnabling, setIsEnabling] = useState(false);
 
   const fetchUsers = async () => {
     try {
@@ -55,9 +63,9 @@ export function UsersRoles() {
     }
   };
 
-  // Hard Delete for Pending (Never approved)
   const executeReject = async () => {
     if (!userToReject) return;
+    setIsRejecting(true);
     try {
       await axios.delete(`http://localhost:8000/users/${userToReject.id}`);
       fetchUsers();
@@ -66,12 +74,14 @@ export function UsersRoles() {
       showToast("Pending request rejected and removed.", "success");
     } catch (error) {
       showToast("Failed to reject faculty account.", "error");
+    } finally {
+      setIsRejecting(false);
     }
   };
 
-  // Soft Delete for Active Users
   const executeDisable = async () => {
     if (!userToDisable) return;
+    setIsDisabling(true);
     try {
       await axios.put(`http://localhost:8000/users/${userToDisable.id}/disable`);
       fetchUsers();
@@ -80,6 +90,24 @@ export function UsersRoles() {
       showToast("User account has been disabled.", "success");
     } catch (error) {
       showToast("Failed to disable user account.", "error");
+    } finally {
+      setIsDisabling(false);
+    }
+  };
+
+  const executeEnable = async () => {
+    if (!userToEnable) return;
+    setIsEnabling(true);
+    try {
+      await axios.put(`http://localhost:8000/users/${userToEnable.id}/enable`);
+      fetchUsers();
+      setShowEnableModal(false);
+      setUserToEnable(null);
+      showToast("User account has been re-enabled.", "success");
+    } catch (error) {
+      showToast("Failed to re-enable user account.", "error");
+    } finally {
+      setIsEnabling(false);
     }
   };
 
@@ -116,7 +144,6 @@ export function UsersRoles() {
   const pendingFaculty = users.filter(u => u.role === "FACULTY" && !u.is_verified);
   const registeredUsers = users.filter(u => u.is_verified || u.role === "ADMIN");
 
-  // Multi-parameter filtering!
   const filteredUsers = registeredUsers.filter(user => {
     const searchLower = searchQuery.toLowerCase();
     const matchesName = user.full_name?.toLowerCase().includes(searchLower) || false;
@@ -138,7 +165,11 @@ export function UsersRoles() {
   ];
 
   if (isLoading) {
-    return <div className="p-8 text-center text-gray-500">Loading user database...</div>;
+    return (
+      <div className="flex justify-center items-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-[#1D6FA3]" />
+      </div>
+    );
   }
 
   return (
@@ -162,7 +193,7 @@ export function UsersRoles() {
         </div>
         <button
           onClick={() => setShowAddUserModal(true)}
-          className="flex items-center gap-2 px-6 py-3 bg-[#1D6FA3] text-white rounded-lg hover:bg-[#0B3C5D] transition-colors shadow-sm"
+          className="flex items-center gap-2 px-6 py-3 bg-[#1D6FA3] text-white rounded-lg hover:bg-[#0B3C5D] transition-colors shadow-sm cursor-pointer active:scale-95"
         >
           <UserPlus className="h-5 w-5" />
           Add User
@@ -205,10 +236,10 @@ export function UsersRoles() {
                     <td className="px-6 py-4 text-gray-500 text-sm">{new Date(user.created_at).toLocaleDateString()}</td>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2">
-                        <button onClick={() => handleApprove(user.id)} className="flex items-center gap-1.5 px-3 py-1.5 bg-green-50 text-green-700 font-semibold text-xs rounded border border-green-200 hover:bg-green-100 transition-colors">
+                        <button onClick={() => handleApprove(user.id)} className="flex items-center gap-1.5 px-3 py-1.5 bg-green-50 text-green-700 font-semibold text-xs rounded border border-green-200 hover:bg-green-100 transition-colors cursor-pointer">
                           <CheckCircle className="h-4 w-4" /> Approve
                         </button>
-                        <button onClick={() => { setUserToReject(user); setShowRejectModal(true); }} className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 border border-red-200 text-red-700 font-semibold text-xs rounded hover:bg-red-100 transition-colors">
+                        <button onClick={() => { setUserToReject(user); setShowRejectModal(true); }} className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 border border-red-200 text-red-700 font-semibold text-xs rounded hover:bg-red-100 transition-colors cursor-pointer">
                           <XCircle className="h-4 w-4" /> Reject
                         </button>
                       </div>
@@ -242,7 +273,7 @@ export function UsersRoles() {
               <select 
                 value={selectedRole} 
                 onChange={(e) => setSelectedRole(e.target.value)} 
-                className="sm:w-40 px-4 py-3 bg-white border border-gray-200 rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#1D6FA3] cursor-pointer"
+                className="sm:w-40 px-4 py-3 bg-white border border-gray-200 rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#1D6FA3] cursor-pointer hover:bg-gray-50"
               >
                 <option value="all">All Roles</option>
                 <option value="ADMIN">Admin</option>
@@ -253,7 +284,7 @@ export function UsersRoles() {
               <select 
                 value={selectedStatus} 
                 onChange={(e) => setSelectedStatus(e.target.value)} 
-                className="sm:w-40 px-4 py-3 bg-white border border-gray-200 rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#1D6FA3] cursor-pointer"
+                className="sm:w-40 px-4 py-3 bg-white border border-gray-200 rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#1D6FA3] cursor-pointer hover:bg-gray-50"
               >
                 <option value="all">All Status</option>
                 <option value="Active">Active</option>
@@ -301,14 +332,24 @@ export function UsersRoles() {
                       </span>
                     </td>
                     <td className="px-6 py-4 text-center">
-                      {(user.status || 'Active') === 'Active' && user.role !== 'ADMIN' && (
-                        <button 
-                          onClick={() => { setUserToDisable(user); setShowDisableModal(true); }} 
-                          className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer" 
-                          title="Disable Account"
-                        >
-                          <Ban className="h-5 w-5" />
-                        </button>
+                      {user.role !== 'ADMIN' && (
+                        (user.status || 'Active') === 'Active' ? (
+                          <button 
+                            onClick={() => { setUserToDisable(user); setShowDisableModal(true); }} 
+                            className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer" 
+                            title="Disable Account"
+                          >
+                            <Ban className="h-5 w-5" />
+                          </button>
+                        ) : (
+                          <button 
+                            onClick={() => { setUserToEnable(user); setShowEnableModal(true); }} 
+                            className="p-2 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors cursor-pointer" 
+                            title="Re-enable Account"
+                          >
+                            <Unlock className="h-5 w-5" />
+                          </button>
+                        )
                       )}
                     </td>
                   </tr>
@@ -325,7 +366,7 @@ export function UsersRoles() {
           <div className="bg-white rounded-2xl max-w-xl w-full shadow-2xl overflow-hidden">
             <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-[#F5F7FA]">
               <h2 className="text-xl font-bold text-[#1F2937]">Create User Account</h2>
-              <button onClick={() => setShowAddUserModal(false)} className="p-2 hover:bg-gray-200 rounded-full transition-colors">
+              <button onClick={() => setShowAddUserModal(false)} className="p-2 hover:bg-gray-200 rounded-full transition-colors cursor-pointer">
                 <X className="h-5 w-5 text-gray-500" />
               </button>
             </div>
@@ -357,11 +398,11 @@ export function UsersRoles() {
               </div>
             
               <div className="pt-4 flex gap-3">
-                <button type="button" onClick={() => setShowAddUserModal(false)} className="flex-1 px-5 py-3 text-sm font-bold text-gray-600 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors">
+                <button type="button" onClick={() => setShowAddUserModal(false)} className="flex-1 px-5 py-3 text-sm font-bold text-gray-600 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors cursor-pointer">
                   Cancel
                 </button>
-                <button type="submit" disabled={isCreating} className="flex-1 px-5 py-3 text-sm font-bold bg-[#1D6FA3] text-white rounded-xl hover:bg-[#0B3C5D] transition-colors disabled:opacity-50">
-                   {isCreating ? "Creating..." : "Create Account"}
+                <button type="submit" disabled={isCreating} className="flex-1 px-5 py-3 text-sm font-bold bg-[#1D6FA3] text-white rounded-xl hover:bg-[#0B3C5D] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer">
+                   {isCreating ? <><Loader2 className="h-4 w-4 animate-spin"/> Creating...</> : "Create Account"}
                 </button>
               </div>
             </form>
@@ -369,13 +410,18 @@ export function UsersRoles() {
         </div>
       )}
 
-      {/* --- DISABLE ACTIVE ACCOUNT MODAL --- */}
+      {/* --- DISABLE ACCOUNT MODAL --- */}
       {showDisableModal && userToDisable && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl overflow-hidden">
-            <div className="p-6 border-b border-red-100 bg-red-50 flex items-center gap-3">
-              <ShieldAlert className="h-6 w-6 text-red-600" />
-              <h2 className="text-xl font-bold text-red-700">Disable Account</h2>
+            <div className="p-6 border-b border-red-100 bg-red-50 flex justify-between items-center">
+              <div className="flex items-center gap-3">
+                <ShieldAlert className="h-6 w-6 text-red-600" />
+                <h2 className="text-xl font-bold text-red-700">Disable Account</h2>
+              </div>
+              <button onClick={() => setShowDisableModal(false)} className="p-2 hover:bg-red-100 rounded-full transition-colors cursor-pointer">
+                <X className="h-5 w-5 text-red-700" />
+              </button>
             </div>
             
             <div className="p-6 space-y-4">
@@ -388,11 +434,46 @@ export function UsersRoles() {
             </div>
 
             <div className="p-6 border-t border-gray-100 bg-[#F9FAFB] flex justify-end gap-3">
-              <button onClick={() => setShowDisableModal(false)} className="px-5 py-2.5 text-sm font-bold text-gray-600 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors">
+              <button onClick={() => setShowDisableModal(false)} disabled={isDisabling} className="px-5 py-2.5 text-sm font-bold text-gray-600 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors cursor-pointer">
                 Cancel
               </button>
-              <button onClick={executeDisable} className="px-5 py-2.5 text-sm font-bold text-white rounded-xl bg-red-600 hover:bg-red-700 transition-colors">
-                Yes, Disable Account
+              <button onClick={executeDisable} disabled={isDisabling} className="px-5 py-2.5 text-sm font-bold text-white rounded-xl bg-red-600 hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer">
+                {isDisabling ? <><Loader2 className="h-4 w-4 animate-spin"/> Disabling...</> : "Yes, Disable Account"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- ENABLE ACCOUNT MODAL --- */}
+      {showEnableModal && userToEnable && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl overflow-hidden">
+            <div className="p-6 border-b border-green-100 bg-green-50 flex justify-between items-center">
+              <div className="flex items-center gap-3">
+                <Unlock className="h-6 w-6 text-green-600" />
+                <h2 className="text-xl font-bold text-green-700">Re-enable Account</h2>
+              </div>
+              <button onClick={() => setShowEnableModal(false)} className="p-2 hover:bg-green-100 rounded-full transition-colors cursor-pointer">
+                <X className="h-5 w-5 text-green-700" />
+              </button>
+            </div>
+            
+            <div className="p-6 space-y-4">
+              <p className="text-sm text-gray-600 leading-relaxed">
+                You are about to restore login access for <span className="font-bold text-gray-900">{userToEnable.full_name} ({userToEnable.email})</span>.
+              </p>
+              <p className="text-sm text-gray-600 leading-relaxed">
+                They will immediately be able to log back into the dashboard using their existing password.
+              </p>
+            </div>
+
+            <div className="p-6 border-t border-gray-100 bg-[#F9FAFB] flex justify-end gap-3">
+              <button onClick={() => setShowEnableModal(false)} disabled={isEnabling} className="px-5 py-2.5 text-sm font-bold text-gray-600 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors cursor-pointer">
+                Cancel
+              </button>
+              <button onClick={executeEnable} disabled={isEnabling} className="px-5 py-2.5 text-sm font-bold text-white rounded-xl bg-green-600 hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer">
+                {isEnabling ? <><Loader2 className="h-4 w-4 animate-spin"/> Enabling...</> : "Yes, Re-enable"}
               </button>
             </div>
           </div>
@@ -403,9 +484,14 @@ export function UsersRoles() {
       {showRejectModal && userToReject && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl overflow-hidden">
-            <div className="p-6 border-b border-red-100 bg-red-50 flex items-center gap-3">
-              <UserX className="h-6 w-6 text-red-600" />
-              <h2 className="text-xl font-bold text-red-700">Reject Registration</h2>
+            <div className="p-6 border-b border-red-100 bg-red-50 flex justify-between items-center">
+              <div className="flex items-center gap-3">
+                <UserX className="h-6 w-6 text-red-600" />
+                <h2 className="text-xl font-bold text-red-700">Reject Registration</h2>
+              </div>
+              <button onClick={() => setShowRejectModal(false)} className="p-2 hover:bg-red-100 rounded-full transition-colors cursor-pointer">
+                <X className="h-5 w-5 text-red-700" />
+              </button>
             </div>
             
             <div className="p-6 space-y-4">
@@ -418,11 +504,11 @@ export function UsersRoles() {
             </div>
 
             <div className="p-6 border-t border-gray-100 bg-[#F9FAFB] flex justify-end gap-3">
-              <button onClick={() => setShowRejectModal(false)} className="px-5 py-2.5 text-sm font-bold text-gray-600 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors">
+              <button onClick={() => setShowRejectModal(false)} disabled={isRejecting} className="px-5 py-2.5 text-sm font-bold text-gray-600 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors cursor-pointer">
                 Cancel
               </button>
-              <button onClick={executeReject} className="px-5 py-2.5 text-sm font-bold text-white rounded-xl bg-red-600 hover:bg-red-700 transition-colors">
-                Reject Request
+              <button onClick={executeReject} disabled={isRejecting} className="px-5 py-2.5 text-sm font-bold text-white rounded-xl bg-red-600 hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer">
+                {isRejecting ? <><Loader2 className="h-4 w-4 animate-spin"/> Rejecting...</> : "Reject Request"}
               </button>
             </div>
           </div>

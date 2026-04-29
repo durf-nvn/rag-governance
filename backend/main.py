@@ -238,6 +238,17 @@ def disable_user(user_id: str, db: Session = Depends(get_db)):
     db.commit()
     return {"message": f"Account for {user.full_name or user.email} has been disabled!"}
 
+@app.put("/users/{user_id}/enable")
+def enable_user(user_id: str, db: Session = Depends(get_db)):
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Reactivate the account
+    user.status = "Active"
+    db.commit()
+    return {"message": f"Account for {user.full_name or user.email} has been re-enabled!"}
+
 @app.post("/users")
 def create_user_admin(request: UserCreateRequest, db: Session = Depends(get_db)):
     # 1. Check if email exists
