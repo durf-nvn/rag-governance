@@ -9,7 +9,7 @@ interface Message {
   content: string;
   sources?: { name: string; relevance: number; snippet?: string }[];
   timestamp: string;
-  feedback?: "helpful" | "not-helpful"; // ADD THIS LINE
+  feedback?: "helpful" | "not-helpful";
   followUps?: string[];
 }
 
@@ -37,11 +37,9 @@ export function AskPolicy() {
     scrollToBottom();
   }, [messages]);
 
-  // 1. Change from hardcoded arrays to State variables
   const [recentQuestions, setRecentQuestions] = useState<string[]>([]);
   const [popularTopics, setPopularTopics] = useState<{label: string, color: string}[]>([]);
 
-  // 2. Fetch the real data when the component loads
   useEffect(() => {
     const fetchAnalytics = async () => {
       try {
@@ -56,27 +54,23 @@ export function AskPolicy() {
       }
     };
     fetchAnalytics();
-  }, []); // The empty array means this runs once when the page opens
+  }, []); 
 
-  // Grab the email saved during login
   const userEmail = localStorage.getItem('userEmail') || 'guest@ctu.edu.ph';
 
-  // NEW: Fetch history when the component loads
   useEffect(() => {
     const fetchHistory = async () => {
       try {
         const res = await axios.get(`http://localhost:8000/chat-history?email=${userEmail}`);
         
         if (res.data && res.data.length > 0) {
-          // Convert database format to UI format
           const formattedHistory = res.data.map((msg: any, index: number) => ({
-            id: index + 2, // Start at 2 because the welcome message is id 1
+            id: index + 2, 
             type: msg.role,
             content: msg.content,
             timestamp: new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
           }));
 
-          // Keep the default AI greeting at the top, then attach history
           setMessages([
             {
               id: 1,
@@ -93,11 +87,9 @@ export function AskPolicy() {
     };
 
     fetchHistory();
-  }, [userEmail]); // This ensures it runs when the email is available
+  }, [userEmail]); 
 
-  // FIXED: Now accepts an optional string so buttons can trigger it directly!
   const handleSendMessage = async (quickText?: string) => {
-    // If a button passed text, use it. Otherwise, use what's typed in the input.
     const textToSend = typeof quickText === 'string' ? quickText : query;
     
     if (!textToSend.trim()) return;
@@ -110,21 +102,19 @@ export function AskPolicy() {
     };
 
     setMessages((prev) => [...prev, userMessage]);
-    setQuery(""); // Clear the input box instantly
+    setQuery(""); 
     setIsLoading(true);
 
     try {
-      // Update this request to include the user_email!
       const response = await axios.post("http://localhost:8000/ask-policy", {
         question: textToSend,
-        user_email: userEmail, // <-- ADD THIS LINE
+        user_email: userEmail,
         user_role: currentRole,
       });
 
-      // Update this mapping!
       const formattedSources = response.data.sources.map((src: any) => ({
-        name: src.name,       // Now pulling the name from the object
-        snippet: src.snippet, // Pulling our new snippet!
+        name: src.name,       
+        snippet: src.snippet, 
         relevance: src.relevance
       }));
 
@@ -133,7 +123,7 @@ export function AskPolicy() {
         type: "ai",
         content: response.data.answer,
         sources: formattedSources.length > 0 ? formattedSources : undefined,
-        followUps: response.data.follow_ups, // ADD THIS LINE
+        followUps: response.data.follow_ups, 
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       };
 
@@ -153,7 +143,6 @@ export function AskPolicy() {
   };
 
   const handleFeedback = async (messageId: number, isHelpful: boolean) => {
-    // 1. Update UI immediately so it feels fast
     setMessages((prevMessages) =>
       prevMessages.map((msg) =>
         msg.id === messageId
@@ -162,7 +151,6 @@ export function AskPolicy() {
       )
     );
 
-    // 2. Find the AI message and the User question that came right before it
     const aiMessage = messages.find((m) => m.id === messageId);
     const userMessage = messages.find((m) => m.id === messageId - 1);
 
@@ -197,7 +185,7 @@ export function AskPolicy() {
               {recentQuestions.map((question, index) => (
                 <button
                   key={index}
-                  onClick={() => handleSendMessage(question)} // WIRED UP!
+                  onClick={() => handleSendMessage(question)}
                   disabled={isLoading}
                   className="w-full text-left px-4 py-3 text-sm text-[#374151] hover:text-[#1D6FA3] bg-[#F5F7FA] hover:bg-[#E3F2FD] rounded-lg transition-colors border border-transparent disabled:opacity-50"
                 >
@@ -212,7 +200,7 @@ export function AskPolicy() {
                 {popularTopics.map((topic, index) => (
                   <button 
                     key={index}
-                    onClick={() => handleSendMessage(`What are the policies regarding ${topic.label}?`)} // WIRED UP!
+                    onClick={() => handleSendMessage(`What are the policies regarding ${topic.label}?`)}
                     disabled={isLoading}
                     className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors disabled:opacity-50
                       ${topic.color === 'blue' ? 'bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-200' : ''}
@@ -244,10 +232,11 @@ export function AskPolicy() {
                     </div>
                   )}
                   
+                  {/* REMOVED shadow-sm, ADDED solid gray outline for AI messages and matching blue outline for user messages */}
                   <div
-                    className={`rounded-2xl px-5 py-4 shadow-sm ${
+                    className={`rounded-2xl px-5 py-4 ${
                       message.type === "user"
-                        ? "bg-[#1D6FA3] text-white rounded-tr-sm"
+                        ? "bg-[#1D6FA3] text-white rounded-tr-sm border border-[#1D6FA3]"
                         : "bg-[#F9FAFB] text-[#1F2937] border border-[#E5E7EB] rounded-tl-sm"
                     }`}
                   >
@@ -260,17 +249,16 @@ export function AskPolicy() {
                       {message.sources.map((source, index) => (
                         <details 
                           key={index} 
-                          className="group bg-white border border-[#E5E7EB] rounded-lg overflow-hidden mb-2 shadow-sm [&_summary::-webkit-details-marker]:hidden"
+                          // REMOVED shadow-sm here
+                          className="group bg-white border border-[#E5E7EB] rounded-lg overflow-hidden mb-2 [&_summary::-webkit-details-marker]:hidden"
                         >
                           <summary className="flex items-center justify-between p-3 cursor-pointer hover:bg-[#F5F7FA] transition-colors list-none">
-                            {/* THIS IS THE PART THAT WENT MISSING */}
                             <div className="flex items-center gap-3">
                               <FileText className="h-4 w-4 text-[#1D6FA3]" />
                               <span className="text-sm font-medium text-[#374151]">{source.name}</span>
                             </div>
                             
                             <div className="flex items-center gap-4">
-                              {/* Dynamic Confidence Score Bar */}
                               <div className="flex items-center gap-2 hidden sm:flex">
                                 <div className="w-16 bg-gray-200 rounded-full h-1.5 overflow-hidden">
                                   <div 
@@ -294,7 +282,6 @@ export function AskPolicy() {
                             </div>
                           </summary>
                           
-                          {/* The Hidden Snippet Content */}
                           {source.snippet && (
                             <div className="p-3 bg-[#F9FAFB] border-t border-[#E5E7EB] text-xs text-[#4B5563] leading-relaxed italic">
                               "{source.snippet}"
@@ -309,8 +296,8 @@ export function AskPolicy() {
                           disabled={message.feedback !== undefined}
                           className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors border 
                             ${message.feedback === 'helpful' 
-                              ? 'bg-green-100 text-[#10B981] border-green-200' // Clicked state (Solid Green)
-                              : 'text-[#6B7280] border-transparent hover:text-[#10B981] hover:bg-green-50 hover:border-green-100 disabled:opacity-50' // Default state
+                              ? 'bg-green-100 text-[#10B981] border-green-200' 
+                              : 'text-[#6B7280] border-transparent hover:text-[#10B981] hover:bg-green-50 hover:border-green-100 disabled:opacity-50' 
                             }`}
                         >
                           <ThumbsUp className={`h-3.5 w-3.5 ${message.feedback === 'helpful' ? 'fill-current' : ''}`} />
@@ -322,8 +309,8 @@ export function AskPolicy() {
                           disabled={message.feedback !== undefined}
                           className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors border 
                             ${message.feedback === 'not-helpful' 
-                              ? 'bg-red-100 text-[#EF4444] border-red-200' // Clicked state (Solid Red)
-                              : 'text-[#6B7280] border-transparent hover:text-[#EF4444] hover:bg-red-50 hover:border-red-100 disabled:opacity-50' // Default state
+                              ? 'bg-red-100 text-[#EF4444] border-red-200' 
+                              : 'text-[#6B7280] border-transparent hover:text-[#EF4444] hover:bg-red-50 hover:border-red-100 disabled:opacity-50' 
                             }`}
                         >
                           <ThumbsDown className={`h-3.5 w-3.5 ${message.feedback === 'not-helpful' ? 'fill-current' : ''}`} />
@@ -333,7 +320,7 @@ export function AskPolicy() {
                     </div>
                   )}
 
-                  {/* Smart Follow-Up Chips */}
+                  {/* REMOVED shadow-sm from follow-up chips */}
                   {message.followUps && message.followUps.length > 0 && (
                     <div className="mt-4 ml-2 flex flex-wrap gap-2">
                       {message.followUps.map((fq, idx) => (
@@ -341,7 +328,7 @@ export function AskPolicy() {
                           key={idx}
                           onClick={() => handleSendMessage(fq)}
                           disabled={isLoading}
-                          className="px-4 py-2 bg-white border border-[#E5E7EB] hover:border-[#1D6FA3] text-[#1D6FA3] hover:bg-[#F5F7FA] text-xs font-medium rounded-full transition-all shadow-sm disabled:opacity-50 text-left"
+                          className="px-4 py-2 bg-white border border-[#E5E7EB] hover:border-[#1D6FA3] text-[#1D6FA3] hover:bg-[#F5F7FA] text-xs font-medium rounded-full transition-all disabled:opacity-50 text-left"
                         >
                           {fq}
                         </button>
@@ -349,7 +336,6 @@ export function AskPolicy() {
                     </div>
                   )}
 
-                  {/* Existing Timestamp Code */}
                   <span className={`text-[11px] text-[#9CA3AF] mt-2 block ${message.type === "user" ? "text-right mr-1" : "ml-1"}`}>
                     {message.timestamp}
                   </span>
@@ -366,7 +352,8 @@ export function AskPolicy() {
                     </div>
                     <span className="text-sm font-semibold text-[#1F2937]">AI Assistant</span>
                   </div>
-                  <div className="rounded-2xl rounded-tl-sm px-5 py-4 bg-[#F9FAFB] border border-[#E5E7EB] flex items-center gap-3 shadow-sm">
+                  {/* REMOVED shadow-sm here */}
+                  <div className="rounded-2xl rounded-tl-sm px-5 py-4 bg-[#F9FAFB] border border-[#E5E7EB] flex items-center gap-3">
                     <Loader2 className="h-5 w-5 animate-spin text-[#1D6FA3]" />
                     <p className="text-[15px] text-[#6B7280]">Searching knowledge base...</p>
                   </div>
@@ -377,7 +364,8 @@ export function AskPolicy() {
           </div>
 
           <div className="shrink-0 border-t border-[#E5E7EB] p-4 sm:p-6 bg-white">
-            <div className="flex gap-3 items-end">
+            {/* FIXED ALIGNMENT: items-center ensures perfect horizontal alignment, h-[56px] sets a strict height for both */}
+            <div className="flex gap-3 items-center">
               <div className="flex-1 relative">
                 <textarea
                   value={query}
@@ -385,18 +373,20 @@ export function AskPolicy() {
                   onKeyPress={(e) => {
                     if (e.key === "Enter" && !e.shiftKey) {
                       e.preventDefault();
-                      handleSendMessage(); // Sends current typed query
+                      handleSendMessage();
                     }
                   }}
                   placeholder="Ask a question about policies, procedures, or guidelines..."
-                  className="w-full pl-5 pr-12 py-4 bg-[#F5F7FA] border border-[#E5E7EB] rounded-xl text-[15px] text-[#1F2937] placeholder-[#9CA3AF] focus:outline-none focus:ring-2 focus:ring-[#1D6FA3] focus:border-transparent resize-none shadow-inner"
-                  rows={2}
+                  // REMOVED shadow-inner, FIXED rows to 1, added strict h-[56px] and padding adjustments
+                  className="w-full pl-5 pr-12 py-[17px] bg-[#F5F7FA] border border-[#E5E7EB] rounded-xl text-[15px] text-[#1F2937] placeholder-[#9CA3AF] focus:outline-none focus:ring-2 focus:ring-[#1D6FA3] resize-none h-[56px]"
+                  rows={1}
                 />
               </div>
               <button
-                onClick={() => handleSendMessage()} // Sends current typed query
+                onClick={() => handleSendMessage()}
                 disabled={isLoading || !query.trim()}
-                className="px-6 py-4 bg-[#1D6FA3] text-white rounded-xl hover:bg-[#0B3C5D] disabled:opacity-50 transition-all flex items-center gap-2 font-medium h-[62px] shadow-sm active:scale-[0.98]"
+                // ADDED shrink-0 so the button doesn't get crushed, synced h-[56px] to match textarea perfectly
+                className="px-6 py-0 bg-[#1D6FA3] text-white rounded-xl hover:bg-[#0B3C5D] disabled:opacity-50 transition-all flex items-center justify-center gap-2 font-medium h-[56px] shrink-0 active:scale-[0.98]"
               >
                 <Send className="h-5 w-5" />
                 <span className="hidden sm:inline">Send</span>
