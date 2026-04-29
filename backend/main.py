@@ -553,21 +553,30 @@ def get_documents():
     
     seen = set()
     unique_docs = []
+    
     for item in response.data:
-        doc_name = item['metadata'].get('name')
-        if doc_name not in seen:
+        meta = item.get('metadata', {})
+        doc_name = meta.get('name')
+        doc_version = meta.get('version', '1.0') # Fallback if missing
+        
+        # --- THE FIX 1: Combine name AND version to make it unique ---
+        unique_key = f"{doc_name}_v{doc_version}"
+        
+        if unique_key not in seen:
             unique_docs.append({
                 "id": len(unique_docs) + 1,
                 "name": doc_name,
-                "category": item['metadata'].get('category'),
-                "office": item['metadata'].get('office'),
-                "version": item['metadata'].get('version'),
-                "effectivity_date": item['metadata'].get('effectivity_date', 'N/A'),
-                "file_url": item['metadata'].get('file_url') or item['metadata'].get('source')
+                "category": meta.get('category'),
+                "office": meta.get('office'),
+                "version": doc_version,
+                "effectivity_date": meta.get('effectivity_date', 'N/A'),
+                "file_url": meta.get('file_url') or meta.get('source'),
+                "status": meta.get('status', 'Active') # <--- THE FIX 2: Send status to React
             })
-            seen.add(doc_name)
+            seen.add(unique_key)
             
-    return unique_docs
+    # Sort them so the newest/highest versions appear at the top of the table
+    return sorted(unique_docs, key=lambda x: (x['name'], x['version']), reverse=True)
 
 @app.get("/analytics/recent")
 def get_recent_questions():
@@ -712,14 +721,29 @@ def update_document(request: UpdateDocumentRequest):
         raise HTTPException(status_code=500, detail="Failed to update document")
 
 @app.delete("/documents/{doc_name}")
-def delete_document(doc_name: str):
+def archive_document(doc_name: str):
     from vector_store import supabase
     try:
-        supabase.table("document_sections").delete().eq("metadata->>name", doc_name).execute()
-        return {"message": "Document archived and removed from AI knowledge base!"}
+        # 1. Fetch ALL chunks/vectors belonging to this specific document
+        chunks_res = supabase.table("document_sections").select("id, metadata").eq("metadata->>name", doc_name).execute()
+        
+        if not chunks_res.data:
+            raise HTTPException(status_code=404, detail="Document not found in the database.")
+
+        # 2. Loop through every chunk and update its status to "Archived"
+        # We do this instead of a hard delete to preserve the audit trail.
+        for chunk in chunks_res.data:
+            chunk_meta = chunk['metadata']
+            chunk_meta['status'] = "Archived" 
+            
+            # Save the modified metadata back to the database
+            supabase.table("document_sections").update({"metadata": chunk_meta}).eq("id", chunk['id']).execute()
+
+        return {"message": f"Document '{doc_name}' successfully archived and removed from active AI context!"}
+        
     except Exception as e:
-        print(f"Delete error: {e}")
-        raise HTTPException(status_code=500, detail="Failed to delete document")
+        print(f"Archive error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to archive document")
     
 @app.post("/upload-accreditation-evidence")
 async def upload_accreditation_evidence(
