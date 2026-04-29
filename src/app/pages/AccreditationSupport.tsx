@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Search, CheckCircle, AlertCircle, FileText, Download, Award, Target, Upload, ChevronDown, X, Loader2, ArrowLeft, Archive } from "lucide-react";
+import { Search, CheckCircle, AlertCircle, FileText, Award, Target, Upload, ChevronDown, X, Loader2, ArrowLeft, Archive, Eye, ShieldAlert } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "../components/ui/tabs";
 import axios from "axios";
 
@@ -8,18 +8,30 @@ export function AccreditationSupport() {
   const [searchQuery, setSearchQuery] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   
+  // --- TOAST NOTIFICATIONS ---
+  const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' } | null>(null);
+  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3000);
+  };
+
   // --- UPLOAD MODAL STATE ---
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [uploadTargetArea, setUploadTargetArea] = useState<any>(null);
   const [uploadForm, setUploadForm] = useState({ fileName: "" });
   const [isUploading, setIsUploading] = useState(false);
 
+  // --- DELETE MODAL STATE ---
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [docToDelete, setDocToDelete] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
   // --- REAL FILE UPLOAD STATE ---
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // --- NEW: DRILL-DOWN STATE ---
+  // --- DRILL-DOWN STATE ---
   const [expandedArea, setExpandedArea] = useState<any>(null);
   const [areaDetails, setAreaDetails] = useState({ requirements: [], uploadedFiles: [] });
   const [isLoadingDetails, setIsLoadingDetails] = useState(false);
@@ -33,38 +45,46 @@ export function AccreditationSupport() {
     areas: []
   });
 
-  const fetchAccreditationData = async () => {
-    setIsLoading(true);
+  // --- THE FIX: MASTER REFRESH FUNCTION ---
+  // This ensures both the Grid and the Drill-Down Header sync perfectly
+  const refreshData = async () => {
     try {
       const response = await axios.get(`http://localhost:8000/accreditation-status/${selectedProgram}`);
       setCurrentData(response.data);
+
+      if (expandedArea) {
+        const detailsRes = await axios.get(`http://localhost:8000/accreditation-details/${selectedProgram}/${expandedArea.code}`);
+        setAreaDetails(detailsRes.data);
+        
+        // Update the expandedArea object itself so the Header stats change immediately
+        const updatedArea = response.data.areas.find((a: any) => a.code === expandedArea.code);
+        if (updatedArea) setExpandedArea(updatedArea);
+      }
     } catch (error) {
-      console.error("Failed to fetch accreditation data:", error);
-    } finally {
-      setIsLoading(false);
+      console.error("Failed to refresh data", error);
     }
+  };
+
+  const fetchAccreditationData = async () => {
+    setIsLoading(true);
+    await refreshData();
+    setIsLoading(false);
   };
 
   useEffect(() => {
     fetchAccreditationData();
-    setExpandedArea(null); // Reset detail view if program changes
+    setExpandedArea(null);
   }, [selectedProgram]);
 
-  // --- NEW: FETCH SPECIFIC AREA DETAILS ---
   const handleViewDetails = async (area: any) => {
     setExpandedArea(area);
     setIsLoadingDetails(true);
     try {
-      // We will build this backend route next!
       const response = await axios.get(`http://localhost:8000/accreditation-details/${selectedProgram}/${area.code}`);
       setAreaDetails(response.data);
     } catch (error) {
       console.error("Failed to fetch area details:", error);
-      // Fallback placeholder data until we build the backend
-      setAreaDetails({
-        requirements: [{ id: 1, text: "Backend route pending...", is_met: false }],
-        uploadedFiles: []
-      });
+      showToast("Failed to load area details.", "error");
     } finally {
       setIsLoadingDetails(false);
     }
@@ -75,7 +95,6 @@ export function AccreditationSupport() {
     area.code.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  // --- DRAG AND DROP HANDLERS ---
   const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); setIsDragging(true); };
   const handleDragLeave = (e: React.DragEvent) => { e.preventDefault(); setIsDragging(false); };
   const handleDrop = (e: React.DragEvent) => {
@@ -91,11 +110,10 @@ export function AccreditationSupport() {
     }
   };
 
-  // --- UPLOAD HANDLER ---
   const handleUploadSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!uploadForm.fileName || !selectedFile) {
-      alert("Please provide a name and select a file.");
+      showToast("Please provide a name and select a file.", "error");
       return;
     }
     
@@ -111,20 +129,16 @@ export function AccreditationSupport() {
         headers: { "Content-Type": "multipart/form-data" }
       });
 
-      await fetchAccreditationData();
+      await refreshData();
       
-      // If we are inside a detail view, refresh that specific detail view too!
-      if (expandedArea) {
-        await handleViewDetails(expandedArea);
-      }
-
-      setShowUploadModal(false);
       setUploadForm({ fileName: "" });
       setSelectedFile(null); 
+      setShowUploadModal(false);
+      showToast("Evidence successfully uploaded and linked!", "success");
       
     } catch (error) {
       console.error("Upload failed:", error);
-      alert("Failed to save evidence. Is the backend running?");
+      showToast("Failed to save evidence.", "error");
     } finally {
       setIsUploading(false);
     }
@@ -136,31 +150,45 @@ export function AccreditationSupport() {
     setSelectedFile(null); 
   };
 
-  // --- ARCHIVE EVIDENCE HANDLER ---
-  const handleArchiveEvidence = async (documentName: string) => {
-    if (window.confirm(`Are you sure you want to remove "${documentName}" from this area?`)) {
-      try {
-        // Re-using the soft-delete route we made for the Knowledge Repository!
-        await axios.delete(`http://localhost:8000/documents/${encodeURIComponent(documentName)}`);
-        
-        // Refresh everything
-        await fetchAccreditationData();
-        if (expandedArea) {
-          await handleViewDetails(expandedArea);
-        }
-      } catch (error) {
-        console.error("Failed to archive:", error);
-        alert("Failed to archive document.");
-      }
+  const openDeleteModal = (docName: string) => {
+    setDocToDelete(docName);
+    setShowDeleteModal(true);
+  };
+
+  const executeDelete = async () => {
+    if (!docToDelete) return;
+    setIsDeleting(true);
+    try {
+      await axios.delete(`http://localhost:8000/documents/${encodeURIComponent(docToDelete)}`);
+      await refreshData();
+      setShowDeleteModal(false);
+      setDocToDelete(null);
+      showToast("Document archived successfully!", "success");
+    } catch (error) {
+      console.error("Failed to archive:", error);
+      showToast("Failed to archive document.", "error");
+    } finally {
+      setIsDeleting(false);
     }
   };
 
   if (isLoading && currentData.areas.length === 0) {
-    return <div className="flex justify-center items-center h-64 text-gray-500"><Loader2 className="h-8 w-8 animate-spin" /></div>;
+    return <div className="flex justify-center items-center h-64 text-gray-500"><Loader2 className="h-8 w-8 animate-spin text-[#1D6FA3]" /></div>;
   }
 
   return (
     <div className="space-y-6 relative">
+      
+      {/* --- TOAST NOTIFICATION --- */}
+      {toast && (
+        <div className={`fixed bottom-8 right-8 px-6 py-4 rounded-xl shadow-2xl flex items-center gap-3 text-sm font-bold z-[100] transition-all duration-300 animate-in slide-in-from-bottom-5 fade-in ${
+          toast.type === 'success' ? 'bg-[#E6F7ED] text-[#006837] border-2 border-[#006837]/20' : 'bg-red-50 text-red-700 border-2 border-red-200'
+        }`}>
+          {toast.type === 'success' ? <CheckCircle className="h-5 w-5" /> : <AlertCircle className="h-5 w-5" />}
+          {toast.message}
+        </div>
+      )}
+
       <div>
         <h1 className="text-3xl text-gray-900 mb-2">QA & Accreditation Support</h1>
         <p className="text-gray-600">Comprehensive quality assurance tracking across AACCUP, ISO, CHED monitoring, and accreditation results</p>
@@ -215,7 +243,6 @@ export function AccreditationSupport() {
             </div>
           </div>
 
-          {/* Conditional Rendering: If expandedArea is NULL, show Master Grid. Otherwise, show Detail View */}
           {!expandedArea ? (
             <>
               {/* Stats Row */}
@@ -306,7 +333,6 @@ export function AccreditationSupport() {
                             <span className="font-medium">{area.evidenceCount} / {area.required} Uploaded</span>
                           </div>
                           
-                          {/* NEW: Replaced the heavy button with a sleek, animated text indicator */}
                           <div className="flex items-center gap-1.5 text-sm font-bold text-[#1D6FA3] group-hover:text-[#0B3C5D]">
                             View Details 
                             <span className="transform transition-transform duration-300 group-hover:translate-x-1">→</span>
@@ -319,7 +345,6 @@ export function AccreditationSupport() {
               </div>
             </>
           ) : (
-            // --- NEW: THE DRILL DOWN DETAIL VIEW ---
             <div className="space-y-6 animate-in slide-in-from-right-4 fade-in duration-300">
               
               {/* Header Navigation */}
@@ -392,7 +417,7 @@ export function AccreditationSupport() {
                       <h3 className="font-bold text-gray-900">Uploaded Evidence</h3>
                       <button 
                         onClick={() => openUploadModal(expandedArea)}
-                        className="flex items-center gap-2 px-3 py-1.5 bg-[#1D6FA3] text-white rounded-lg hover:bg-[#0B3C5D] transition-all text-xs font-semibold cursor-pointer shadow-sm"
+                        className="flex items-center gap-2 px-3 py-1.5 bg-[#1D6FA3] text-white rounded-lg hover:bg-[#0B3C5D] transition-all text-xs font-semibold cursor-pointer shadow-sm active:scale-95"
                       >
                         <Upload className="h-3.5 w-3.5" />
                         Upload File
@@ -430,15 +455,17 @@ export function AccreditationSupport() {
                                   <td className="px-4 py-3 text-sm text-gray-500">{file.date}</td>
                                   <td className="px-4 py-3 text-center">
                                     <div className="flex items-center justify-center gap-2">
+                                      {/* UPDATED TO USE THE EYE ICON FOR VIEW */}
                                       <button 
                                         onClick={() => window.open(file.url, "_blank")}
                                         className="p-1.5 text-gray-400 hover:text-[#1D6FA3] transition-colors cursor-pointer" 
                                         title="View File"
                                       >
-                                        <Download className="h-4 w-4" />
+                                        <Eye className="h-4 w-4" />
                                       </button>
+                                      {/* WIRED TO THE NEW DELETE MODAL */}
                                       <button 
-                                        onClick={() => handleArchiveEvidence(file.name)}
+                                        onClick={() => openDeleteModal(file.name)}
                                         className="p-1.5 text-gray-400 hover:text-red-600 transition-colors cursor-pointer" 
                                         title="Remove Evidence"
                                       >
@@ -522,7 +549,6 @@ export function AccreditationSupport() {
                 />
               </div>
 
-              {/* REAL DRAG AND DROP ZONE */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">File Upload</label>
                 <div 
@@ -577,6 +603,45 @@ export function AccreditationSupport() {
           </div>
         </div>
       )}
+
+      {/* --- NEW DELETE MODAL --- */}
+      {showDeleteModal && docToDelete && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl overflow-hidden">
+            <div className="p-6 border-b border-red-100 bg-red-50 flex items-center gap-3">
+              <ShieldAlert className="h-6 w-6 text-red-600" />
+              <h2 className="text-xl font-bold text-red-700">Archive Evidence</h2>
+            </div>
+            
+            <div className="p-6 space-y-4">
+              <p className="text-sm text-gray-600 leading-relaxed">
+                Are you sure you want to remove <span className="font-bold text-gray-900">"{docToDelete}"</span> from this accreditation area?
+              </p>
+              <p className="text-sm text-gray-600 leading-relaxed">
+                This action will archive the file. It will no longer count towards your compliance progress, but it will remain in the database for auditing purposes.
+              </p>
+            </div>
+
+            <div className="p-6 border-t border-gray-100 bg-[#F9FAFB] flex justify-end gap-3">
+              <button 
+                onClick={() => setShowDeleteModal(false)} 
+                disabled={isDeleting}
+                className="px-5 py-2.5 text-sm font-bold text-gray-600 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={executeDelete} 
+                disabled={isDeleting}
+                className="px-5 py-2.5 text-sm font-bold text-white rounded-xl bg-red-600 hover:bg-red-700 transition-colors disabled:opacity-50 flex justify-center items-center gap-2 cursor-pointer"
+              >
+                {isDeleting ? <><Loader2 className="h-4 w-4 animate-spin"/> Archiving...</> : "Yes, Archive Evidence"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
