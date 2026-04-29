@@ -983,3 +983,39 @@ def get_accreditation_details(program: str, area_code: str):
     except Exception as e:
         print(f"Details error: {e}")
         raise HTTPException(status_code=500, detail="Failed to fetch details")
+
+@app.get("/audit/queries")
+def get_query_logs():
+    from vector_store import supabase
+    from datetime import datetime
+    try:
+        # Fetch only the questions (where role == 'user'), ordered by newest first.
+        # We limit to 100 to prevent the dashboard from lagging.
+        response = supabase.table("chat_history").select("*").eq("role", "user").order("created_at", desc=True).limit(100).execute()
+        
+        logs = []
+        if response.data:
+            for index, item in enumerate(response.data):
+                # Format the timestamp beautifully
+                raw_date = item.get("created_at", "")
+                formatted_date = "Unknown Date"
+                if raw_date:
+                    try:
+                        dt = datetime.fromisoformat(raw_date.replace("Z", "+00:00"))
+                        formatted_date = dt.strftime("%B %d, %Y - %I:%M %p")
+                    except:
+                        formatted_date = raw_date.split("T")[0]
+
+                logs.append({
+                    "id": item.get("id", index),
+                    "user": item.get("user_email", "Unknown User"),
+                    "role": item.get("user_role", "User"), 
+                    "query": item.get("content", ""),
+                    "timestamp": formatted_date,
+                    "status": "Answered"
+                })
+                
+        return logs
+    except Exception as e:
+        print(f"Audit log error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch query logs")
