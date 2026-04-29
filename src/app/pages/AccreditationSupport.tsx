@@ -18,7 +18,7 @@ export function AccreditationSupport() {
   // --- UPLOAD MODAL STATE ---
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [uploadTargetArea, setUploadTargetArea] = useState<any>(null);
-  const [uploadForm, setUploadForm] = useState({ fileName: "" });
+  const [uploadForm, setUploadForm] = useState({ fileName: "", requirementTarget: "" });
   const [isUploading, setIsUploading] = useState(false);
 
   // --- DELETE MODAL STATE ---
@@ -123,6 +123,7 @@ export function AccreditationSupport() {
     submitData.append("document_name", uploadForm.fileName);
     submitData.append("program", selectedProgram);
     submitData.append("area_code", uploadTargetArea.code);
+    submitData.append("requirement_target", uploadForm.requirementTarget);
 
     try {
       await axios.post("http://localhost:8000/upload-accreditation-evidence", submitData, {
@@ -447,9 +448,14 @@ export function AccreditationSupport() {
                               areaDetails.uploadedFiles.map((file: any, index: number) => (
                                 <tr key={index} className="hover:bg-gray-50 transition-colors">
                                   <td className="px-4 py-3">
-                                    <div className="flex items-center gap-2">
-                                      <FileText className="h-4 w-4 text-[#1D6FA3]" />
-                                      <span className="text-sm font-medium text-gray-900">{file.name}</span>
+                                    <div className="flex items-start gap-2">
+                                      <FileText className="h-4 w-4 text-[#1D6FA3] mt-0.5" />
+                                      <div>
+                                        <div className="text-sm font-medium text-gray-900">{file.name}</div>
+                                        <div className="text-xs text-gray-500 mt-0.5 max-w-[200px] truncate" title={file.target}>
+                                          Fulfills: {file.target}
+                                        </div>
+                                      </div>
                                     </div>
                                   </td>
                                   <td className="px-4 py-3 text-sm text-gray-500">{file.date}</td>
@@ -549,6 +555,22 @@ export function AccreditationSupport() {
                 />
               </div>
 
+              {/* NEW: The Requirement Target Dropdown */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Fulfills Requirement</label>
+                <select
+                  required
+                  value={uploadForm.requirementTarget}
+                  onChange={(e) => setUploadForm({...uploadForm, requirementTarget: e.target.value})}
+                  className="w-full px-4 py-3 bg-[#F5F7FA] border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1D6FA3] transition-all cursor-pointer"
+                >
+                  <option value="" disabled>Select the specific checklist requirement...</option>
+                  {areaDetails.requirements.map((req: any) => (
+                    <option key={req.id} value={req.text}>{req.text}</option>
+                  ))}
+                </select>
+              </div>
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">File Upload</label>
                 <div 
@@ -593,7 +615,7 @@ export function AccreditationSupport() {
                 </button>
                 <button
                   type="submit"
-                  disabled={!uploadForm.fileName || !selectedFile || isUploading}
+                  disabled={!uploadForm.fileName || !uploadForm.requirementTarget || !selectedFile || isUploading}
                   className="flex-1 px-5 py-3 text-sm font-semibold bg-[#006837] text-white rounded-xl hover:bg-[#00542c] disabled:opacity-50 transition-colors flex justify-center items-center gap-2 cursor-pointer active:scale-[0.98]"
                 >
                   {isUploading ? <><Loader2 className="h-4 w-4 animate-spin"/> Processing...</> : "Upload & Verify"}

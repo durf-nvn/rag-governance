@@ -778,12 +778,14 @@ def archive_document(doc_name: str):
         print(f"Archive error: {e}")
         raise HTTPException(status_code=500, detail="Failed to archive document")
     
+# 1. THE UPLOAD ROUTE
 @app.post("/upload-accreditation-evidence")
 async def upload_accreditation_evidence(
     file: UploadFile = File(...),
     document_name: str = Form(...),
-    program: str = Form(...),   # <--- NEW: Catch the Program
-    area_code: str = Form(...)  # <--- NEW: Catch the Area Code
+    program: str = Form(...),
+    area_code: str = Form(...),
+    requirement_target: str = Form(...) # <--- NEW: Catch the exact requirement
 ):
     import time, io, PyPDF2
     from vector_store import supabase, add_to_vector_db
@@ -794,7 +796,6 @@ async def upload_accreditation_evidence(
         extracted_text = ""
         filename_lower = file.filename.lower()
         
-        # Support multiple file types
         if filename_lower.endswith(".pdf"):
             pdf_reader = PyPDF2.PdfReader(io.BytesIO(contents))
             for page in pdf_reader.pages:
@@ -812,7 +813,6 @@ async def upload_accreditation_evidence(
         if not extracted_text.strip():
             raise HTTPException(status_code=400, detail="Could not extract text.")
 
-        # Upload to Storage
         safe_filename = file.filename.replace(" ", "_")
         unique_filename = f"evid_{int(time.time())}_{safe_filename}"
         
@@ -821,47 +821,46 @@ async def upload_accreditation_evidence(
         )
         public_url = supabase.storage.from_("documents").get_public_url(unique_filename)
 
-        # --- THE CRITICAL FIX: Tagging the Area & Program ---
         metadata = {
             "name": document_name,
             "category": "Accreditation Evidence",
             "office": "Quality Assurance",
             "version": "1.0",
             "status": "Active",
-            "program": program,       # Added to DB!
-            "area_code": area_code,   # Added to DB!
+            "program": program,
+            "area_code": area_code,
+            "requirement_target": requirement_target, # <--- NEW: Save it to database!
             "upload_date": datetime.now().isoformat(),
             "file_url": public_url
         }
 
         add_to_vector_db(extracted_text, metadata)
-        return {"message": "Evidence successfully uploaded and linked to area!"}
+        return {"message": "Evidence successfully uploaded and linked to specific requirement!"}
 
     except Exception as e:
         print(f"Evidence upload error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+# 2. THE STATUS ROUTE
 @app.get("/accreditation-status/{program}")
 def get_accreditation_status(program: str):
     from vector_store import supabase
-    
     try:
-        # 1. Get ALL active evidence specifically for this program
         res = supabase.table("document_sections").select("metadata").eq("metadata->>category", "Accreditation Evidence").eq("metadata->>program", program).eq("metadata->>status", "Active").execute()
         
-        # Group unique uploaded documents by Area Code
-        uploaded_files = {}
+        # Group unique fulfilled requirements by Area Code
+        fulfilled_reqs = {}
         if res.data:
             for item in res.data:
                 meta = item.get('metadata', {})
                 area = meta.get('area_code')
-                name = meta.get('name')
-                if area and name:
-                    if area not in uploaded_files:
-                        uploaded_files[area] = set()
-                    uploaded_files[area].add(name)
+                req_target = meta.get('requirement_target') # <--- Look for the explicit target
+                
+                if area and req_target:
+                    if area not in fulfilled_reqs:
+                        fulfilled_reqs[area] = set()
+                    fulfilled_reqs[area].add(req_target) # Add the unique requirement
 
-        # 2. Master Templates for all 10 Areas
         AREA_TEMPLATES = {
             "Area I": ["Approved Board Resolution of VMGO", "Dissemination Evidence (Photos, Memos)", "Stakeholder Awareness Survey Rating"],
             "Area II": ["Faculty Manual", "201 Files / Credentials of Faculty", "Faculty Development Plan", "Summary of Faculty Workload and Loading"],
@@ -883,15 +882,15 @@ def get_accreditation_status(program: str):
             "Area IX": "Laboratories", "Area X": "Administration"
         }
         
-        # 3. Calculate Math for all 10 areas dynamically
         areas_list = []
         total_req = 0
         total_ev = 0
         
         for code, reqs in AREA_TEMPLATES.items():
             required_count = len(reqs)
-            ev_count = len(uploaded_files.get(code, set()))
-            capped_ev = min(ev_count, required_count) # Cap it so compliance doesn't exceed 100%
+            # Count how many unique requirements were actually met
+            ev_count = len(fulfilled_reqs.get(code, set())) 
+            capped_ev = min(ev_count, required_count)
             
             total_req += required_count
             total_ev += capped_ev
@@ -913,41 +912,44 @@ def get_accreditation_status(program: str):
             "level": "Level III" if program == "BSIT" else "Level II",
             "overall": overall,
             "gaps": total_req - total_ev,
-            "evidence": sum(len(v) for v in uploaded_files.values()),
+            "evidence": total_ev,
             "areas": areas_list
         }
     except Exception as e:
-        print(f"Status fetch error: {e}")
+        print(f"Status error: {e}")
         raise HTTPException(status_code=500, detail="Failed to calculate status")
-    
+
+# 3. THE DETAILS ROUTE
 @app.get("/accreditation-details/{program}/{area_code}")
 def get_accreditation_details(program: str, area_code: str):
     from vector_store import supabase
-    
     try:
-        # 1. Fetch uploaded files for this specific program and area
         response = supabase.table("document_sections").select("metadata").eq("metadata->>category", "Accreditation Evidence").eq("metadata->>program", program).eq("metadata->>area_code", area_code).execute()
         
         unique_docs = {}
+        fulfilled_targets = set() # Track exactly which requirements have files
+        
         if response.data:
             for item in response.data:
                 meta = item.get('metadata', {})
-                
-                # Protect the AI and UI by ignoring archived files
-                if meta.get('status') == "Archived":
-                    continue
+                if meta.get('status') == "Archived": continue
                 
                 doc_name = meta.get('name')
+                req_target = meta.get('requirement_target') # Get the tag
+                
+                if req_target:
+                    fulfilled_targets.add(req_target) # Add to fulfilled list
+                
                 if doc_name and doc_name not in unique_docs:
                     unique_docs[doc_name] = {
                         "name": doc_name,
                         "date": meta.get('upload_date', '').split('T')[0] if 'upload_date' in meta else 'Recently',
-                        "url": meta.get('file_url') or meta.get('source', '#')
+                        "url": meta.get('file_url') or meta.get('source', '#'),
+                        "target": req_target or "Uncategorized" # Show in UI table
                     }
                     
         uploaded_files = list(unique_docs.values())
         
-        # 2. Hardcoded Phase 1 Templates (You can move this to a DB table in Phase 2)
         AREA_TEMPLATES = {
             "Area I": ["Approved Board Resolution of VMGO", "Dissemination Evidence (Photos, Memos)", "Stakeholder Awareness Survey Rating"],
             "Area II": ["Faculty Manual", "201 Files / Credentials of Faculty", "Faculty Development Plan", "Summary of Faculty Workload and Loading"],
@@ -961,15 +963,12 @@ def get_accreditation_details(program: str, area_code: str):
             "Area X": ["Organizational Chart", "Strategic Plan", "Financial Audit Reports"]
         }
         
-        # Fallback to a generic checklist if area_code isn't exactly matched
-        template_reqs = AREA_TEMPLATES.get(area_code, ["Compliance Report", "Supporting Exhibits", "Summary of Activities"])
+        template_reqs = AREA_TEMPLATES.get(area_code, [])
         
-        # 3. Smart Matching: Map uploaded files to requirements
         requirements = []
         for index, req_text in enumerate(template_reqs):
-            # For this MVP demo: We consider a requirement "met" if the QA officer 
-            # has uploaded enough files to cover the checklist count.
-            is_met = index < len(uploaded_files)
+            # THE FIX: Is the exact text inside the fulfilled targets set?
+            is_met = req_text in fulfilled_targets 
             
             requirements.append({
                 "id": index + 1,
@@ -981,7 +980,6 @@ def get_accreditation_details(program: str, area_code: str):
             "requirements": requirements,
             "uploadedFiles": sorted(uploaded_files, key=lambda x: x['date'], reverse=True)
         }
-
     except Exception as e:
-        print(f"Details fetch error: {e}")
-        raise HTTPException(status_code=500, detail="Failed to fetch area details")
+        print(f"Details error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch details")
