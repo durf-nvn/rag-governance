@@ -173,6 +173,23 @@ export function AccreditationSupport() {
     }
   };
 
+  const handleViewDocument = (file: any) => {
+    // 1. Get the current user info from localStorage
+    const userEmail = localStorage.getItem('userEmail') || 'Unknown';
+    const userRole = localStorage.getItem('userRole') || 'STUDENT';
+
+    // 2. Send the log silently in the background
+    axios.post("http://localhost:8000/audit/access", {
+      document_name: file.name,   // Matches your 'file' object
+      action_type: "View",
+      user_email: userEmail,
+      user_role: userRole
+    }).catch(err => console.error("Silently failed to log access"));
+
+    // 3. Actually open the file in a new tab
+    window.open(file.url, "_blank");
+  };
+
   if (isLoading && currentData.areas.length === 0) {
     return <div className="flex justify-center items-center h-64 text-gray-500"><Loader2 className="h-8 w-8 animate-spin text-[#1D6FA3]" /></div>;
   }
@@ -463,7 +480,7 @@ export function AccreditationSupport() {
                                     <div className="flex items-center justify-center gap-2">
                                       {/* UPDATED TO USE THE EYE ICON FOR VIEW */}
                                       <button 
-                                        onClick={() => window.open(file.url, "_blank")}
+                                        onClick={() => handleViewDocument(file)}
                                         className="p-1.5 text-gray-400 hover:text-[#1D6FA3] transition-colors cursor-pointer" 
                                         title="View File"
                                       >
