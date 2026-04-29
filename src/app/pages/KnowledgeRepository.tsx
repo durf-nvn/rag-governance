@@ -105,7 +105,18 @@ export function KnowledgeRepository() {
 
   const handleView = (doc: any) => {
     if (doc.file_url) {
-      window.open(doc.file_url, "_blank");
+      // Get the current user info from localStorage
+      const userEmail = localStorage.getItem('userEmail') || 'Unknown';
+      const userRole = localStorage.getItem('userRole') || 'STUDENT';
+
+      // Send the log silently in the background
+      axios.post("http://localhost:8000/audit/access", {
+        document_name: doc.name,   // or whatever the document name variable is
+        action_type: "View",       // change to "Download" for the download button
+        user_email: userEmail,
+        user_role: userRole
+      }).catch(err => console.error("Silently failed to log access"));
+          window.open(doc.file_url, "_blank");
     } else {
       showToast("Document link not found!", "error");
     }
@@ -117,6 +128,18 @@ export function KnowledgeRepository() {
       return;
     }
     try {
+      // Get the current user info from localStorage
+      const userEmail = localStorage.getItem('userEmail') || 'Unknown';
+      const userRole = localStorage.getItem('userRole') || 'STUDENT';
+
+      // Send the log silently in the background
+      axios.post("http://localhost:8000/audit/access", {
+        document_name: doc.name,   // or whatever the document name variable is
+        action_type: "View",       // change to "Download" for the download button
+        user_email: userEmail,
+        user_role: userRole
+      }).catch(err => console.error("Silently failed to log access"));
+
       const response = await fetch(doc.file_url);
       if (!response.ok) throw new Error("Network response was not ok");
       const blob = await response.blob();

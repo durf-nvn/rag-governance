@@ -70,6 +70,12 @@ class UserCreateRequest(BaseModel):
     password: str
 # ------------------------------------------
 
+class AccessLogRequest(BaseModel):
+    document_name: str
+    action_type: str
+    user_email: str
+    user_role: str
+
 models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
@@ -1019,3 +1025,53 @@ def get_query_logs():
     except Exception as e:
         print(f"Audit log error: {e}")
         raise HTTPException(status_code=500, detail="Failed to fetch query logs")
+    
+# 1. The Route to SAVE the log (Triggered when someone clicks View/Download)
+@app.post("/audit/access")
+def log_document_access(log: AccessLogRequest):
+    from vector_store import supabase
+    try:
+        supabase.table("document_access_logs").insert({
+            "document_name": log.document_name,
+            "action_type": log.action_type,
+            "user_email": log.user_email,
+            "user_role": log.user_role
+        }).execute()
+        return {"message": "Access successfully logged"}
+    except Exception as e:
+        print(f"Failed to log access: {e}")
+        return {"message": "Silent failure - do not disrupt user experience"}
+
+# 2. The Route to FETCH the logs (Triggered by the Audit Trail Dashboard)
+@app.get("/audit/access")
+def get_access_logs():
+    from vector_store import supabase
+    from datetime import datetime
+    try:
+        response = supabase.table("document_access_logs").select("*").order("accessed_at", desc=True).limit(100).execute()
+        
+        logs = []
+        if response.data:
+            for item in response.data:
+                # Format the timestamp beautifully
+                raw_date = item.get("accessed_at", "")
+                formatted_date = "Unknown Date"
+                if raw_date:
+                    try:
+                        dt = datetime.fromisoformat(raw_date.replace("Z", "+00:00"))
+                        formatted_date = dt.strftime("%B %d, %Y - %I:%M %p")
+                    except:
+                        formatted_date = raw_date.split("T")[0]
+
+                logs.append({
+                    "id": item.get("id"),
+                    "user": item.get("user_email", "Unknown"),
+                    "role": item.get("user_role", "User"),
+                    "document": item.get("document_name", "Unknown Document"),
+                    "action": item.get("action_type", "Accessed"),
+                    "timestamp": formatted_date
+                })
+        return logs
+    except Exception as e:
+        print(f"Access log fetch error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch access logs")
