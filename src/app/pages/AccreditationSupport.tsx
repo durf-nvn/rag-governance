@@ -261,7 +261,11 @@ export function AccreditationSupport() {
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                     {filteredAreas.map((area: any) => (
-                      <div key={area.id} className="border border-gray-200 rounded-xl p-5 hover:border-[#D4AF37] hover:shadow-md transition-all flex flex-col justify-between bg-white group">
+                      <div 
+                        key={area.id} 
+                        onClick={() => handleViewDetails(area)}
+                        className="border border-gray-200 rounded-xl p-5 hover:border-[#1D6FA3] hover:shadow-lg transition-all duration-200 flex flex-col justify-between bg-white group cursor-pointer active:scale-[0.99]"
+                      >
                         <div>
                           <div className="flex items-start justify-between mb-4">
                             <div className="pr-4">
@@ -302,13 +306,11 @@ export function AccreditationSupport() {
                             <span className="font-medium">{area.evidenceCount} / {area.required} Uploaded</span>
                           </div>
                           
-                          {/* CHANGED TO VIEW DETAILS */}
-                          <button 
-                            onClick={() => handleViewDetails(area)}
-                            className="flex items-center gap-2 px-4 py-2 bg-gray-50 text-gray-700 border border-gray-200 rounded-lg hover:bg-[#1D6FA3] hover:text-white hover:border-[#1D6FA3] transition-all text-sm font-semibold cursor-pointer"
-                          >
-                            View Details
-                          </button>
+                          {/* NEW: Replaced the heavy button with a sleek, animated text indicator */}
+                          <div className="flex items-center gap-1.5 text-sm font-bold text-[#1D6FA3] group-hover:text-[#0B3C5D]">
+                            View Details 
+                            <span className="transform transition-transform duration-300 group-hover:translate-x-1">→</span>
+                          </div>
                         </div>
                       </div>
                     ))}
