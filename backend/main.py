@@ -782,158 +782,206 @@ def archive_document(doc_name: str):
 async def upload_accreditation_evidence(
     file: UploadFile = File(...),
     document_name: str = Form(...),
-    program: str = Form(...),
-    area_code: str = Form(...)
+    program: str = Form(...),   # <--- NEW: Catch the Program
+    area_code: str = Form(...)  # <--- NEW: Catch the Area Code
 ):
-    import time
-    from vector_store import supabase
+    import time, io, PyPDF2
+    from vector_store import supabase, add_to_vector_db
     from datetime import datetime
 
-    contents = await file.read()
-    extracted_text = ""
-    
     try:
-        # 1. Extract text based on file type
+        contents = await file.read()
+        extracted_text = ""
         filename_lower = file.filename.lower()
         
+        # Support multiple file types
         if filename_lower.endswith(".pdf"):
-            # PDF Extraction
             pdf_reader = PyPDF2.PdfReader(io.BytesIO(contents))
             for page in pdf_reader.pages:
                 text = page.extract_text()
-                if text:
-                    extracted_text += text + "\n"
-                    
+                if text: extracted_text += text + "\n"
         elif filename_lower.endswith(".txt"):
-            # TXT Extraction (Super easy, just decode it)
             extracted_text = contents.decode("utf-8")
-            
         elif filename_lower.endswith(".docx"):
-            # DOCX Extraction
             import docx
             doc = docx.Document(io.BytesIO(contents))
             extracted_text = "\n".join([paragraph.text for paragraph in doc.paragraphs])
-            
         else:
-            raise HTTPException(status_code=400, detail="Unsupported file format. Please upload PDF, DOCX, or TXT.")
+            raise HTTPException(status_code=400, detail="Unsupported file format.")
 
         if not extracted_text.strip():
-            raise HTTPException(status_code=400, detail="Could not extract text from the document. It might be empty or an image-based file.")
+            raise HTTPException(status_code=400, detail="Could not extract text.")
 
-        # 2. Upload the physical file to Supabase Storage
+        # Upload to Storage
         safe_filename = file.filename.replace(" ", "_")
-        unique_filename = f"accreditation_{int(time.time())}_{safe_filename}"
+        unique_filename = f"evid_{int(time.time())}_{safe_filename}"
         
         supabase.storage.from_("documents").upload(
-            file=contents,
-            path=unique_filename,
-            file_options={"content-type": "application/pdf"}
+            file=contents, path=unique_filename, file_options={"content-type": file.content_type}
         )
-        
         public_url = supabase.storage.from_("documents").get_public_url(unique_filename)
 
-        # 3. Save the vectors and metadata to the database
+        # --- THE CRITICAL FIX: Tagging the Area & Program ---
         metadata = {
             "name": document_name,
             "category": "Accreditation Evidence",
-            "program": program,
-            "area": area_code,
-            "office": "Quality Assurance", # Default for accreditation
+            "office": "Quality Assurance",
             "version": "1.0",
-            "effectivity_date": "N/A",
+            "status": "Active",
+            "program": program,       # Added to DB!
+            "area_code": area_code,   # Added to DB!
             "upload_date": datetime.now().isoformat(),
             "file_url": public_url
         }
 
-        # Vector chunking for AI
-        vector_store.add_to_vector_db(extracted_text, metadata)
-
-        return {"message": "Evidence securely uploaded, chunked, and logged!"}
+        add_to_vector_db(extracted_text, metadata)
+        return {"message": "Evidence successfully uploaded and linked to area!"}
 
     except Exception as e:
-        print(f"Accreditation upload error: {e}")
-        raise HTTPException(status_code=500, detail="Failed to save evidence")
+        print(f"Evidence upload error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/accreditation-status/{program}")
 def get_accreditation_status(program: str):
     from vector_store import supabase
     
     try:
-        # 1. Fetch the requirements template for this program
-        templates_res = supabase.table("accreditation_templates").select("*").eq("program", program).execute()
-        templates = templates_res.data or []
-
-        # 2. Fetch the actually uploaded evidence for this program
-        evidence_res = supabase.table("document_sections") \
-            .select("metadata") \
-            .eq("metadata->>category", "Accreditation Evidence") \
-            .eq("metadata->>program", program) \
-            .execute()
+        # 1. Get ALL active evidence specifically for this program
+        res = supabase.table("document_sections").select("metadata").eq("metadata->>category", "Accreditation Evidence").eq("metadata->>program", program).eq("metadata->>status", "Active").execute()
         
-        raw_metadata_list = [doc['metadata'] for doc in evidence_res.data] if evidence_res.data else []
+        # Group unique uploaded documents by Area Code
+        uploaded_files = {}
+        if res.data:
+            for item in res.data:
+                meta = item.get('metadata', {})
+                area = meta.get('area_code')
+                name = meta.get('name')
+                if area and name:
+                    if area not in uploaded_files:
+                        uploaded_files[area] = set()
+                    uploaded_files[area].add(name)
 
-        # --- THE FIX: FILTER OUT DUPLICATE CHUNKS ---
-        # Group by document name so a 20-chunk PDF only counts as 1 document
-        unique_docs = {}
-        for meta in raw_metadata_list:
-            doc_name = meta.get("name")
-            if doc_name and doc_name not in unique_docs:
-                unique_docs[doc_name] = meta
-        # --------------------------------------------
-
-        # 3. Calculate math per area
-        area_dict = {}
-        for t in templates:
-            area = t['area']
-            if area not in area_dict:
-                area_dict[area] = {
-                    "id": area, "code": area, "title": f"{area} Requirements", 
-                    "required": 0, "evidenceCount": 0, "gaps": 0, "compliance": 0, "status": "needs-improvement"
-                }
-            area_dict[area]["required"] += 1
-
-        # Count unique evidence matches
-        for doc_name, meta in unique_docs.items():
-            area = meta.get("area")
-            if area in area_dict:
-                area_dict[area]["evidenceCount"] += 1
-
-        # 4. Finalize the percentages
-        total_required = 0
-        total_evidence = 0
+        # 2. Master Templates for all 10 Areas
+        AREA_TEMPLATES = {
+            "Area I": ["Approved Board Resolution of VMGO", "Dissemination Evidence (Photos, Memos)", "Stakeholder Awareness Survey Rating"],
+            "Area II": ["Faculty Manual", "201 Files / Credentials of Faculty", "Faculty Development Plan", "Summary of Faculty Workload and Loading"],
+            "Area III": ["CMO / Syllabi for all subjects", "Curriculum Map", "Sample Exams and Rubrics"],
+            "Area IV": ["Student Handbook", "Guidance and Counseling Reports", "Student Organization Activities"],
+            "Area V": ["Institutional Research Agenda", "Published Research Papers", "Research Incentives Memo"],
+            "Area VI": ["Extension Program Plan", "MOA/MOU with Partner Communities", "Impact Assessment Report"],
+            "Area VII": ["Library Manual", "Inventory of Books and Journals", "Library Utilization Reports"],
+            "Area VIII": ["Campus Development Plan", "Building Permits and Fire Safety Certs", "Maintenance Logs"],
+            "Area IX": ["Laboratory Manuals", "Inventory of Equipment", "Safety and Hazard Protocols"],
+            "Area X": ["Organizational Chart", "Strategic Plan", "Financial Audit Reports"]
+        }
+        
+        AREA_TITLES = {
+            "Area I": "Vision, Mission, Goals and Objectives", "Area II": "Faculty",
+            "Area III": "Curriculum and Instruction", "Area IV": "Support to Students",
+            "Area V": "Research", "Area VI": "Extension and Community Involvement",
+            "Area VII": "Library", "Area VIII": "Physical Plant and Facilities",
+            "Area IX": "Laboratories", "Area X": "Administration"
+        }
+        
+        # 3. Calculate Math for all 10 areas dynamically
         areas_list = []
+        total_req = 0
+        total_ev = 0
         
-        for area_name, data in area_dict.items():
-            # Cap evidence for math purposes (so 2 uploads for 1 requirement doesn't make it 200%)
-            capped_evidence = min(data["evidenceCount"], data["required"])
-            data["gaps"] = data["required"] - capped_evidence
-            data["compliance"] = int((capped_evidence / data["required"]) * 100) if data["required"] > 0 else 0
-            data["status"] = "compliant" if data["compliance"] == 100 else "needs-improvement"
+        for code, reqs in AREA_TEMPLATES.items():
+            required_count = len(reqs)
+            ev_count = len(uploaded_files.get(code, set()))
+            capped_ev = min(ev_count, required_count) # Cap it so compliance doesn't exceed 100%
             
-            total_required += data["required"]
-            total_evidence += capped_evidence
-            areas_list.append(data)
+            total_req += required_count
+            total_ev += capped_ev
+            comp = int((capped_ev / required_count) * 100) if required_count > 0 else 0
             
-        overall_compliance = int((total_evidence / total_required) * 100) if total_required > 0 else 0
-        overall_gaps = total_required - total_evidence
-
-        # Format recent evidence using ONLY the unique documents
-        unique_docs_list = list(unique_docs.values())
-        recent = sorted(unique_docs_list, key=lambda x: x.get('upload_date', ''), reverse=True)[:5]
-        recent_formatted = [{
-            "name": d.get("name", "Unknown Document"),
-            "date": d.get("upload_date", "").split("T")[0] if "upload_date" in d else "Recently",
-            "area": d.get("area", "General")
-        } for d in recent]
-
+            areas_list.append({
+                "id": code.replace(" ", ""),
+                "code": code,
+                "title": AREA_TITLES.get(code, "General Area"),
+                "compliance": comp,
+                "required": required_count,
+                "evidenceCount": ev_count,
+                "gaps": max(0, required_count - ev_count)
+            })
+            
+        overall = int((total_ev / total_req) * 100) if total_req > 0 else 0
+        
         return {
             "level": "Level III" if program == "BSIT" else "Level II",
-            "overall": overall_compliance,
-            "gaps": overall_gaps,
-            "evidence": len(unique_docs_list),
-            "areas": sorted(areas_list, key=lambda x: x['code']),
-            "recentEvidence": recent_formatted
+            "overall": overall,
+            "gaps": total_req - total_ev,
+            "evidence": sum(len(v) for v in uploaded_files.values()),
+            "areas": areas_list
         }
     except Exception as e:
-        print(f"Fetch error: {e}")
-        raise HTTPException(status_code=500, detail="Failed to fetch accreditation status")
+        print(f"Status fetch error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to calculate status")
+    
+@app.get("/accreditation-details/{program}/{area_code}")
+def get_accreditation_details(program: str, area_code: str):
+    from vector_store import supabase
+    
+    try:
+        # 1. Fetch uploaded files for this specific program and area
+        response = supabase.table("document_sections").select("metadata").eq("metadata->>category", "Accreditation Evidence").eq("metadata->>program", program).eq("metadata->>area_code", area_code).execute()
+        
+        unique_docs = {}
+        if response.data:
+            for item in response.data:
+                meta = item.get('metadata', {})
+                
+                # Protect the AI and UI by ignoring archived files
+                if meta.get('status') == "Archived":
+                    continue
+                
+                doc_name = meta.get('name')
+                if doc_name and doc_name not in unique_docs:
+                    unique_docs[doc_name] = {
+                        "name": doc_name,
+                        "date": meta.get('upload_date', '').split('T')[0] if 'upload_date' in meta else 'Recently',
+                        "url": meta.get('file_url') or meta.get('source', '#')
+                    }
+                    
+        uploaded_files = list(unique_docs.values())
+        
+        # 2. Hardcoded Phase 1 Templates (You can move this to a DB table in Phase 2)
+        AREA_TEMPLATES = {
+            "Area I": ["Approved Board Resolution of VMGO", "Dissemination Evidence (Photos, Memos)", "Stakeholder Awareness Survey Rating"],
+            "Area II": ["Faculty Manual", "201 Files / Credentials of Faculty", "Faculty Development Plan", "Summary of Faculty Workload and Loading"],
+            "Area III": ["CMO / Syllabi for all subjects", "Curriculum Map", "Sample Exams and Rubrics"],
+            "Area IV": ["Student Handbook", "Guidance and Counseling Reports", "Student Organization Activities"],
+            "Area V": ["Institutional Research Agenda", "Published Research Papers", "Research Incentives Memo"],
+            "Area VI": ["Extension Program Plan", "MOA/MOU with Partner Communities", "Impact Assessment Report"],
+            "Area VII": ["Library Manual", "Inventory of Books and Journals", "Library Utilization Reports"],
+            "Area VIII": ["Campus Development Plan", "Building Permits and Fire Safety Certs", "Maintenance Logs"],
+            "Area IX": ["Laboratory Manuals", "Inventory of Equipment", "Safety and Hazard Protocols"],
+            "Area X": ["Organizational Chart", "Strategic Plan", "Financial Audit Reports"]
+        }
+        
+        # Fallback to a generic checklist if area_code isn't exactly matched
+        template_reqs = AREA_TEMPLATES.get(area_code, ["Compliance Report", "Supporting Exhibits", "Summary of Activities"])
+        
+        # 3. Smart Matching: Map uploaded files to requirements
+        requirements = []
+        for index, req_text in enumerate(template_reqs):
+            # For this MVP demo: We consider a requirement "met" if the QA officer 
+            # has uploaded enough files to cover the checklist count.
+            is_met = index < len(uploaded_files)
+            
+            requirements.append({
+                "id": index + 1,
+                "text": req_text,
+                "is_met": is_met
+            })
+            
+        return {
+            "requirements": requirements,
+            "uploadedFiles": sorted(uploaded_files, key=lambda x: x['date'], reverse=True)
+        }
+
+    except Exception as e:
+        print(f"Details fetch error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch area details")
