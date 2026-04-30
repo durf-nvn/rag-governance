@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Search, Filter, Download, Loader2, MessageSquare, Clock, ShieldAlert, FileText, History } from "lucide-react";
+import { Search, Download, Loader2, MessageSquare, FileText, History, X } from "lucide-react";
 import axios from "axios";
 
 type TabType = "queries" | "access" | "versions" | "system";
@@ -126,18 +126,26 @@ export function AuditTrail() {
               </button>
             </div>
             
-            <div className="flex gap-3">
-              <div className="relative flex-1 md:w-64">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <div className="relative flex-1 md:w-64">
+                <Search className="absolute left-3 top-1/3 transform -translate-y-1/3 h-4 w-4 text-gray-400 pointer-events-none" />
                 <input 
                   type="text" 
                   placeholder="Search logs..." 
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-9 pr-4 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1D6FA3]" 
+                  className="w-full pl-9 pr-10 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1D6FA3] transition-colors" 
                 />
+                {/* NEW: The Conditional Clear Button */}
+                {searchQuery && (
+                  <button
+                    onClick={() => setSearchQuery("")}
+                    className="absolute right-3 top-1/3 transform -translate-y-1/3 p-0.5 text-gray-400 hover:text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-full transition-all cursor-pointer"
+                    title="Clear search"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
               </div>
-            </div>
           </div>
         </div>
 
