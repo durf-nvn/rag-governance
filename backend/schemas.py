@@ -34,3 +34,4 @@ class Token(BaseModel):
     full_name: str  # NEW
     email: str      # NEW
     role: str       # NEW
+    department: str or "BSIT"

@@ -81,6 +81,7 @@ export function LoginPage() {
       localStorage.setItem('userName', response.data.full_name);
       localStorage.setItem('userEmail', response.data.email);
       localStorage.setItem('userRole', response.data.role);
+      localStorage.setItem('userDepartment', response.data.department);
       
       setUserRole(response.data.role);
       navigate("/app");

@@ -70,31 +70,36 @@ export function SignUpPage() {
     }
   };
 
-  const courses = [
-    "Bachelor of Elementary Education",
-    "Bachelor of Secondary Education major in Mathematics",
-    "Bachelor of Secondary Education major in English",
-    "Bachelor of Technology and Livelihood Education major in Home Economics",
-    "Bachelor of Arts in English Language Studies",
-    "Bachelor of Arts in Literature",
-    "Bachelor of Arts in Psychology",
-    "Bachelor of Science in Industrial Engineering",
-    "Bachelor of Science in Information Technology",
-    "Bachelor in Industrial Technology major in Automotive Technology",
-    "Bachelor in Industrial Technology major in Computer Technology",
-    "Bachelor in Industrial Technology major in Drafting Technology",
-    "Bachelor in Industrial Technology major in Electronics Technology",
-    "Bachelor in Industrial Technology major in Garments Technology"
-  ];
-
-  const departments = [
-    "BS Information Technology (BSIT)",
-    "BS Education (BSEd)",
-    "BS Hospitality Management (BSHM)",
-    "BS Industrial Technology (BSInT)",
-    "General Education (GenEd)",
-    "College of Arts and Sciences (CAS)",
-    "Others"
+  const academicPrograms = [
+    {
+      college: "College of Education (COEd)",
+      programs: [
+        { value: "BEED", label: "Bachelor of Elementary Education" },
+        { value: "BSED_MATH", label: "BSEd major in Mathematics" },
+        { value: "BSED_ENGLISH", label: "BSEd major in English" },
+        { value: "BTLED_HE", label: "BTLEd major in Home Economics" }
+      ]
+    },
+    {
+      college: "College of Arts and Sciences (CAS)",
+      programs: [
+        { value: "AB_ELS", label: "BA in English Language Studies" },
+        { value: "AB_LIT", label: "BA in Literature" },
+        { value: "AB_PSYCH", label: "BA in Psychology" }
+      ]
+    },
+    {
+      college: "College of Technology and Engineering (COTE)",
+      programs: [
+        { value: "BSIE", label: "BS in Industrial Engineering" },
+        { value: "BSIT", label: "BS in Information Technology" },
+        { value: "BIT_AUTO", label: "BIT major in Automotive Technology" },
+        { value: "BIT_COMP", label: "BIT major in Computer Technology" },
+        { value: "BIT_DRAFT", label: "BIT major in Drafting Technology" },
+        { value: "BIT_ELEC", label: "BIT major in Electronics Technology" },
+        { value: "BIT_GARM", label: "BIT major in Garments Technology" }
+      ]
+    }
   ];
 
   // UPDATED: Expanded demographic options
@@ -246,9 +251,15 @@ export function SignUpPage() {
                       onChange={(e) => setFormData({ ...formData, course: e.target.value })}
                       className="w-full px-4 py-3 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm text-[#1F2937] focus:outline-none focus:ring-2 focus:ring-[#1D6FA3] focus:border-transparent cursor-pointer"
                     >
-                      <option value="">Select Course</option>
-                      {courses.map(course => (
-                        <option key={course} value={course}>{course}</option>
+                      <option value="">Select Program</option>
+                      {academicPrograms.map((group) => (
+                        <optgroup key={group.college} label={group.college}>
+                          {group.programs.map((prog) => (
+                            <option key={prog.value} value={prog.value}>
+                              {prog.label}
+                            </option>
+                          ))}
+                        </optgroup>
                       ))}
                     </select>
                   </div>
@@ -287,8 +298,14 @@ export function SignUpPage() {
                     className="w-full px-4 py-3 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm text-[#1F2937] focus:outline-none focus:ring-2 focus:ring-[#1D6FA3] focus:border-transparent cursor-pointer"
                   >
                     <option value="">Select Program</option>
-                    {departments.map(dept => (
-                      <option key={dept} value={dept}>{dept}</option>
+                    {academicPrograms.map((group) => (
+                      <optgroup key={group.college} label={group.college}>
+                        {group.programs.map((prog) => (
+                          <option key={prog.value} value={prog.value}>
+                            {prog.label}
+                          </option>
+                        ))}
+                      </optgroup>
                     ))}
                   </select>
                 </div>

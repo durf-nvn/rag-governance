@@ -12,6 +12,7 @@ export function FacultyDashboard() {
   const [totalDocs, setTotalDocs] = useState(0);
   const [myQueriesCount, setMyQueriesCount] = useState(0);
   const [myAccessCount, setMyAccessCount] = useState(0);
+  const [userDepartment, setUserDepartment] = useState("Program"); // NEW: State to hold the name for the UI
   
   // Charts & Lists
   const [chartData, setChartData] = useState<any[]>([]);
@@ -26,13 +27,16 @@ export function FacultyDashboard() {
       setIsLoading(true);
       try {
         const userEmail = localStorage.getItem('userEmail') || '';
+        const userDept = localStorage.getItem('userDepartment') || 'BSIT'; 
+        
+        setUserDepartment(userDept); // Save to state so we can show it in the HTML
 
-        // Fetch all data in parallel! Notice the ?role=FACULTY on the stats route
+        // FIXED: Only 4 API calls now, perfectly matching the 4 variables!
         const [statsRes, historyRes, accessRes, accredRes] = await Promise.all([
           axios.get("http://localhost:8000/system-stats?role=FACULTY"),
           axios.get(`http://localhost:8000/chat-history?email=${userEmail}`),
           axios.get("http://localhost:8000/audit/access"),
-          axios.get("http://localhost:8000/accreditation-status/BSIT") 
+          axios.get(`http://localhost:8000/accreditation-status/${userDept}`) 
         ]);
 
         // 1. Top Level Stats
@@ -48,7 +52,7 @@ export function FacultyDashboard() {
         setAccreditationScore(accredRes.data.overall || 0);
         setMissingEvidence(accredRes.data.gaps || 0);
 
-        // 3. Process Recent Activity (Views & Downloads)
+        // 3. Process Recent Activity
         const formattedActivity = myAccessLogs.slice(0, 5).map((log: any) => ({
           title: log.document,
           action: log.action, 
@@ -126,7 +130,7 @@ export function FacultyDashboard() {
       value: missingEvidence,
       icon: Clock,
       color: "#CE0000",
-      subtitle: "Missing BSIT evidence"
+      subtitle: `Missing ${userDepartment} evidence` // FIXED: Now dynamic!
     }
   ];
 
@@ -205,7 +209,7 @@ export function FacultyDashboard() {
           <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-[#006837] to-[#10B981]"></div>
           <h2 className="text-lg font-bold text-gray-900 mb-2 w-full text-left flex items-center gap-2">
             <ShieldCheck className="h-5 w-5 text-[#006837]" />
-            BSIT QA Readiness
+            {userDepartment} QA Readiness {/* FIXED: Now dynamic! */}
           </h2>
           <p className="text-xs text-gray-500 mb-4 w-full text-left">Real-time accreditation compliance</p>
           

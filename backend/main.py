@@ -188,13 +188,19 @@ def login_user(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = D
         }).execute()
     except Exception as e:
         print(f"Failed to log login: {e}")
+
+    # --- NEW: Get the correct department/course ---
+    user_dept = user.department
+    if user.role == "STUDENT" and user.student_profile:
+        user_dept = user.student_profile.course
     
     return {
         "access_token": access_token, 
         "token_type": "bearer",
         "full_name": user.full_name or "CTU User", 
         "email": user.email,
-        "role": user.role
+        "role": user.role,
+        "department": user_dept
     }
 
 @app.post("/send-reset-email")
