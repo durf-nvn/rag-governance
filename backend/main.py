@@ -117,6 +117,7 @@ def register_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
         full_name=user.full_name,
         hashed_password=hashed_pwd,
         role=user.role.upper(),
+        department=user.department,
         is_verified=auto_verify
     )
     

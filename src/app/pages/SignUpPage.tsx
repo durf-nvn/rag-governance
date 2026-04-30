@@ -24,6 +24,7 @@ export function SignUpPage() {
     course: "",
     year: "",
     employeeId: "",
+    department: "",
     agreeToTerms: false
   });
 
@@ -49,7 +50,8 @@ export function SignUpPage() {
         role: formData.role,
         full_name: formData.fullName, 
         course: formData.course || null, 
-        year: formData.year || null      
+        year: formData.year || null,
+        department: formData.department || null  
       });
 
       setUserRole(formData.role);
@@ -83,6 +85,16 @@ export function SignUpPage() {
     "Bachelor in Industrial Technology major in Drafting Technology",
     "Bachelor in Industrial Technology major in Electronics Technology",
     "Bachelor in Industrial Technology major in Garments Technology"
+  ];
+
+  const departments = [
+    "BS Information Technology (BSIT)",
+    "BS Education (BSEd)",
+    "BS Hospitality Management (BSHM)",
+    "BS Industrial Technology (BSInT)",
+    "General Education (GenEd)",
+    "College of Arts and Sciences (CAS)",
+    "Others"
   ];
 
   // UPDATED: Expanded demographic options
@@ -258,6 +270,27 @@ export function SignUpPage() {
                       ))}
                     </select>
                   </div>
+                </div>
+              )}
+
+              {/* FACULTY DEPARTMENT DROPDOWN */}
+              {formData.role === "FACULTY" && (
+                <div>
+                  <label htmlFor="department" className="block text-sm font-medium mb-2 text-[#1F2937]">
+                    Assigned Program / Department
+                  </label>
+                  <select
+                    id="department"
+                    required
+                    value={formData.department}
+                    onChange={(e) => setFormData({ ...formData, department: e.target.value })}
+                    className="w-full px-4 py-3 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm text-[#1F2937] focus:outline-none focus:ring-2 focus:ring-[#1D6FA3] focus:border-transparent cursor-pointer"
+                  >
+                    <option value="">Select Program</option>
+                    {departments.map(dept => (
+                      <option key={dept} value={dept}>{dept}</option>
+                    ))}
+                  </select>
                 </div>
               )}
 

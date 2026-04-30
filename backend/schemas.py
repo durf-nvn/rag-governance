@@ -11,6 +11,7 @@ class UserCreate(BaseModel):
     full_name: str
     course: Optional[str] = None  # NEW
     year: Optional[str] = None    # NEW
+    department: Optional[str] = None
 
 # What we send back to the user (Notice we DO NOT send the password back!)
 class UserResponse(BaseModel):
@@ -18,6 +19,7 @@ class UserResponse(BaseModel):
     email: EmailStr
     role: str
     full_name: Optional[str] = None  # NEW
+    department: Optional[str] = None
     is_verified: bool                # NEW
     status: Optional[str] = "Active"
     created_at: datetime
