@@ -10,7 +10,8 @@ export function AuditTrail() {
   // Real Data States
   const [queryLogs, setQueryLogs] = useState<any[]>([]);
   const [accessLogs, setAccessLogs] = useState<any[]>([]);
-  const [versionLogs, setVersionLogs] = useState<any[]>([]); // <--- NEW STATE
+  const [versionLogs, setVersionLogs] = useState<any[]>([]);
+  const [systemLogs, setSystemLogs] = useState<any[]>([]); // <--- NEW STATE
   const [isLoading, setIsLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -18,17 +19,18 @@ export function AuditTrail() {
     const fetchAllAuditData = async () => {
       setIsLoading(true);
       try {
-        // Fetch all three endpoints simultaneously for maximum performance
-        const [queriesRes, accessRes, versionsRes] = await Promise.all([
+        // Fetch ALL FOUR endpoints simultaneously!
+        const [queriesRes, accessRes, versionsRes, systemRes] = await Promise.all([
           axios.get("http://localhost:8000/audit/queries"),
           axios.get("http://localhost:8000/audit/access"),
-          axios.get("http://localhost:8000/audit/versions")
+          axios.get("http://localhost:8000/audit/versions"),
+          axios.get("http://localhost:8000/audit/system") // <--- NEW API CALL
         ]);
 
-        // Populate all states immediately so the top cards show correct numbers
         setQueryLogs(queriesRes.data);
         setAccessLogs(accessRes.data);
         setVersionLogs(versionsRes.data);
+        setSystemLogs(systemRes.data); // <--- SAVE THE DATA
         
       } catch (error) {
         console.error("Failed to fetch audit logs", error);
@@ -38,14 +40,17 @@ export function AuditTrail() {
     };
 
     fetchAllAuditData();
-  }, []); // The empty array [] means this runs exactly once when the page opens
+  }, []);
 
   // The unified filter variable!
   const filteredData = activeTab === "queries" 
     ? queryLogs.filter(log => log.user.toLowerCase().includes(searchQuery.toLowerCase()) || log.query.toLowerCase().includes(searchQuery.toLowerCase()))
     : activeTab === "access"
     ? accessLogs.filter(log => log.user.toLowerCase().includes(searchQuery.toLowerCase()) || log.document.toLowerCase().includes(searchQuery.toLowerCase()))
-    : versionLogs.filter(log => log.document.toLowerCase().includes(searchQuery.toLowerCase()) || log.user.toLowerCase().includes(searchQuery.toLowerCase()));
+    : activeTab === "versions"
+    ? versionLogs.filter(log => log.document.toLowerCase().includes(searchQuery.toLowerCase()) || log.user.toLowerCase().includes(searchQuery.toLowerCase()))
+    // NEW: System filter
+    : systemLogs.filter(log => log.user.toLowerCase().includes(searchQuery.toLowerCase()) || log.description.toLowerCase().includes(searchQuery.toLowerCase()));
 
   return (
     <div className="space-y-6">
@@ -78,9 +83,9 @@ export function AuditTrail() {
           <p className="text-sm text-gray-500 mt-1">Tracked file modifications</p>
         </div>
         <div className="bg-white rounded-lg shadow-sm p-6 border-t-4 border-[#CE0000]">
-          <h3 className="text-3xl font-bold text-[#CE0000] mb-2">--</h3>
+          <h3 className="text-3xl font-bold text-[#CE0000] mb-2">{systemLogs.length}</h3>
           <p className="text-gray-700 font-medium">Security Events</p>
-          <p className="text-sm text-gray-500 mt-1">Pending implementation</p>
+          <p className="text-sm text-gray-500 mt-1">Tracked system activities</p>
         </div>
       </div>
 
@@ -285,15 +290,48 @@ export function AuditTrail() {
                 )}
               </tbody>
             </table>
-          ) : (
-             <div className="flex flex-col items-center justify-center h-[400px] text-gray-500">
-                <ShieldAlert className="h-12 w-12 text-gray-300 mb-4" />
-                <h3 className="text-lg font-semibold text-gray-900">System Events (Phase 2)</h3>
-                <p className="text-sm text-gray-500 mt-1 max-w-sm text-center">
-                  Tracking for new registrations, password changes, and account disabling will be implemented here to satisfy full audit compliance.
-                </p>
-             </div>
-          )}
+          ) : activeTab === "system" ? (
+            <table className="w-full text-left whitespace-nowrap">
+              <thead className="bg-[#F5F7FA] border-b border-gray-200">
+                <tr>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">User Account</th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Event Type</th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Description</th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Timestamp</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {filteredData.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="px-6 py-12 text-center text-gray-500">
+                      No system events found matching your search.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredData.map((log) => (
+                    <tr key={log.id} className="hover:bg-gray-50 transition-colors">
+                      <td className="px-6 py-4">
+                        <span className="font-semibold text-gray-900">{log.user}</span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className={`px-2.5 py-1 text-xs font-semibold rounded-full border ${
+                          log.type === 'Authentication' 
+                            ? 'bg-blue-50 text-blue-700 border-blue-200' 
+                            : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                        }`}>
+                          {log.type}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className="text-sm text-gray-700">{log.description}</span>
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-500">{log.timestamp}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          ) : null}
         </div>
       </div>
     </div>

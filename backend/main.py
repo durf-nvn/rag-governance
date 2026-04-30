@@ -122,6 +122,18 @@ def register_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
     
     db.add(new_user)
     db.commit()
+
+    # --- NEW: LOG THE REGISTRATION EVENT SILENTLY ---
+    try:
+        from vector_store import supabase
+        supabase.table("system_events_logs").insert({
+            "user_email": new_user.email,
+            "event_type": "Account Creation",
+            "description": f"New {new_user.role} account registered"
+        }).execute()
+    except Exception as e:
+        print(f"Failed to log registration: {e}")
+
     db.refresh(new_user)
 
     if user.role.upper() == "STUDENT":
@@ -164,6 +176,17 @@ def login_user(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = D
 
     # 4. Generate the login token
     access_token = utils.create_access_token(data={"sub": user.email})
+
+    # --- NEW: LOG THE LOGIN EVENT SILENTLY ---
+    try:
+        from vector_store import supabase
+        supabase.table("system_events_logs").insert({
+            "user_email": user.email,
+            "event_type": "Authentication",
+            "description": "User successfully logged in"
+        }).execute()
+    except Exception as e:
+        print(f"Failed to log login: {e}")
     
     return {
         "access_token": access_token, 
@@ -1132,3 +1155,34 @@ def get_version_history():
     except Exception as e:
         print(f"Version log fetch error: {e}")
         raise HTTPException(status_code=500, detail="Failed to fetch version history")
+
+@app.get("/audit/system")
+def get_system_events():
+    from vector_store import supabase
+    from datetime import datetime
+    try:
+        response = supabase.table("system_events_logs").select("*").order("event_date", desc=True).limit(100).execute()
+        
+        logs = []
+        if response.data:
+            for item in response.data:
+                raw_date = item.get("event_date", "")
+                formatted_date = "Unknown Date"
+                if raw_date:
+                    try:
+                        dt = datetime.fromisoformat(raw_date.replace("Z", "+00:00"))
+                        formatted_date = dt.strftime("%B %d, %Y - %I:%M %p")
+                    except:
+                        formatted_date = raw_date.split("T")[0]
+
+                logs.append({
+                    "id": item.get("id"),
+                    "user": item.get("user_email", "Unknown"),
+                    "type": item.get("event_type", "System Event"),
+                    "description": item.get("description", ""),
+                    "timestamp": formatted_date
+                })
+        return logs
+    except Exception as e:
+        print(f"System log fetch error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch system events")
