@@ -1,10 +1,16 @@
 import { useState, useEffect, useRef } from "react";
-import { Search, CheckCircle, AlertCircle, FileText, Award, Target, Upload, ChevronDown, X, Loader2, ArrowLeft, Archive, Eye, ShieldAlert } from "lucide-react";
+import { Search, CheckCircle, AlertCircle, FileText, Award, Target, Upload, ChevronDown, X, Loader2, ArrowLeft, Archive, Eye, ShieldAlert, Lock } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "../components/ui/tabs";
 import axios from "axios";
 
 export function AccreditationSupport() {
-  const [selectedProgram, setSelectedProgram] = useState("BSIT");
+  // --- NEW: Grab the User's Role and Department immediately ---
+  const userRole = localStorage.getItem('userRole') || 'STUDENT';
+  const userDept = localStorage.getItem('userDepartment') || 'BSIT';
+
+  // --- NEW: Default to their department if Faculty, otherwise BSIT ---
+  const [selectedProgram, setSelectedProgram] = useState(userRole === 'FACULTY' ? userDept : "BSIT");
+  
   const [searchQuery, setSearchQuery] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   
@@ -45,8 +51,6 @@ export function AccreditationSupport() {
     areas: []
   });
 
-  // --- THE FIX: MASTER REFRESH FUNCTION ---
-  // This ensures both the Grid and the Drill-Down Header sync perfectly
   const refreshData = async () => {
     try {
       const response = await axios.get(`http://localhost:8000/accreditation-status/${selectedProgram}`);
@@ -56,7 +60,6 @@ export function AccreditationSupport() {
         const detailsRes = await axios.get(`http://localhost:8000/accreditation-details/${selectedProgram}/${expandedArea.code}`);
         setAreaDetails(detailsRes.data);
         
-        // Update the expandedArea object itself so the Header stats change immediately
         const updatedArea = response.data.areas.find((a: any) => a.code === expandedArea.code);
         if (updatedArea) setExpandedArea(updatedArea);
       }
@@ -132,7 +135,7 @@ export function AccreditationSupport() {
 
       await refreshData();
       
-      setUploadForm({ fileName: "" });
+      setUploadForm({ fileName: "", requirementTarget: "" });
       setSelectedFile(null); 
       setShowUploadModal(false);
       showToast("Evidence successfully uploaded and linked!", "success");
@@ -174,19 +177,16 @@ export function AccreditationSupport() {
   };
 
   const handleViewDocument = (file: any) => {
-    // 1. Get the current user info from localStorage
-    const userEmail = localStorage.getItem('userEmail') || 'Unknown';
-    const userRole = localStorage.getItem('userRole') || 'STUDENT';
+    const email = localStorage.getItem('userEmail') || 'Unknown';
+    const role = localStorage.getItem('userRole') || 'STUDENT';
 
-    // 2. Send the log silently in the background
     axios.post("http://localhost:8000/audit/access", {
-      document_name: file.name,   // Matches your 'file' object
+      document_name: file.name,
       action_type: "View",
-      user_email: userEmail,
-      user_role: userRole
+      user_email: email,
+      user_role: role
     }).catch(err => console.error("Silently failed to log access"));
 
-    // 3. Actually open the file in a new tab
     window.open(file.url, "_blank");
   };
 
@@ -197,7 +197,6 @@ export function AccreditationSupport() {
   return (
     <div className="space-y-6 relative">
       
-      {/* --- TOAST NOTIFICATION --- */}
       {toast && (
         <div className={`fixed bottom-8 right-8 px-6 py-4 rounded-xl shadow-2xl flex items-center gap-3 text-sm font-bold z-[100] transition-all duration-300 animate-in slide-in-from-bottom-5 fade-in ${
           toast.type === 'success' ? 'bg-[#E6F7ED] text-[#006837] border-2 border-[#006837]/20' : 'bg-red-50 text-red-700 border-2 border-red-200'
@@ -222,7 +221,6 @@ export function AccreditationSupport() {
 
         <TabsContent value="aaccup" className="space-y-6 mt-6">
           
-          {/* Top Context Bar */}
           <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
               <h2 className="text-lg font-semibold text-gray-900">Program Evaluation Context</h2>
@@ -230,11 +228,18 @@ export function AccreditationSupport() {
             </div>
             
             <div className="flex flex-col sm:flex-row items-center gap-4">
-              <div className="relative w-full sm:w-64">
+              <div className="relative w-full sm:w-72">
+                
+                {/* --- NEW: Lock the dropdown if the user is Faculty --- */}
                 <select 
                   value={selectedProgram}
                   onChange={(e) => setSelectedProgram(e.target.value)}
-                  className="appearance-none w-full px-4 py-3 bg-[#F5F7FA] border border-gray-300 rounded-lg text-sm font-medium text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#CE0000] pr-10 cursor-pointer"
+                  disabled={userRole === 'FACULTY'}
+                  className={`appearance-none w-full px-4 py-3 border border-gray-300 rounded-lg text-sm font-medium text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#CE0000] pr-10 ${
+                    userRole === 'FACULTY' 
+                      ? 'bg-gray-100 opacity-80 cursor-not-allowed' 
+                      : 'bg-[#F5F7FA] cursor-pointer'
+                  }`}
                 >
                   <option value="BEED">Bachelor of Elementary Education</option>
                   <option value="BSED_MATH">BSEd major in Mathematics</option>
@@ -251,7 +256,13 @@ export function AccreditationSupport() {
                   <option value="BIT_ELEC">BIT major in Electronics Technology</option>
                   <option value="BIT_GARM">BIT major in Garments Technology</option>
                 </select>
-                <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-500 pointer-events-none" />
+                
+                {/* Show a Lock icon for Faculty to indicate it's intentionally secured */}
+                {userRole === 'FACULTY' ? (
+                  <Lock className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-500 pointer-events-none" />
+                ) : (
+                  <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-500 pointer-events-none" />
+                )}
               </div>
 
               <div className="flex items-center gap-2 px-5 py-3 bg-gradient-to-r from-[#D4AF37] to-[#FDB913] text-white rounded-lg shadow-md border border-[#D4AF37]/50 w-full sm:w-auto justify-center">
@@ -365,7 +376,6 @@ export function AccreditationSupport() {
           ) : (
             <div className="space-y-6 animate-in slide-in-from-right-4 fade-in duration-300">
               
-              {/* Header Navigation */}
               <div className="bg-white rounded-xl shadow-sm p-6 border-t-4 border-[#1D6FA3]">
                 <button 
                   onClick={() => setExpandedArea(null)}
@@ -394,7 +404,6 @@ export function AccreditationSupport() {
 
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 
-                {/* Column 1: The Checklist */}
                 <div className="lg:col-span-1 space-y-6">
                   <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
                     <div className="p-4 bg-[#F9FAFB] border-b border-gray-200">
@@ -428,7 +437,6 @@ export function AccreditationSupport() {
                   </div>
                 </div>
 
-                {/* Column 2: Uploaded Evidence Table */}
                 <div className="lg:col-span-2 space-y-6">
                   <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden flex flex-col h-full">
                     <div className="p-4 bg-[#F9FAFB] border-b border-gray-200 flex justify-between items-center">
@@ -478,7 +486,6 @@ export function AccreditationSupport() {
                                   <td className="px-4 py-3 text-sm text-gray-500">{file.date}</td>
                                   <td className="px-4 py-3 text-center">
                                     <div className="flex items-center justify-center gap-2">
-                                      {/* UPDATED TO USE THE EYE ICON FOR VIEW */}
                                       <button 
                                         onClick={() => handleViewDocument(file)}
                                         className="p-1.5 text-gray-400 hover:text-[#1D6FA3] transition-colors cursor-pointer" 
@@ -486,7 +493,6 @@ export function AccreditationSupport() {
                                       >
                                         <Eye className="h-4 w-4" />
                                       </button>
-                                      {/* WIRED TO THE NEW DELETE MODAL */}
                                       <button 
                                         onClick={() => openDeleteModal(file.name)}
                                         className="p-1.5 text-gray-400 hover:text-red-600 transition-colors cursor-pointer" 
@@ -572,7 +578,6 @@ export function AccreditationSupport() {
                 />
               </div>
 
-              {/* NEW: The Requirement Target Dropdown */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Fulfills Requirement</label>
                 <select

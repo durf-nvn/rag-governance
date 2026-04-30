@@ -193,6 +193,10 @@ def login_user(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = D
     user_dept = user.department
     if user.role == "STUDENT" and user.student_profile:
         user_dept = user.student_profile.course
+        
+    # THE FIX: Prevent 'None' from crashing the Token schema validation
+    if not user_dept:
+        user_dept = "ADMIN" if user.role == "ADMIN" else "Unassigned"
     
     return {
         "access_token": access_token, 
@@ -301,6 +305,7 @@ def create_user_admin(request: UserCreateRequest, db: Session = Depends(get_db))
         full_name=request.full_name,
         hashed_password=hashed_pwd,
         role=request.role.upper(),
+        department="ADMIN" if request.role.upper() == "ADMIN" else "Unassigned", # <--- NEW AUTOMATIC ASSIGNMENT
         is_verified=True 
     )
     
