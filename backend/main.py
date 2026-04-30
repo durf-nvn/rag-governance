@@ -12,10 +12,10 @@ import io
 from groq import Groq
 from pydantic import BaseModel, EmailStr
 from datetime import datetime, timedelta 
-
 import os
 from dotenv import load_dotenv
 from fastapi import FastAPI, Depends, HTTPException
+import json
 
 # 1. LOAD THE ENVIRONMENT FIRST
 load_dotenv()
@@ -1199,3 +1199,61 @@ def get_system_events():
     except Exception as e:
         print(f"System log fetch error: {e}")
         raise HTTPException(status_code=500, detail="Failed to fetch system events")
+    
+@app.post("/evaluate-grades")
+async def evaluate_grades(file: UploadFile = File(...)):
+    try:
+        # 1. Ephemeral In-Memory Parsing (DO NOT save to database!)
+        content = await file.read()
+        pdf_reader = PyPDF2.PdfReader(io.BytesIO(content))
+        raw_text = ""
+        for page in pdf_reader.pages:
+            raw_text += page.extract_text() + "\n"
+            
+        # 2. Strict Institutional AI Prompt (70B Optimized & Clean Extraction)
+        system_prompt = """
+        You are a meticulous Academic Data Extractor for Cebu Technological University (CTU).
+        Your job is to parse scrambled PDF text and extract subjects, units, and grades into a clean JSON structure.
+        
+        CRITICAL PARSING RULES FOR PDFs:
+        1. PyPDF2 flattens tables. A subject row might look like: "CS46 FUNCTIONAL ENGLISH 3.00 01:00PM Wed CAS 3 1.6"
+        2. UNITS are typically integers or decimals like 2.00, 3.00, or 5.00.
+        3. GRADES are strictly between 1.0 and 5.0. 
+        4. DO NOT INVENT GRADES. If a subject does not have a clear grade (1.0 to 5.0) explicitly associated with it on its line, mark the grade as 0 and 'has_missing_grades' as true. Do NOT borrow grades from other rows!
+        5. If there are multiple grades on a single line (e.g., a midterm and a final), ALWAYS extract the LAST valid numerical grade on that line.
+        
+        You MUST respond with a pure JSON object in this EXACT format. 
+        {
+          "semesters": [
+            {
+              "semester_name": "1st Semester SY 2023-2024",
+              "subjects_scratchpad": [
+                {"subject": "CS46 FUNCTIONAL ENGLISH", "units": 3.0, "grade": 1.6, "weighted_score": 4.8},
+                {"subject": "CS47 ART APP", "units": 3.0, "grade": 0, "weighted_score": 0} 
+              ],
+              "has_missing_grades": true
+            }
+          ],
+          "summary": "2-3 sentences summarizing performance. Be direct using 'You'.",
+          "recommendations": ["Recommendation 1", "Recommendation 2", "Recommendation 3"]
+        }
+        """
+        
+        # 3. Request Evaluation from Groq
+        response = groq_client.chat.completions.create(
+            model="llama-3.3-70b-versatile", # Fast and capable model
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"Here is the raw text from the grade slip:\n\n{raw_text}"}
+            ],
+            temperature=0.1, # Keep it strictly logical
+            response_format={"type": "json_object"}
+        )
+        
+        # 4. Parse and return the JSON
+        result_json = response.choices[0].message.content
+        return json.loads(result_json)
+        
+    except Exception as e:
+        print(f"Grade Evaluation Error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to evaluate grades.")
