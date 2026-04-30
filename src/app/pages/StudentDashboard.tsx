@@ -136,7 +136,7 @@ export function StudentDashboard() {
         </div>
         <div className="flex items-center gap-2 bg-[#10B981] text-white px-4 py-2 rounded-lg shadow-sm">
           <GraduationCap className="h-4 w-4" />
-          <span className="text-sm font-medium">Student Profile</span>
+          <span className="text-sm font-medium">Student</span>
         </div>
       </div>
 
