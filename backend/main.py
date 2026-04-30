@@ -697,7 +697,7 @@ def get_popular_topics():
     return topics
 
 @app.get("/system-stats")
-def get_system_stats():
+def get_system_stats(role: str = "STUDENT"): # Default to student for maximum safety
     from vector_store import supabase
     try:
         # Fetch all metadata from the vector database
@@ -709,11 +709,16 @@ def get_system_stats():
             for item in response.data:
                 meta = item.get("metadata", {})
                 doc_name = meta.get("name")
-                status = meta.get("status", "Active") # Default to Active if missing
+                status = meta.get("status", "Active") 
                 category = meta.get("category", "")
                 
-                # ONLY count the document if it has a name AND is not Archived
-                if doc_name and status != "Archived" and category != "Accreditation Evidence":
+                # Must have a name and not be archived
+                if doc_name and status != "Archived":
+                    # THE FIX: If the user is a STUDENT, hide the Accreditation Evidence
+                    if role.upper() == "STUDENT" and category == "Accreditation Evidence":
+                        continue
+                    
+                    # Otherwise (Faculty or Admin), add it to the total count!
                     unique_active_docs.add(doc_name)
                     
         return {
