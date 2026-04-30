@@ -11,7 +11,7 @@ export function AuditTrail() {
   const [queryLogs, setQueryLogs] = useState<any[]>([]);
   const [accessLogs, setAccessLogs] = useState<any[]>([]);
   const [versionLogs, setVersionLogs] = useState<any[]>([]);
-  const [systemLogs, setSystemLogs] = useState<any[]>([]); // <--- NEW STATE
+  const [systemLogs, setSystemLogs] = useState<any[]>([]); 
   const [isLoading, setIsLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -19,18 +19,17 @@ export function AuditTrail() {
     const fetchAllAuditData = async () => {
       setIsLoading(true);
       try {
-        // Fetch ALL FOUR endpoints simultaneously!
         const [queriesRes, accessRes, versionsRes, systemRes] = await Promise.all([
           axios.get("http://localhost:8000/audit/queries"),
           axios.get("http://localhost:8000/audit/access"),
           axios.get("http://localhost:8000/audit/versions"),
-          axios.get("http://localhost:8000/audit/system") // <--- NEW API CALL
+          axios.get("http://localhost:8000/audit/system") 
         ]);
 
         setQueryLogs(queriesRes.data);
         setAccessLogs(accessRes.data);
         setVersionLogs(versionsRes.data);
-        setSystemLogs(systemRes.data); // <--- SAVE THE DATA
+        setSystemLogs(systemRes.data); 
         
       } catch (error) {
         console.error("Failed to fetch audit logs", error);
@@ -42,14 +41,12 @@ export function AuditTrail() {
     fetchAllAuditData();
   }, []);
 
-  // The unified filter variable!
   const filteredData = activeTab === "queries" 
     ? queryLogs.filter(log => log.user.toLowerCase().includes(searchQuery.toLowerCase()) || log.query.toLowerCase().includes(searchQuery.toLowerCase()))
     : activeTab === "access"
     ? accessLogs.filter(log => log.user.toLowerCase().includes(searchQuery.toLowerCase()) || log.document.toLowerCase().includes(searchQuery.toLowerCase()))
     : activeTab === "versions"
     ? versionLogs.filter(log => log.document.toLowerCase().includes(searchQuery.toLowerCase()) || log.user.toLowerCase().includes(searchQuery.toLowerCase()))
-    // NEW: System filter
     : systemLogs.filter(log => log.user.toLowerCase().includes(searchQuery.toLowerCase()) || log.description.toLowerCase().includes(searchQuery.toLowerCase()));
 
   return (
@@ -151,13 +148,15 @@ export function AuditTrail() {
                 <Loader2 className="h-8 w-8 animate-spin text-[#1D6FA3]" />
              </div>
           ) : activeTab === "queries" ? (
-            <table className="w-full text-left whitespace-nowrap">
+            /* ADDED: table-fixed and min-w-[900px] */
+            <table className="w-full text-left whitespace-nowrap table-fixed min-w-[900px]">
               <thead className="bg-[#F5F7FA] border-b border-gray-200">
                 <tr>
-                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">User</th>
-                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Query Sent to AI</th>
-                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Timestamp</th>
-                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Status</th>
+                  {/* ADDED: Explicit width percentages */}
+                  <th className="w-[25%] px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">User</th>
+                  <th className="w-[45%] px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Query Sent to AI</th>
+                  <th className="w-[20%] px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Timestamp</th>
+                  <th className="w-[10%] px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Status</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -170,19 +169,19 @@ export function AuditTrail() {
                 ) : (
                   filteredData.map((log) => (
                     <tr key={log.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-6 py-4">
-                        <div className="font-semibold text-gray-900">{log.user}</div>
-                        <div className="text-xs font-medium text-gray-500 mt-0.5">{log.role || "STUDENT"}</div>
+                      <td className="px-6 py-4 truncate">
+                        <div className="font-semibold text-gray-900 truncate" title={log.user}>{log.user}</div>
+                        <div className="text-xs font-medium text-gray-500 mt-0.5 truncate">{log.role || "STUDENT"}</div>
                       </td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-2">
+                      <td className="px-6 py-4 truncate">
+                        <div className="flex items-center gap-2 truncate">
                           <MessageSquare className="h-4 w-4 text-[#1D6FA3] flex-shrink-0" />
-                          <span className="text-sm text-gray-700 truncate max-w-md block" title={log.query}>
+                          <span className="text-sm text-gray-700 truncate" title={log.query}>
                             {log.query}
                           </span>
                         </div>
                       </td>
-                      <td className="px-6 py-4 text-sm text-gray-500">{log.timestamp}</td>
+                      <td className="px-6 py-4 text-sm text-gray-500 truncate">{log.timestamp}</td>
                       <td className="px-6 py-4">
                         <span className="px-2.5 py-1 text-xs font-semibold rounded-full bg-green-50 text-green-700 border border-green-200">
                           {log.status || "Answered"}
@@ -194,13 +193,15 @@ export function AuditTrail() {
               </tbody>
             </table>
           ) : activeTab === "access" ? (
-            <table className="w-full text-left whitespace-nowrap">
+            /* ADDED: table-fixed and min-w-[900px] */
+            <table className="w-full text-left whitespace-nowrap table-fixed min-w-[900px]">
               <thead className="bg-[#F5F7FA] border-b border-gray-200">
                 <tr>
-                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">User</th>
-                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Document Accessed</th>
-                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Action</th>
-                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Timestamp</th>
+                  {/* ADDED: Explicit width percentages */}
+                  <th className="w-[25%] px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">User</th>
+                  <th className="w-[45%] px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Document Accessed</th>
+                  <th className="w-[10%] px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Action</th>
+                  <th className="w-[20%] px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Timestamp</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -213,12 +214,12 @@ export function AuditTrail() {
                 ) : (
                   filteredData.map((log) => (
                     <tr key={log.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-6 py-4">
-                        <div className="font-semibold text-gray-900">{log.user}</div>
-                        <div className="text-xs font-medium text-gray-500 mt-0.5">{log.role}</div>
+                      <td className="px-6 py-4 truncate">
+                        <div className="font-semibold text-gray-900 truncate" title={log.user}>{log.user}</div>
+                        <div className="text-xs font-medium text-gray-500 mt-0.5 truncate">{log.role}</div>
                       </td>
-                      <td className="px-6 py-4">
-                        <div className="font-medium text-[#1D6FA3] truncate max-w-sm" title={log.document}>
+                      <td className="px-6 py-4 truncate">
+                        <div className="font-medium text-[#1D6FA3] truncate" title={log.document}>
                           {log.document}
                         </div>
                       </td>
@@ -231,21 +232,23 @@ export function AuditTrail() {
                           {log.action}
                         </span>
                       </td>
-                      <td className="px-6 py-4 text-sm text-gray-500">{log.timestamp}</td>
+                      <td className="px-6 py-4 text-sm text-gray-500 truncate">{log.timestamp}</td>
                     </tr>
                   ))
                 )}
               </tbody>
             </table>
           ) : activeTab === "versions" ? (
-            <table className="w-full text-left whitespace-nowrap">
+            /* ADDED: table-fixed and min-w-[900px] */
+            <table className="w-full text-left whitespace-nowrap table-fixed min-w-[900px]">
               <thead className="bg-[#F5F7FA] border-b border-gray-200">
                 <tr>
-                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Document Name</th>
-                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Version</th>
-                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Updated By</th>
-                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Timestamp</th>
-                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Status</th>
+                  {/* ADDED: Explicit width percentages */}
+                  <th className="w-[35%] px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Document Name</th>
+                  <th className="w-[10%] px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Version</th>
+                  <th className="w-[20%] px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Updated By</th>
+                  <th className="w-[20%] px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Timestamp</th>
+                  <th className="w-[15%] px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Status</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -258,10 +261,10 @@ export function AuditTrail() {
                 ) : (
                   filteredData.map((log) => (
                     <tr key={log.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-2">
+                      <td className="px-6 py-4 truncate">
+                        <div className="flex items-center gap-2 truncate">
                           <FileText className="h-4 w-4 text-[#1D6FA3] flex-shrink-0" />
-                          <span className="font-semibold text-gray-900 truncate max-w-sm block" title={log.document}>
+                          <span className="font-semibold text-gray-900 truncate" title={log.document}>
                             {log.document}
                           </span>
                         </div>
@@ -272,10 +275,10 @@ export function AuditTrail() {
                           v{log.version}
                         </div>
                       </td>
-                      <td className="px-6 py-4">
-                        <span className="text-sm font-medium text-gray-700">{log.user}</span>
+                      <td className="px-6 py-4 truncate">
+                        <span className="text-sm font-medium text-gray-700 truncate" title={log.user}>{log.user}</span>
                       </td>
-                      <td className="px-6 py-4 text-sm text-gray-500">{log.timestamp}</td>
+                      <td className="px-6 py-4 text-sm text-gray-500 truncate">{log.timestamp}</td>
                       <td className="px-6 py-4">
                         <span className={`px-2.5 py-1 text-xs font-semibold rounded-full border ${
                           log.status === 'Active' 
@@ -291,13 +294,15 @@ export function AuditTrail() {
               </tbody>
             </table>
           ) : activeTab === "system" ? (
-            <table className="w-full text-left whitespace-nowrap">
+            /* ADDED: table-fixed and min-w-[900px] */
+            <table className="w-full text-left whitespace-nowrap table-fixed min-w-[900px]">
               <thead className="bg-[#F5F7FA] border-b border-gray-200">
                 <tr>
-                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">User Account</th>
-                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Event Type</th>
-                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Description</th>
-                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Timestamp</th>
+                  {/* ADDED: Explicit width percentages */}
+                  <th className="w-[25%] px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">User Account</th>
+                  <th className="w-[20%] px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Event Type</th>
+                  <th className="w-[35%] px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Description</th>
+                  <th className="w-[20%] px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Timestamp</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -310,8 +315,8 @@ export function AuditTrail() {
                 ) : (
                   filteredData.map((log) => (
                     <tr key={log.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-6 py-4">
-                        <span className="font-semibold text-gray-900">{log.user}</span>
+                      <td className="px-6 py-4 truncate">
+                        <span className="font-semibold text-gray-900 truncate" title={log.user}>{log.user}</span>
                       </td>
                       <td className="px-6 py-4">
                         <span className={`px-2.5 py-1 text-xs font-semibold rounded-full border ${
@@ -322,10 +327,10 @@ export function AuditTrail() {
                           {log.type}
                         </span>
                       </td>
-                      <td className="px-6 py-4">
-                        <span className="text-sm text-gray-700">{log.description}</span>
+                      <td className="px-6 py-4 truncate">
+                        <span className="text-sm text-gray-700 truncate" title={log.description}>{log.description}</span>
                       </td>
-                      <td className="px-6 py-4 text-sm text-gray-500">{log.timestamp}</td>
+                      <td className="px-6 py-4 text-sm text-gray-500 truncate">{log.timestamp}</td>
                     </tr>
                   ))
                 )}
