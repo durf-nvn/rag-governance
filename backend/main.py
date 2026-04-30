@@ -1075,3 +1075,60 @@ def get_access_logs():
     except Exception as e:
         print(f"Access log fetch error: {e}")
         raise HTTPException(status_code=500, detail="Failed to fetch access logs")
+
+@app.get("/audit/versions")
+def get_version_history():
+    from vector_store import supabase
+    from datetime import datetime
+    try:
+        # Fetch metadata for all documents in the database
+        response = supabase.table("document_sections").select("metadata").execute()
+        
+        raw_logs = []
+        if response.data:
+            for item in response.data:
+                meta = item.get("metadata", {})
+                doc_name = meta.get("name")
+                version = meta.get("version", "1.0")
+                
+                if doc_name:
+                    raw_date = meta.get("upload_date", "")
+                    formatted_date = "Unknown Date"
+                    if raw_date:
+                        try:
+                            dt = datetime.fromisoformat(raw_date.replace("Z", "+00:00"))
+                            formatted_date = dt.strftime("%B %d, %Y - %I:%M %p")
+                        except:
+                            formatted_date = raw_date.split("T")[0]
+
+                    raw_logs.append({
+                        "document": doc_name,
+                        "version": version,
+                        # Fallback to 'System Admin' if user isn't tagged in old uploads
+                        "user": meta.get("uploaded_by", "System Admin"), 
+                        "status": meta.get("status", "Active"),
+                        "timestamp": formatted_date,
+                        "raw_date": raw_date
+                    })
+        
+        # Sort chronologically (newest first)
+        raw_logs.sort(key=lambda x: x["raw_date"], reverse=True)
+        
+        # THE FIX: Deduplicate vector chunks! 
+        # We only want to show ONE row per document per version.
+        unique_logs = []
+        seen = set()
+        
+        for idx, log in enumerate(raw_logs):
+            identifier = f"{log['document']}_v{log['version']}"
+            if identifier not in seen:
+                seen.add(identifier)
+                # Assign a unique React ID
+                log["id"] = f"ver_{idx}"
+                unique_logs.append(log)
+
+        return unique_logs[:100]
+        
+    except Exception as e:
+        print(f"Version log fetch error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch version history")

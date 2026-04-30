@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Search, Filter, Download, Loader2, MessageSquare, Clock, ShieldAlert } from "lucide-react";
+import { Search, Filter, Download, Loader2, MessageSquare, Clock, ShieldAlert, FileText, History } from "lucide-react";
 import axios from "axios";
 
 type TabType = "queries" | "access" | "versions" | "system";
@@ -10,21 +10,26 @@ export function AuditTrail() {
   // Real Data States
   const [queryLogs, setQueryLogs] = useState<any[]>([]);
   const [accessLogs, setAccessLogs] = useState<any[]>([]);
+  const [versionLogs, setVersionLogs] = useState<any[]>([]); // <--- NEW STATE
   const [isLoading, setIsLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
-    const fetchAuditData = async () => {
+    const fetchAllAuditData = async () => {
       setIsLoading(true);
       try {
-        if (activeTab === "queries") {
-          const res = await axios.get("http://localhost:8000/audit/queries");
-          setQueryLogs(res.data);
-        } 
-        else if (activeTab === "access") {
-          const res = await axios.get("http://localhost:8000/audit/access");
-          setAccessLogs(res.data);
-        }
+        // Fetch all three endpoints simultaneously for maximum performance
+        const [queriesRes, accessRes, versionsRes] = await Promise.all([
+          axios.get("http://localhost:8000/audit/queries"),
+          axios.get("http://localhost:8000/audit/access"),
+          axios.get("http://localhost:8000/audit/versions")
+        ]);
+
+        // Populate all states immediately so the top cards show correct numbers
+        setQueryLogs(queriesRes.data);
+        setAccessLogs(accessRes.data);
+        setVersionLogs(versionsRes.data);
+        
       } catch (error) {
         console.error("Failed to fetch audit logs", error);
       } finally {
@@ -32,13 +37,15 @@ export function AuditTrail() {
       }
     };
 
-    fetchAuditData();
-  }, [activeTab]);
+    fetchAllAuditData();
+  }, []); // The empty array [] means this runs exactly once when the page opens
 
   // The unified filter variable!
   const filteredData = activeTab === "queries" 
     ? queryLogs.filter(log => log.user.toLowerCase().includes(searchQuery.toLowerCase()) || log.query.toLowerCase().includes(searchQuery.toLowerCase()))
-    : accessLogs.filter(log => log.user.toLowerCase().includes(searchQuery.toLowerCase()) || log.document.toLowerCase().includes(searchQuery.toLowerCase()));
+    : activeTab === "access"
+    ? accessLogs.filter(log => log.user.toLowerCase().includes(searchQuery.toLowerCase()) || log.document.toLowerCase().includes(searchQuery.toLowerCase()))
+    : versionLogs.filter(log => log.document.toLowerCase().includes(searchQuery.toLowerCase()) || log.user.toLowerCase().includes(searchQuery.toLowerCase()));
 
   return (
     <div className="space-y-6">
@@ -66,9 +73,9 @@ export function AuditTrail() {
           <p className="text-sm text-gray-500 mt-1">Tracked views & downloads</p>
         </div>
         <div className="bg-white rounded-lg shadow-sm p-6 border-t-4 border-[#006837]">
-          <h3 className="text-3xl font-bold text-[#006837] mb-2">--</h3>
+          <h3 className="text-3xl font-bold text-[#006837] mb-2">{versionLogs.length}</h3>
           <p className="text-gray-700 font-medium">Version Updates</p>
-          <p className="text-sm text-gray-500 mt-1">Pending implementation</p>
+          <p className="text-sm text-gray-500 mt-1">Tracked file modifications</p>
         </div>
         <div className="bg-white rounded-lg shadow-sm p-6 border-t-4 border-[#CE0000]">
           <h3 className="text-3xl font-bold text-[#CE0000] mb-2">--</h3>
@@ -153,7 +160,6 @@ export function AuditTrail() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {/* FIX: Changed from filteredQueries to filteredData */}
                 {filteredData.length === 0 ? (
                   <tr>
                     <td colSpan={4} className="px-6 py-12 text-center text-gray-500">
@@ -230,7 +236,60 @@ export function AuditTrail() {
                 )}
               </tbody>
             </table>
-          ) : activeTab === "system" ? (
+          ) : activeTab === "versions" ? (
+            <table className="w-full text-left whitespace-nowrap">
+              <thead className="bg-[#F5F7FA] border-b border-gray-200">
+                <tr>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Document Name</th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Version</th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Updated By</th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Timestamp</th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {filteredData.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="px-6 py-12 text-center text-gray-500">
+                      No version history found matching your search.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredData.map((log) => (
+                    <tr key={log.id} className="hover:bg-gray-50 transition-colors">
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-2">
+                          <FileText className="h-4 w-4 text-[#1D6FA3] flex-shrink-0" />
+                          <span className="font-semibold text-gray-900 truncate max-w-sm block" title={log.document}>
+                            {log.document}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-1.5 font-bold text-gray-700">
+                          <History className="h-4 w-4 text-gray-400" />
+                          v{log.version}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className="text-sm font-medium text-gray-700">{log.user}</span>
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-500">{log.timestamp}</td>
+                      <td className="px-6 py-4">
+                        <span className={`px-2.5 py-1 text-xs font-semibold rounded-full border ${
+                          log.status === 'Active' 
+                            ? 'bg-green-50 text-green-700 border-green-200' 
+                            : 'bg-gray-100 text-gray-500 border-gray-200'
+                        }`}>
+                          {log.status}
+                        </span>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          ) : (
              <div className="flex flex-col items-center justify-center h-[400px] text-gray-500">
                 <ShieldAlert className="h-12 w-12 text-gray-300 mb-4" />
                 <h3 className="text-lg font-semibold text-gray-900">System Events (Phase 2)</h3>
@@ -238,12 +297,6 @@ export function AuditTrail() {
                   Tracking for new registrations, password changes, and account disabling will be implemented here to satisfy full audit compliance.
                 </p>
              </div>
-          ) : (
-            <div className="flex flex-col items-center justify-center h-[400px] text-gray-500">
-               <Clock className="h-12 w-12 text-gray-300 mb-4" />
-               <h3 className="text-lg font-semibold text-gray-900">Module Pending</h3>
-               <p className="text-sm text-gray-500 mt-1">This specific audit trail feature is scheduled for the next development sprint.</p>
-            </div>
           )}
         </div>
       </div>
