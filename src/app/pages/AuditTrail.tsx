@@ -135,10 +135,6 @@ export function AuditTrail() {
                   className="w-full pl-9 pr-4 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1D6FA3]" 
                 />
               </div>
-              <button className="flex items-center gap-2 px-3 py-2 bg-white border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer">
-                <Filter className="h-4 w-4" />
-                <span className="hidden sm:inline text-sm">Filter</span>
-              </button>
             </div>
           </div>
         </div>
