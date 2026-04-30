@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Search, Download, Loader2, MessageSquare, FileText, History, X } from "lucide-react";
+import { Search, Filter, Download, Loader2, MessageSquare, Clock, ShieldAlert, FileText, History, X, Calendar, FileSpreadsheet, CheckCircle, AlertCircle } from "lucide-react";
 import axios from "axios";
 
 type TabType = "queries" | "access" | "versions" | "system";
@@ -14,6 +14,17 @@ export function AuditTrail() {
   const [systemLogs, setSystemLogs] = useState<any[]>([]); 
   const [isLoading, setIsLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+
+  // --- EXPORT MODAL & TOAST STATE ---
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [exportType, setExportType] = useState<TabType>("queries");
+  const [exportDates, setExportDates] = useState({ start: "", end: "" });
+  
+  const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' } | null>(null);
+  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3000);
+  };
 
   useEffect(() => {
     const fetchAllAuditData = async () => {
@@ -41,6 +52,69 @@ export function AuditTrail() {
     fetchAllAuditData();
   }, []);
 
+  // --- FIXED: FRONTEND CSV EXPORT LOGIC ---
+  const handleExport = () => {
+    let dataToExport: any[] = [];
+    
+    // 1. Select the correct dataset
+    if (exportType === "queries") dataToExport = [...queryLogs];
+    if (exportType === "access") dataToExport = [...accessLogs];
+    if (exportType === "versions") dataToExport = [...versionLogs];
+    if (exportType === "system") dataToExport = [...systemLogs];
+
+    // 2. Safe Date Parser Helper (Fixes the "Invalid Date" bug)
+    // Strips out the " - 05:51 PM" part so JS can properly read "April 29, 2026"
+    const parseLogDate = (timestampStr: string) => {
+      if (!timestampStr || timestampStr === "Unknown Date") return new Date(0);
+      const cleanDateString = timestampStr.split(' - ')[0]; 
+      return new Date(cleanDateString);
+    };
+
+    // 3. Filter by Dates
+    if (exportDates.start) {
+      const startDate = new Date(exportDates.start);
+      startDate.setHours(0, 0, 0, 0); // Start of the day
+      dataToExport = dataToExport.filter(log => parseLogDate(log.timestamp) >= startDate);
+    }
+    
+    if (exportDates.end) {
+      const endDate = new Date(exportDates.end);
+      endDate.setHours(23, 59, 59, 999); // End of the day
+      dataToExport = dataToExport.filter(log => parseLogDate(log.timestamp) <= endDate);
+    }
+
+    // 4. Safety Check (Using Toast instead of alert)
+    if (dataToExport.length === 0) {
+      showToast("No records found in this date range.", "error");
+      return;
+    }
+
+    // 5. Build CSV String
+    const headers = Object.keys(dataToExport[0]).filter(k => k !== 'id').join(',');
+    const rows = dataToExport.map(row => {
+      return Object.entries(row)
+        .filter(([key]) => key !== 'id')
+        .map(([_, value]) => `"${String(value).replace(/"/g, '""')}"`)
+        .join(',');
+    }).join('\n');
+
+    const csvContent = headers + '\n' + rows;
+
+    // 6. Trigger Browser Download
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `CTU_Audit_${exportType}_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    // Close Modal & Show Success
+    setShowExportModal(false);
+    showToast(`Successfully exported ${dataToExport.length} records!`, "success");
+  };
+
   const filteredData = activeTab === "queries" 
     ? queryLogs.filter(log => log.user.toLowerCase().includes(searchQuery.toLowerCase()) || log.query.toLowerCase().includes(searchQuery.toLowerCase()))
     : activeTab === "access"
@@ -50,14 +124,28 @@ export function AuditTrail() {
     : systemLogs.filter(log => log.user.toLowerCase().includes(searchQuery.toLowerCase()) || log.description.toLowerCase().includes(searchQuery.toLowerCase()));
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 relative">
+
+      {/* --- TOAST NOTIFICATION --- */}
+      {toast && (
+        <div className={`fixed bottom-8 right-8 px-6 py-4 rounded-xl shadow-2xl flex items-center gap-3 text-sm font-bold z-[100] transition-all duration-300 animate-in slide-in-from-bottom-5 fade-in ${
+          toast.type === 'success' ? 'bg-[#E6F7ED] text-[#006837] border-2 border-[#006837]/20' : 'bg-red-50 text-red-700 border-2 border-red-200'
+        }`}>
+          {toast.type === 'success' ? <CheckCircle className="h-5 w-5" /> : <AlertCircle className="h-5 w-5" />}
+          {toast.message}
+        </div>
+      )}
+
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl text-gray-900 mb-2">System Audit Trail</h1>
           <p className="text-gray-600">Monitor system usage, document access, and AI interactions</p>
         </div>
-        <button className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors shadow-sm cursor-pointer">
-          <Download className="h-4 w-4" />
+        <button 
+          onClick={() => setShowExportModal(true)}
+          className="flex items-center gap-2 px-5 py-2.5 bg-[#1D6FA3] text-white font-medium rounded-lg hover:bg-[#0B3C5D] transition-colors shadow-sm cursor-pointer active:scale-95"
+        >
+          <FileSpreadsheet className="h-4 w-4" />
           Export Report
         </button>
       </div>
@@ -82,7 +170,7 @@ export function AuditTrail() {
         <div className="bg-white rounded-lg shadow-sm p-6 border-t-4 border-[#CE0000]">
           <h3 className="text-3xl font-bold text-[#CE0000] mb-2">{systemLogs.length}</h3>
           <p className="text-gray-700 font-medium">Security Events</p>
-          <p className="text-sm text-gray-500 mt-1">Tracked system activities</p>
+          <p className="text-sm text-gray-500 mt-1">Logins and account creations</p>
         </div>
       </div>
 
@@ -126,8 +214,9 @@ export function AuditTrail() {
               </button>
             </div>
             
-            <div className="relative flex-1 md:w-64">
-                <Search className="absolute left-3 top-1/3 transform -translate-y-1/3 h-4 w-4 text-gray-400 pointer-events-none" />
+            <div className="flex gap-3">
+              <div className="relative flex-1 md:w-64">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
                 <input 
                   type="text" 
                   placeholder="Search logs..." 
@@ -135,17 +224,17 @@ export function AuditTrail() {
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="w-full pl-9 pr-10 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1D6FA3] transition-colors" 
                 />
-                {/* NEW: The Conditional Clear Button */}
                 {searchQuery && (
                   <button
                     onClick={() => setSearchQuery("")}
-                    className="absolute right-3 top-1/3 transform -translate-y-1/3 p-0.5 text-gray-400 hover:text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-full transition-all cursor-pointer"
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 p-0.5 text-gray-400 hover:text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-full transition-all cursor-pointer"
                     title="Clear search"
                   >
                     <X className="h-3.5 w-3.5" />
                   </button>
                 )}
               </div>
+            </div>
           </div>
         </div>
 
@@ -156,11 +245,9 @@ export function AuditTrail() {
                 <Loader2 className="h-8 w-8 animate-spin text-[#1D6FA3]" />
              </div>
           ) : activeTab === "queries" ? (
-            /* ADDED: table-fixed and min-w-[900px] */
             <table className="w-full text-left whitespace-nowrap table-fixed min-w-[900px]">
               <thead className="bg-[#F5F7FA] border-b border-gray-200">
                 <tr>
-                  {/* ADDED: Explicit width percentages */}
                   <th className="w-[25%] px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">User</th>
                   <th className="w-[45%] px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Query Sent to AI</th>
                   <th className="w-[20%] px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Timestamp</th>
@@ -201,11 +288,9 @@ export function AuditTrail() {
               </tbody>
             </table>
           ) : activeTab === "access" ? (
-            /* ADDED: table-fixed and min-w-[900px] */
             <table className="w-full text-left whitespace-nowrap table-fixed min-w-[900px]">
               <thead className="bg-[#F5F7FA] border-b border-gray-200">
                 <tr>
-                  {/* ADDED: Explicit width percentages */}
                   <th className="w-[25%] px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">User</th>
                   <th className="w-[45%] px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Document Accessed</th>
                   <th className="w-[10%] px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Action</th>
@@ -247,11 +332,9 @@ export function AuditTrail() {
               </tbody>
             </table>
           ) : activeTab === "versions" ? (
-            /* ADDED: table-fixed and min-w-[900px] */
             <table className="w-full text-left whitespace-nowrap table-fixed min-w-[900px]">
               <thead className="bg-[#F5F7FA] border-b border-gray-200">
                 <tr>
-                  {/* ADDED: Explicit width percentages */}
                   <th className="w-[35%] px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Document Name</th>
                   <th className="w-[10%] px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Version</th>
                   <th className="w-[20%] px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Updated By</th>
@@ -302,11 +385,9 @@ export function AuditTrail() {
               </tbody>
             </table>
           ) : activeTab === "system" ? (
-            /* ADDED: table-fixed and min-w-[900px] */
             <table className="w-full text-left whitespace-nowrap table-fixed min-w-[900px]">
               <thead className="bg-[#F5F7FA] border-b border-gray-200">
                 <tr>
-                  {/* ADDED: Explicit width percentages */}
                   <th className="w-[25%] px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">User Account</th>
                   <th className="w-[20%] px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Event Type</th>
                   <th className="w-[35%] px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Description</th>
@@ -347,6 +428,84 @@ export function AuditTrail() {
           ) : null}
         </div>
       </div>
+
+      {/* --- EXPORT MODAL --- */}
+      {showExportModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl overflow-hidden">
+            <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-[#F5F7FA]">
+              <div className="flex items-center gap-2">
+                <Download className="h-5 w-5 text-[#1D6FA3]" />
+                <h2 className="text-xl font-bold text-[#1F2937]">Export Audit Report</h2>
+              </div>
+              <button onClick={() => setShowExportModal(false)} className="p-2 hover:bg-gray-200 rounded-full transition-colors cursor-pointer">
+                <X className="h-5 w-5 text-gray-500" />
+              </button>
+            </div>
+            
+            <div className="p-6 space-y-5">
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-2">Select Log Type</label>
+                <select 
+                  value={exportType}
+                  onChange={(e) => setExportType(e.target.value as TabType)}
+                  className="w-full px-4 py-3 bg-[#F5F7FA] border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1D6FA3] cursor-pointer"
+                >
+                  <option value="queries">AI Query Logs</option>
+                  <option value="access">Document Access Logs</option>
+                  <option value="versions">Version History Logs</option>
+                  <option value="system">System Events</option>
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">Start Date</label>
+                  <div className="relative">
+                    <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                    <input 
+                      type="date" 
+                      value={exportDates.start}
+                      onChange={(e) => setExportDates({...exportDates, start: e.target.value})}
+                      className="w-full pl-9 pr-3 py-3 bg-[#F5F7FA] border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1D6FA3] text-sm cursor-pointer"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">End Date</label>
+                  <div className="relative">
+                    <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                    <input 
+                      type="date" 
+                      value={exportDates.end}
+                      onChange={(e) => setExportDates({...exportDates, end: e.target.value})}
+                      className="w-full pl-9 pr-3 py-3 bg-[#F5F7FA] border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1D6FA3] text-sm cursor-pointer"
+                    />
+                  </div>
+                </div>
+              </div>
+              <p className="text-xs text-gray-500 italic">Leave dates blank to export all history for this log type.</p>
+            </div>
+
+            <div className="p-6 border-t border-gray-100 bg-[#F9FAFB] flex justify-end gap-3">
+              <button 
+                onClick={() => setShowExportModal(false)} 
+                className="px-5 py-2.5 text-sm font-bold text-gray-600 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={handleExport} 
+                className="px-6 py-2.5 text-sm font-bold text-white rounded-xl bg-[#006837] hover:bg-[#00542c] transition-colors flex items-center gap-2 cursor-pointer active:scale-95 shadow-sm"
+              >
+                <FileSpreadsheet className="h-4 w-4" />
+                Download CSV
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
