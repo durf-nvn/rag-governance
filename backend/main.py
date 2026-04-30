@@ -697,35 +697,31 @@ def get_popular_topics():
     return topics
 
 @app.get("/system-stats")
-def get_system_stats(db: Session = Depends(get_db)):
+def get_system_stats():
     from vector_store import supabase
     try:
-        # 1. Get total registered users
-        users_count = db.query(models.User).count()
-
-        # 2. Get total AI queries asked
-        queries_res = supabase.table("query_logs").select("id").execute()
-        queries_count = len(queries_res.data) if queries_res.data else 0
-
-        # 3. Get total unique documents
-        docs_res = supabase.table("document_sections").select("metadata").execute()
-        unique_docs = set()
-        if docs_res.data:
-            for item in docs_res.data:
-                doc_name = item.get('metadata', {}).get('name')
-                if doc_name:
-                    unique_docs.add(doc_name)
-        docs_count = len(unique_docs)
-
+        # Fetch all metadata from the vector database
+        response = supabase.table("document_sections").select("metadata").execute()
+        
+        unique_active_docs = set()
+        
+        if response.data:
+            for item in response.data:
+                meta = item.get("metadata", {})
+                doc_name = meta.get("name")
+                status = meta.get("status", "Active") # Default to Active if missing
+                category = meta.get("category", "")
+                
+                # ONLY count the document if it has a name AND is not Archived
+                if doc_name and status != "Archived" and category != "Accreditation Evidence":
+                    unique_active_docs.add(doc_name)
+                    
         return {
-            "users": users_count,
-            "queries": queries_count,
-            "documents": docs_count
+            "documents": len(unique_active_docs)
         }
     except Exception as e:
-        print(f"Error fetching stats: {e}")
-        # Fallback values in case the database is empty or still initializing
-        return {"users": 0, "queries": 0, "documents": 0}
+        print(f"Stats error: {e}")
+        return {"documents": 0}
 
 @app.post("/feedback")
 def submit_feedback(request: FeedbackRequest):
