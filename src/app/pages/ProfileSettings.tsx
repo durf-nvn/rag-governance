@@ -40,11 +40,9 @@ export function ProfileSettings() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<"profile" | "security">("profile");
   
-  // LocalStorage Data
   const userEmail = localStorage.getItem("userEmail") || "";
   const userRole = localStorage.getItem("userRole") || "STUDENT";
   
-  // Profile State
   const [profileData, setProfileData] = useState({
     fullName: localStorage.getItem("userName") || "",
     program: localStorage.getItem("userDepartment") || ""
@@ -52,12 +50,10 @@ export function ProfileSettings() {
   const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
   const [profileStatus, setProfileStatus] = useState<{ type: "success" | "error", msg: string } | null>(null);
 
-  // Password & Modal State
   const [passwords, setPasswords] = useState({ current: "", new: "", confirm: "" });
   const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
   const [passwordStatus, setPasswordStatus] = useState<{ type: "success" | "error", msg: string } | null>(null);
   
-  // Countdown Modal Logic
   const [logoutCountdown, setLogoutCountdown] = useState<number | null>(null);
 
   useEffect(() => {
@@ -75,7 +71,6 @@ export function ProfileSettings() {
     navigate("/login");
   };
 
-  // --- HANDLERS ---
   const handleProfileUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
     setProfileStatus(null);
@@ -85,7 +80,7 @@ export function ProfileSettings() {
       const response = await axios.put("http://localhost:8000/users/profile", {
         email: userEmail,
         full_name: profileData.fullName,
-        program: profileData.program
+        program: userRole === "ADMIN" ? "ADMIN" : profileData.program 
       });
       
       localStorage.setItem("userName", response.data.full_name);
@@ -120,7 +115,6 @@ export function ProfileSettings() {
         new_password: passwords.new
       });
       
-      // Trigger the success modal countdown
       setLogoutCountdown(5);
     } catch (error: any) {
       setPasswordStatus({ type: "error", msg: error.response?.data?.detail || "Incorrect current password." });
@@ -129,20 +123,17 @@ export function ProfileSettings() {
   };
 
   return (
-    // FIXED OVERLAY: Covers the entire screen to hide the dashboard sidebar natively
-    <div className="fixed inset-0 z-[100] bg-[#F9FAFB] overflow-y-auto w-full h-full animate-in fade-in duration-300">
-      <div className="max-w-4xl mx-auto py-10 px-6 space-y-6">
+    <div className="w-full animate-in fade-in duration-300">
+      <div className="max-w-4xl mx-auto space-y-6 pb-10">
         
-        {/* BACK BUTTON */}
         <button 
           onClick={() => navigate("/app")}
-          className="flex items-center gap-2 text-gray-500 hover:text-gray-900 transition-colors mb-4 cursor-pointer w-max"
+          className="flex items-center gap-2 text-gray-500 hover:text-gray-900 transition-colors mb-2 cursor-pointer w-max"
         >
           <ArrowLeft className="h-4 w-4" />
           <span className="text-sm font-medium">Back to Dashboard</span>
         </button>
 
-        {/* HEADER */}
         <div className="border-b border-gray-200 pb-4">
           <h2 className="text-2xl font-semibold text-gray-800">Account Settings</h2>
           <p className="text-sm text-gray-500 mt-1">Manage your personal details and security credentials.</p>
@@ -150,7 +141,6 @@ export function ProfileSettings() {
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           
-          {/* SIDEBAR TABS */}
           <div className="md:col-span-1 space-y-1">
             <button 
               onClick={() => setActiveTab("profile")}
@@ -174,10 +164,8 @@ export function ProfileSettings() {
             </button>
           </div>
 
-          {/* MAIN CONTENT AREA */}
           <div className="md:col-span-3 space-y-6">
             
-            {/* PROFILE SUMMARY CARD */}
             <div className="bg-white rounded-xl border border-gray-200 p-5 flex items-center gap-5">
               <div className="w-14 h-14 bg-[#1D6FA3] rounded-full flex items-center justify-center flex-shrink-0">
                 <span className="text-lg font-semibold text-white">{profileData.fullName.charAt(0) || "U"}</span>
@@ -196,7 +184,6 @@ export function ProfileSettings() {
               </div>
             </div>
 
-            {/* TAB CONTENT: PROFILE */}
             {activeTab === "profile" ? (
               <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
                 <div className="p-4 border-b border-gray-100 bg-gray-50/50 flex items-center gap-2">
@@ -224,29 +211,40 @@ export function ProfileSettings() {
                       />
                     </div>
                     
-                    {/* DYNAMIC DROPDOWN IMPLEMENTATION */}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        {userRole === "STUDENT" ? "Course / Program" : "Department"}
-                      </label>
-                      <select
-                        required
-                        value={profileData.program}
-                        onChange={(e) => setProfileData({...profileData, program: e.target.value})}
-                        className="w-full px-3.5 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-[#1D6FA3] focus:border-[#1D6FA3] transition-colors cursor-pointer"
-                      >
-                        <option value="" disabled>Select your academic program</option>
-                        {academicPrograms.map((college, cIdx) => (
-                          <optgroup key={cIdx} label={college.college}>
-                            {college.programs.map((prog, pIdx) => (
-                              <option key={pIdx} value={prog.value}>
-                                {prog.label}
-                              </option>
-                            ))}
-                          </optgroup>
-                        ))}
-                      </select>
-                    </div>
+                    {userRole === "ADMIN" ? (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">System Role</label>
+                        <input
+                          type="text"
+                          value="ADMINISTRATOR"
+                          disabled
+                          className="w-full px-3.5 py-2 bg-gray-100 border border-gray-200 text-gray-500 rounded-lg text-sm cursor-not-allowed"
+                        />
+                      </div>
+                    ) : (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          {userRole === "STUDENT" ? "Course / Program" : "College / Department"}
+                        </label>
+                        <select
+                          required
+                          value={profileData.program}
+                          onChange={(e) => setProfileData({...profileData, program: e.target.value})}
+                          className="w-full px-3.5 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-[#1D6FA3] focus:border-[#1D6FA3] transition-colors cursor-pointer"
+                        >
+                          <option value="" disabled>Select your academic program</option>
+                          {academicPrograms.map((college, cIdx) => (
+                            <optgroup key={cIdx} label={college.college}>
+                              {college.programs.map((prog, pIdx) => (
+                                <option key={pIdx} value={prog.value}>
+                                  {prog.label}
+                                </option>
+                              ))}
+                            </optgroup>
+                          ))}
+                        </select>
+                      </div>
+                    )}
                   </div>
 
                   <div className="pt-2 flex justify-end">
@@ -261,7 +259,6 @@ export function ProfileSettings() {
                 </form>
               </div>
             ) : (
-              /* TAB CONTENT: SECURITY */
               <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
                 <div className="p-4 border-b border-gray-100 bg-gray-50/50 flex items-center gap-2">
                   <Lock className="h-4 w-4 text-gray-500" />
@@ -325,7 +322,6 @@ export function ProfileSettings() {
           </div>
         </div>
 
-        {/* --- SUCCESS LOGOUT MODAL --- */}
         {logoutCountdown !== null && (
           <div className="fixed inset-0 z-[200] flex items-center justify-center bg-gray-900/60 backdrop-blur-sm animate-in fade-in">
             <div className="bg-white p-8 rounded-2xl shadow-xl max-w-sm w-full text-center animate-in zoom-in-95 duration-300 mx-4">

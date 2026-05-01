@@ -1,5 +1,5 @@
 import { Outlet, Link, useLocation, useNavigate } from "react-router";
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   LayoutDashboard,
   Database,
@@ -30,12 +30,17 @@ export function DashboardLayout() {
   const location = useLocation();
   const navigate = useNavigate();
   
-  // FIXED: We extract 'userRole' from our context instead of 'user'
   const { userRole } = useRole();
   
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
+  
+  // Reference for the dropdown menu to detect outside clicks
+  const userMenuRef = useRef<HTMLDivElement>(null);
+
+  // Check if we are currently on the Profile Settings page
+  const isProfileSettings = location.pathname === '/app/profile-settings';
 
   const currentRole = userRole || "STUDENT"
   const userProfile = {
@@ -43,6 +48,22 @@ export function DashboardLayout() {
     name: localStorage.getItem('userName') || "CTU User",
     email: localStorage.getItem('userEmail') || "user@ctu.edu.ph"
   }
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
+        setShowUserMenu(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  // Close dropdown when navigating to a new page
+  useEffect(() => {
+    setShowUserMenu(false);
+  }, [location.pathname]);
 
   const allMenuItems = [
     { path: "/app", label: "Dashboard", icon: LayoutDashboard, permission: "canAccessDashboard" },
@@ -78,7 +99,6 @@ export function DashboardLayout() {
   const badge = getRoleBadge();
 
   const handleLogout = () => {
-    // FIXED: Clear the JWT token so the user is securely logged out
     localStorage.removeItem('token');
     navigate("/login");
   };
@@ -100,15 +120,18 @@ export function DashboardLayout() {
             </div>
           </div>
 
+          {/* Conditionally hide search bar when in Profile Settings */}
           <div className="flex items-center gap-3 flex-1 max-w-xl mx-8">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-[#6B7280]" />
-              <input
-                type="text"
-                placeholder="Search documents, policies..."
-                className="w-full pl-10 pr-4 py-2 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm text-[#1F2937] placeholder-[#6B7280] focus:outline-none focus:ring-2 focus:ring-[#1D6FA3] focus:border-transparent"
-              />
-            </div>
+            {!isProfileSettings && (
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-[#6B7280]" />
+                <input
+                  type="text"
+                  placeholder="Search documents, policies..."
+                  className="w-full pl-10 pr-4 py-2 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm text-[#1F2937] placeholder-[#6B7280] focus:outline-none focus:ring-1 focus:ring-[#1D6FA3] focus:border-transparent"
+                />
+              </div>
+            )}
           </div>
 
           <div className="flex items-center gap-3">
@@ -116,16 +139,17 @@ export function DashboardLayout() {
 
             <button
               onClick={() => setShowNotifications(true)}
-              className="relative p-2 hover:bg-[#F5F7FA] rounded-lg transition-colors"
+              className="relative p-2 hover:bg-[#F5F7FA] rounded-lg transition-colors cursor-pointer"
             >
               <Bell className="h-5 w-5 text-[#6B7280]" />
               <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-[#EF4444] rounded-full"></span>
             </button>
 
-            <div className="relative">
+            {/* Menu container with reference for outside clicks */}
+            <div className="relative" ref={userMenuRef}>
               <button
                 onClick={() => setShowUserMenu(!showUserMenu)}
-                className="flex items-center gap-2 px-3 py-2 hover:bg-[#F5F7FA] rounded-lg transition-colors"
+                className="flex items-center gap-2 px-3 py-2 hover:bg-[#F5F7FA] rounded-lg transition-colors cursor-pointer"
               >
                 <div className={`w-8 h-8 ${badge.color} rounded-lg flex items-center justify-center`}>
                   {badge.icon === Shield && <Shield className="h-4 w-4 text-white" />}
@@ -144,13 +168,9 @@ export function DashboardLayout() {
                     <p className="text-sm font-medium text-[#1F2937]">{userProfile.name}</p>
                     <p className="text-xs text-[#6B7280]">{userProfile.email}</p>
                   </div>
-                  <button className="w-full px-4 py-2 text-left text-sm text-[#1F2937] hover:bg-[#F5F7FA] flex items-center gap-2 transition-colors">
-                    <User className="h-4 w-4 text-[#6B7280]" />
-                    My Profile
-                  </button>
                   <Link 
                     to="/app/profile-settings" 
-                    className="w-full px-4 py-2 text-left text-sm text-[#1F2937] hover:bg-[#F5F7FA] flex items-center gap-2 transition-colors"
+                    className="w-full px-4 py-2 text-left text-sm text-[#1F2937] hover:bg-[#F5F7FA] flex items-center gap-2 transition-colors cursor-pointer"
                   >
                     <Settings className="h-4 w-4 text-[#6B7280]" />
                     <span>Settings</span>
@@ -158,7 +178,7 @@ export function DashboardLayout() {
                   <div className="border-t border-[#E5E7EB] my-1"></div>
                   <button
                     onClick={handleLogout}
-                    className="w-full px-4 py-2 text-left text-sm text-[#EF4444] hover:bg-red-50 flex items-center gap-2 transition-colors"
+                    className="w-full px-4 py-2 text-left text-sm text-[#EF4444] hover:bg-red-50 flex items-center gap-2 transition-colors cursor-pointer"
                   >
                     <LogOut className="h-4 w-4" />
                     Sign Out
@@ -170,58 +190,60 @@ export function DashboardLayout() {
         </div>
       </nav>
 
-      {/* Sidebar */}
-      <aside
-        className={`fixed left-0 top-20 bottom-0 bg-white border-r border-[#E5E7EB] transition-all duration-300 z-20 ${
-          sidebarCollapsed ? "w-16" : "w-64"
-        }`}
-      >
-        <div className="flex flex-col h-full">
-          <div className="flex-1 overflow-y-auto py-4 px-3">
-            {menuItems.map((item) => {
-              const isActive = location.pathname === item.path;
-              const Icon = item.icon;
+      {/* Conditionally hide sidebar when in Profile Settings */}
+      {!isProfileSettings && (
+        <aside
+          className={`fixed left-0 top-[73px] bottom-0 bg-white border-r border-[#E5E7EB] transition-all duration-300 z-20 ${
+            sidebarCollapsed ? "w-16" : "w-64"
+          }`}
+        >
+          <div className="flex flex-col h-full">
+            <div className="flex-1 overflow-y-auto py-4 px-3">
+              {menuItems.map((item) => {
+                const isActive = location.pathname === item.path;
+                const Icon = item.icon;
 
-              return (
-                <Link
-                  key={item.path}
-                  to={item.path}
-                  className={`flex items-center gap-3 px-3 py-2.5 mb-1 rounded-lg transition-all ${
-                    isActive
-                      ? "bg-[#1D6FA3] text-white"
-                      : "text-[#6B7280] hover:bg-[#F5F7FA] hover:text-[#1F2937]"
-                  }`}
-                  title={sidebarCollapsed ? item.label : undefined}
-                >
-                  <Icon className={`h-5 w-5 flex-shrink-0 ${isActive ? "text-white" : ""}`} />
-                  {!sidebarCollapsed && <span className="text-sm font-medium">{item.label}</span>}
-                </Link>
-              );
-            })}
+                return (
+                  <Link
+                    key={item.path}
+                    to={item.path}
+                    className={`flex items-center gap-3 px-3 py-2.5 mb-1 rounded-lg transition-all cursor-pointer ${
+                      isActive
+                        ? "bg-[#1D6FA3] text-white"
+                        : "text-[#6B7280] hover:bg-[#F5F7FA] hover:text-[#1F2937]"
+                    }`}
+                    title={sidebarCollapsed ? item.label : undefined}
+                  >
+                    <Icon className={`h-5 w-5 flex-shrink-0 ${isActive ? "text-white" : ""}`} />
+                    {!sidebarCollapsed && <span className="text-sm font-medium">{item.label}</span>}
+                  </Link>
+                );
+              })}
+            </div>
+
+            <div className="border-t border-[#E5E7EB] p-3">
+              <button
+                onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+                className="w-full flex items-center justify-center p-2 hover:bg-[#F5F7FA] rounded-lg transition-colors cursor-pointer"
+              >
+                {sidebarCollapsed ? (
+                  <ChevronRight className="h-5 w-5 text-[#6B7280]" />
+                ) : (
+                  <div className="flex items-center gap-2 text-sm text-[#6B7280]">
+                    <ChevronLeft className="h-5 w-5" />
+                    <span>Collapse</span>
+                  </div>
+                )}
+              </button>
+            </div>
           </div>
+        </aside>
+      )}
 
-          <div className="border-t border-[#E5E7EB] p-3">
-            <button
-              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-              className="w-full flex items-center justify-center p-2 hover:bg-[#F5F7FA] rounded-lg transition-colors"
-            >
-              {sidebarCollapsed ? (
-                <ChevronRight className="h-5 w-5 text-[#6B7280]" />
-              ) : (
-                <div className="flex items-center gap-2 text-sm text-[#6B7280]">
-                  <ChevronLeft className="h-5 w-5" />
-                  <span>Collapse</span>
-                </div>
-              )}
-            </button>
-          </div>
-        </div>
-      </aside>
-
-      {/* Main Content */}
+      {/* Main Content conditionally adjusts margins if sidebar is hidden */}
       <main
-        className={`transition-all duration-300 pt-[65px] min-h-screen ${
-          sidebarCollapsed ? "ml-16" : "ml-64"
+        className={`transition-all duration-300 pt-[73px] min-h-screen ${
+          isProfileSettings ? "ml-0" : (sidebarCollapsed ? "ml-16" : "ml-64")
         }`}
       >
         <div className="p-8">
