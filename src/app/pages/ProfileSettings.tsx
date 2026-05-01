@@ -3,7 +3,6 @@ import { User, Lock, Shield, CheckCircle, AlertCircle, Loader2, Mail, BookOpen, 
 import axios from "axios";
 import { useNavigate } from "react-router";
 
-// Structured Academic Programs
 const academicPrograms = [
   {
     college: "College of Education (COEd)",
@@ -40,12 +39,13 @@ export function ProfileSettings() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<"profile" | "security">("profile");
   
-  const userEmail = localStorage.getItem("userEmail") || "";
   const userRole = localStorage.getItem("userRole") || "STUDENT";
   
+  // Added email to the profile state
   const [profileData, setProfileData] = useState({
     fullName: localStorage.getItem("userName") || "",
-    program: localStorage.getItem("userDepartment") || ""
+    program: localStorage.getItem("userDepartment") || "",
+    email: localStorage.getItem("userEmail") || ""
   });
   const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
   const [profileStatus, setProfileStatus] = useState<{ type: "success" | "error", msg: string } | null>(null);
@@ -54,7 +54,9 @@ export function ProfileSettings() {
   const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
   const [passwordStatus, setPasswordStatus] = useState<{ type: "success" | "error", msg: string } | null>(null);
   
+  // Dynamic Modal State
   const [logoutCountdown, setLogoutCountdown] = useState<number | null>(null);
+  const [modalContent, setModalContent] = useState({ title: "", message: "" });
 
   useEffect(() => {
     let timer: NodeJS.Timeout;
@@ -76,9 +78,12 @@ export function ProfileSettings() {
     setProfileStatus(null);
     setIsUpdatingProfile(true);
 
+    const originalEmail = localStorage.getItem("userEmail") || "";
+
     try {
       const response = await axios.put("http://localhost:8000/users/profile", {
-        email: userEmail,
+        email: originalEmail, // Send old email to identify user
+        new_email: profileData.email, // Send potentially new email
         full_name: profileData.fullName,
         program: userRole === "ADMIN" ? "ADMIN" : profileData.program 
       });
@@ -86,7 +91,18 @@ export function ProfileSettings() {
       localStorage.setItem("userName", response.data.full_name);
       localStorage.setItem("userDepartment", response.data.program);
       
-      setProfileStatus({ type: "success", msg: "Profile information updated successfully." });
+      // If the email was changed, update storage and trigger the logout modal
+      if (response.data.email !== originalEmail) {
+        localStorage.setItem("userEmail", response.data.email);
+        setModalContent({
+          title: "Email Address Updated!",
+          message: "You have successfully changed your email. For your security, please sign in again using your new email address."
+        });
+        setLogoutCountdown(5);
+      } else {
+        setProfileStatus({ type: "success", msg: "Profile information updated successfully." });
+      }
+
     } catch (error: any) {
       setProfileStatus({ type: "error", msg: error.response?.data?.detail || "Failed to update profile." });
     } finally {
@@ -110,11 +126,15 @@ export function ProfileSettings() {
     setIsUpdatingPassword(true);
     try {
       await axios.post("http://localhost:8000/users/change-password", {
-        email: userEmail,
+        email: localStorage.getItem("userEmail"),
         current_password: passwords.current,
         new_password: passwords.new
       });
       
+      setModalContent({
+        title: "Password Changed!",
+        message: "You have successfully changed your password. For your security, you must sign in again with your new credentials."
+      });
       setLogoutCountdown(5);
     } catch (error: any) {
       setPasswordStatus({ type: "error", msg: error.response?.data?.detail || "Incorrect current password." });
@@ -174,7 +194,7 @@ export function ProfileSettings() {
                 <h3 className="text-lg font-semibold text-gray-800">{profileData.fullName || "CTU User"}</h3>
                 <div className="flex flex-wrap items-center gap-3 mt-1.5 text-sm">
                   <span className="flex items-center gap-1.5 text-gray-500">
-                    <Mail className="h-3.5 w-3.5" /> {userEmail}
+                    <Mail className="h-3.5 w-3.5" /> {profileData.email}
                   </span>
                   <span className="text-gray-300">|</span>
                   <span className="flex items-center gap-1.5 text-[#1D6FA3] font-medium">
@@ -211,6 +231,18 @@ export function ProfileSettings() {
                       />
                     </div>
                     
+                    {/* NEW EMAIL FIELD */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Email Address</label>
+                      <input
+                        type="email"
+                        required
+                        value={profileData.email}
+                        onChange={(e) => setProfileData({...profileData, email: e.target.value})}
+                        className="w-full px-3.5 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-[#1D6FA3] focus:border-[#1D6FA3] transition-colors"
+                      />
+                    </div>
+
                     {userRole === "ADMIN" ? (
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">System Role</label>
@@ -322,21 +354,23 @@ export function ProfileSettings() {
           </div>
         </div>
 
+        {/* --- DYNAMIC SUCCESS MODAL --- */}
         {logoutCountdown !== null && (
           <div className="fixed inset-0 z-[200] flex items-center justify-center bg-gray-900/60 backdrop-blur-sm animate-in fade-in">
             <div className="bg-white p-8 rounded-2xl shadow-xl max-w-sm w-full text-center animate-in zoom-in-95 duration-300 mx-4">
               <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-5">
                 <CheckCircle className="h-8 w-8 text-[#006837]" />
               </div>
-              <h3 className="text-xl font-bold text-gray-900 mb-2">Password Changed!</h3>
+              <h3 className="text-xl font-bold text-gray-900 mb-2">{modalContent.title}</h3>
               <p className="text-sm text-gray-500 leading-relaxed mb-6">
-                For your security, you must sign in again with your new credentials. You will be redirected in <strong className="text-[#1D6FA3] text-base">{logoutCountdown}</strong> seconds.
+                {modalContent.message} <br/><br/>
+                Redirecting in <strong className="text-[#1D6FA3] text-base">{logoutCountdown}</strong> seconds...
               </p>
               <button 
                 onClick={handleForceLogout}
                 className="w-full py-2.5 bg-gray-100 text-gray-700 font-medium rounded-lg hover:bg-gray-200 transition-colors flex items-center justify-center gap-2 text-sm cursor-pointer"
               >
-                <LogOut className="h-4 w-4" /> Okay
+                <LogOut className="h-4 w-4" /> Sign out now
               </button>
             </div>
           </div>

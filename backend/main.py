@@ -76,7 +76,8 @@ class ChangePasswordRequest(BaseModel):
     new_password: str
 
 class UpdateProfileRequest(BaseModel):
-    email: str
+    email: str       # The current email (to find them in the database)
+    new_email: str   # The new email they want to change to
     full_name: str
     program: str
 
@@ -1322,20 +1323,25 @@ def update_profile(req: UpdateProfileRequest, db: Session = Depends(get_db)):
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     
-    # 2. Update core user details
+    # 2. Handle Email Change Logic
+    if req.new_email != req.email:
+        # Check if someone else is already using this new email
+        existing_email = db.query(models.User).filter(models.User.email == req.new_email).first()
+        if existing_email:
+            raise HTTPException(status_code=400, detail="This email is already in use by another account.")
+        user.email = req.new_email
+    
+    # 3. Update core user details
     user.full_name = req.full_name
     
-    # 3. Relational Table Routing
+    # 4. Relational Table Routing
     if user.role == "STUDENT":
-        # Update the linked student_profiles table
         if user.student_profile:
             user.student_profile.course = req.program
         else:
-            # Failsafe: Create it if it somehow doesn't exist
             new_profile = models.StudentProfile(user_id=user.id, course=req.program)
             db.add(new_profile)
     else:
-        # Update the core users table for Faculty/Admin
         user.department = req.program
         
     db.commit()
@@ -1343,5 +1349,6 @@ def update_profile(req: UpdateProfileRequest, db: Session = Depends(get_db)):
     return {
         "message": "Profile updated successfully!", 
         "full_name": user.full_name, 
-        "program": req.program
+        "program": req.program,
+        "email": user.email  # Send back the confirmed email
     }
