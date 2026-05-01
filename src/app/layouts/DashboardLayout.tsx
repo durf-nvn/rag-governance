@@ -120,19 +120,7 @@ export function DashboardLayout() {
             </div>
           </div>
 
-          {/* Conditionally hide search bar when in Profile Settings */}
-          <div className="flex items-center gap-3 flex-1 max-w-xl mx-8">
-            {!isProfileSettings && (
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-[#6B7280]" />
-                <input
-                  type="text"
-                  placeholder="Search documents, policies..."
-                  className="w-full pl-10 pr-4 py-2 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm text-[#1F2937] placeholder-[#6B7280] focus:outline-none focus:ring-1 focus:ring-[#1D6FA3] focus:border-transparent"
-                />
-              </div>
-            )}
-          </div>
+          
 
           <div className="flex items-center gap-3">
             <RoleSwitcher />
@@ -193,12 +181,12 @@ export function DashboardLayout() {
       {/* Conditionally hide sidebar when in Profile Settings */}
       {!isProfileSettings && (
         <aside
-          className={`fixed left-0 top-[73px] bottom-0 bg-white border-r border-[#E5E7EB] transition-all duration-300 z-20 ${
+          className={`fixed left-0 top-20 bottom-0 bg-white border-r border-[#E5E7EB] transition-all duration-300 z-20 ${
             sidebarCollapsed ? "w-16" : "w-64"
           }`}
         >
           <div className="flex flex-col h-full">
-            <div className="flex-1 overflow-y-auto py-4 px-3">
+            <div className="top-20 flex-1 overflow-y-auto py-4 px-3">
               {menuItems.map((item) => {
                 const isActive = location.pathname === item.path;
                 const Icon = item.icon;
