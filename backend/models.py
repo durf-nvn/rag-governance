@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Text, DateTime, Boolean, ForeignKey
+from sqlalchemy import Column, String, Text, DateTime, Boolean, ForeignKey, Integer
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 import uuid
@@ -35,3 +35,16 @@ class OTPVerification(Base):
     email = Column(String(255), unique=True, nullable=False)
     otp_code = Column(String(6), nullable=False)
     expires_at = Column(DateTime, nullable=False)
+
+# --- NEW: ANNOUNCEMENT TABLE ---
+class Announcement(Base):
+    __tablename__ = "announcements"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    title = Column(String(255), nullable=False)
+    content = Column(Text, nullable=False)
+    recipients = Column(String(255), nullable=False) 
+    sent_date = Column(DateTime, default=datetime.utcnow)
+    sent_by = Column(String(255), nullable=False)
+    status = Column(String(50), default="Sent") # Sent, Scheduled, Draft
+    read_count = Column(Integer, default=0)
+    total_recipients = Column(Integer, default=0)
