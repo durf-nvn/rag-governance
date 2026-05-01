@@ -11,6 +11,7 @@ import { GovernanceReference } from "./pages/GovernanceReference";
 import { AuditTrail } from "./pages/AuditTrail";
 import { UsersRoles } from "./pages/UsersRoles";
 import { Settings } from "./pages/Settings";
+import { ProfileSettings } from "./pages/ProfileSettings";
 import { BroadcastAnnouncement } from "./pages/BroadcastAnnouncement";
 import { DocumentGenerator } from "./pages/DocumentGenerator";
 import { AIDocumentGenerator } from "./pages/AIDocumentGenerator";
@@ -103,6 +104,14 @@ export const router = createBrowserRouter([
             element: (
               <ProtectedRoute permission="canAccessSettings">
                 <Settings />
+              </ProtectedRoute>
+            ),
+          },
+          {
+            path: "profile-settings",
+            element: (
+              <ProtectedRoute>
+                <ProfileSettings />
               </ProtectedRoute>
             ),
           },

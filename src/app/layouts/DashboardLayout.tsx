@@ -148,10 +148,13 @@ export function DashboardLayout() {
                     <User className="h-4 w-4 text-[#6B7280]" />
                     My Profile
                   </button>
-                  <button className="w-full px-4 py-2 text-left text-sm text-[#1F2937] hover:bg-[#F5F7FA] flex items-center gap-2 transition-colors">
+                  <Link 
+                    to="/app/profile-settings" 
+                    className="w-full px-4 py-2 text-left text-sm text-[#1F2937] hover:bg-[#F5F7FA] flex items-center gap-2 transition-colors"
+                  >
                     <Settings className="h-4 w-4 text-[#6B7280]" />
-                    Settings
-                  </button>
+                    <span>Settings</span>
+                  </Link>
                   <div className="border-t border-[#E5E7EB] my-1"></div>
                   <button
                     onClick={handleLogout}

@@ -70,6 +70,16 @@ class UserCreateRequest(BaseModel):
     password: str
 # ------------------------------------------
 
+class ChangePasswordRequest(BaseModel):
+    email: str
+    current_password: str
+    new_password: str
+
+class UpdateProfileRequest(BaseModel):
+    email: str
+    full_name: str
+    program: str
+
 class AccessLogRequest(BaseModel):
     document_name: str
     action_type: str
@@ -1287,3 +1297,51 @@ async def evaluate_grades(file: UploadFile = File(...)):
     except Exception as e:
         print(f"Grade Evaluation Error: {e}")
         raise HTTPException(status_code=500, detail="Failed to evaluate grades.")
+    
+@app.post("/users/change-password")
+def change_password(req: ChangePasswordRequest, db: Session = Depends(get_db)):
+    # 1. Find the user
+    user = db.query(models.User).filter(models.User.email == req.email).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # 2. Verify their current password (Security Check)
+    if not utils.verify_password(req.current_password, user.hashed_password):
+        raise HTTPException(status_code=400, detail="Incorrect current password")
+
+    # 3. Hash and save the new password
+    user.hashed_password = utils.hash_password(req.new_password)
+    db.commit()
+    
+    return {"message": "Password successfully updated!"}
+
+@app.put("/users/profile")
+def update_profile(req: UpdateProfileRequest, db: Session = Depends(get_db)):
+    # 1. Fetch the core user
+    user = db.query(models.User).filter(models.User.email == req.email).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # 2. Update core user details
+    user.full_name = req.full_name
+    
+    # 3. Relational Table Routing
+    if user.role == "STUDENT":
+        # Update the linked student_profiles table
+        if user.student_profile:
+            user.student_profile.course = req.program
+        else:
+            # Failsafe: Create it if it somehow doesn't exist
+            new_profile = models.StudentProfile(user_id=user.id, course=req.program)
+            db.add(new_profile)
+    else:
+        # Update the core users table for Faculty/Admin
+        user.department = req.program
+        
+    db.commit()
+    
+    return {
+        "message": "Profile updated successfully!", 
+        "full_name": user.full_name, 
+        "program": req.program
+    }
