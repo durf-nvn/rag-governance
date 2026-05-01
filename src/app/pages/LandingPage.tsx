@@ -96,7 +96,7 @@ export function LandingPage() {
               to="/login" 
               className="px-6 py-2.5 text-sm font-medium text-[#1F2937] hover:text-[#1D6FA3] transition-colors"
             >
-              Login
+              Sign In
             </Link>
             <Link 
               to="/signup" 
