@@ -70,7 +70,6 @@ export function DashboardLayout() {
     { path: "/app/knowledge-repository", label: "Knowledge Repository", icon: Database, permission: "canAccessKnowledgeRepository" },
     { path: "/app/ask-policy", label: "Ask Policy", icon: MessageSquare, permission: "canAccessAskPolicy" },
     { path: "/app/accreditation-support", label: "Accreditation Support", icon: Award, permission: "canAccessAccreditationSupport" },
-    { path: "/app/governance-reference", label: "Governance Reference", icon: FileText, permission: "canAccessGovernanceReference" },
     { path: "/app/audit-trail", label: "Audit Trail", icon: Clock, permission: "canAccessAuditTrail" },
     { path: "/app/users-roles", label: "Users & Roles", icon: Users, permission: "canAccessUsersRoles" },
     { path: "/app/broadcast-announcement", label: "Broadcast Announcement", icon: Radio, permission: "canAccessBroadcastAnnouncement" },
