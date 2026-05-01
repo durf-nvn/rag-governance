@@ -94,6 +94,11 @@ class VerifyOTPRequest(BaseModel):
     email: EmailStr
     otp_code: str
 
+class AccreditationReviewRequest(BaseModel):
+    document_name: str
+    status: str # "Approved" or "Needs Revision"
+    feedback: str = ""
+
 models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
@@ -909,14 +914,15 @@ def archive_document(doc_name: str):
         print(f"Archive error: {e}")
         raise HTTPException(status_code=500, detail="Failed to archive document")
     
-# 1. THE UPLOAD ROUTE
+# 1. UPDATED UPLOAD ROUTE
 @app.post("/upload-accreditation-evidence")
 async def upload_accreditation_evidence(
     file: UploadFile = File(...),
     document_name: str = Form(...),
     program: str = Form(...),
     area_code: str = Form(...),
-    requirement_target: str = Form(...) # <--- NEW: Catch the exact requirement
+    requirement_target: str = Form(...),
+    uploaded_by: str = Form(...) # <--- NEW: Track who uploaded it
 ):
     import time, io, PyPDF2
     from vector_store import supabase, add_to_vector_db
@@ -957,40 +963,94 @@ async def upload_accreditation_evidence(
             "category": "Accreditation Evidence",
             "office": "Quality Assurance",
             "version": "1.0",
-            "status": "Active",
+            "status": "Pending", # <--- NEW: Defaults to Pending!
             "program": program,
             "area_code": area_code,
-            "requirement_target": requirement_target, # <--- NEW: Save it to database!
+            "requirement_target": requirement_target, 
+            "uploaded_by": uploaded_by, # <--- NEW: Track the faculty member
+            "admin_feedback": "",
             "upload_date": datetime.now().isoformat(),
             "file_url": public_url
         }
 
         add_to_vector_db(extracted_text, metadata)
-        return {"message": "Evidence successfully uploaded and linked to specific requirement!"}
+        return {"message": "Evidence successfully uploaded and is pending Admin review!"}
 
     except Exception as e:
         print(f"Evidence upload error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-# 2. THE STATUS ROUTE
+# --- NEW: ADMIN REVIEW QUEUE ROUTE ---
+@app.get("/admin/accreditation-pending")
+def get_pending_accreditation():
+    from vector_store import supabase
+    try:
+        res = supabase.table("document_sections").select("metadata").eq("metadata->>category", "Accreditation Evidence").eq("metadata->>status", "Pending").execute()
+        
+        unique_docs = {}
+        if res.data:
+            for item in res.data:
+                meta = item.get('metadata', {})
+                doc_name = meta.get('name')
+                if doc_name and doc_name not in unique_docs:
+                    unique_docs[doc_name] = {
+                        "name": doc_name,
+                        "program": meta.get('program', 'Unknown'),
+                        "area_code": meta.get('area_code', 'Unknown'),
+                        "target": meta.get('requirement_target', 'Unknown'),
+                        "uploaded_by": meta.get('uploaded_by', 'Faculty Member'),
+                        "date": meta.get('upload_date', '').split('T')[0],
+                        "url": meta.get('file_url')
+                    }
+        return list(unique_docs.values())
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Failed to fetch pending queue")
+
+# --- NEW: ADMIN APPROVAL/REJECTION ROUTE ---
+@app.post("/admin/accreditation-review")
+def review_accreditation(req: AccreditationReviewRequest):
+    from vector_store import supabase
+    try:
+        # Fetch all chunks of this document
+        chunks_res = supabase.table("document_sections").select("id, metadata").eq("metadata->>name", req.document_name).execute()
+        
+        if not chunks_res.data:
+            raise HTTPException(status_code=404, detail="Document not found")
+
+        # Update status and feedback for all chunks
+        for chunk in chunks_res.data:
+            chunk_meta = chunk['metadata']
+            chunk_meta['status'] = req.status
+            chunk_meta['admin_feedback'] = req.feedback
+            
+            supabase.table("document_sections").update({"metadata": chunk_meta}).eq("id", chunk['id']).execute()
+
+        # NOTE FOR YOUR TEAMMATE: Insert the Notification Trigger right here!
+        # Example: if req.status == "Approved", trigger "Your document was approved!" to the specific faculty member.
+
+        return {"message": f"Document successfully marked as {req.status}!"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Failed to process review")
+
+# 2. THE UPDATED STATUS ROUTE (Only counts Approved docs!)
 @app.get("/accreditation-status/{program}")
 def get_accreditation_status(program: str):
     from vector_store import supabase
     try:
-        res = supabase.table("document_sections").select("metadata").eq("metadata->>category", "Accreditation Evidence").eq("metadata->>program", program).eq("metadata->>status", "Active").execute()
+        # NOTICE: We changed "Active" to "Approved" so Pending docs don't artificially inflate the score!
+        res = supabase.table("document_sections").select("metadata").eq("metadata->>category", "Accreditation Evidence").eq("metadata->>program", program).eq("metadata->>status", "Approved").execute()
         
-        # Group unique fulfilled requirements by Area Code
         fulfilled_reqs = {}
         if res.data:
             for item in res.data:
                 meta = item.get('metadata', {})
                 area = meta.get('area_code')
-                req_target = meta.get('requirement_target') # <--- Look for the explicit target
+                req_target = meta.get('requirement_target')
                 
                 if area and req_target:
                     if area not in fulfilled_reqs:
                         fulfilled_reqs[area] = set()
-                    fulfilled_reqs[area].add(req_target) # Add the unique requirement
+                    fulfilled_reqs[area].add(req_target)
 
         AREA_TEMPLATES = {
             "Area I": ["Approved Board Resolution of VMGO", "Dissemination Evidence (Photos, Memos)", "Stakeholder Awareness Survey Rating"],
@@ -1019,7 +1079,6 @@ def get_accreditation_status(program: str):
         
         for code, reqs in AREA_TEMPLATES.items():
             required_count = len(reqs)
-            # Count how many unique requirements were actually met
             ev_count = len(fulfilled_reqs.get(code, set())) 
             capped_ev = min(ev_count, required_count)
             
@@ -1047,10 +1106,9 @@ def get_accreditation_status(program: str):
             "areas": areas_list
         }
     except Exception as e:
-        print(f"Status error: {e}")
         raise HTTPException(status_code=500, detail="Failed to calculate status")
 
-# 3. THE DETAILS ROUTE
+# 3. THE UPDATED DETAILS ROUTE (Sends status to the frontend)
 @app.get("/accreditation-details/{program}/{area_code}")
 def get_accreditation_details(program: str, area_code: str):
     from vector_store import supabase
@@ -1058,7 +1116,7 @@ def get_accreditation_details(program: str, area_code: str):
         response = supabase.table("document_sections").select("metadata").eq("metadata->>category", "Accreditation Evidence").eq("metadata->>program", program).eq("metadata->>area_code", area_code).execute()
         
         unique_docs = {}
-        fulfilled_targets = set() # Track exactly which requirements have files
+        fulfilled_targets = set() 
         
         if response.data:
             for item in response.data:
@@ -1066,17 +1124,21 @@ def get_accreditation_details(program: str, area_code: str):
                 if meta.get('status') == "Archived": continue
                 
                 doc_name = meta.get('name')
-                req_target = meta.get('requirement_target') # Get the tag
+                req_target = meta.get('requirement_target') 
+                doc_status = meta.get('status', 'Pending')
                 
-                if req_target:
-                    fulfilled_targets.add(req_target) # Add to fulfilled list
+                # ONLY mark as fulfilled if it is Approved!
+                if req_target and doc_status == "Approved":
+                    fulfilled_targets.add(req_target) 
                 
                 if doc_name and doc_name not in unique_docs:
                     unique_docs[doc_name] = {
                         "name": doc_name,
                         "date": meta.get('upload_date', '').split('T')[0] if 'upload_date' in meta else 'Recently',
                         "url": meta.get('file_url') or meta.get('source', '#'),
-                        "target": req_target or "Uncategorized" # Show in UI table
+                        "target": req_target or "Uncategorized",
+                        "status": doc_status, # <--- Pass the status to the React UI
+                        "feedback": meta.get('admin_feedback', '')
                     }
                     
         uploaded_files = list(unique_docs.values())
@@ -1095,12 +1157,9 @@ def get_accreditation_details(program: str, area_code: str):
         }
         
         template_reqs = AREA_TEMPLATES.get(area_code, [])
-        
         requirements = []
         for index, req_text in enumerate(template_reqs):
-            # THE FIX: Is the exact text inside the fulfilled targets set?
             is_met = req_text in fulfilled_targets 
-            
             requirements.append({
                 "id": index + 1,
                 "text": req_text,
@@ -1112,7 +1171,6 @@ def get_accreditation_details(program: str, area_code: str):
             "uploadedFiles": sorted(uploaded_files, key=lambda x: x['date'], reverse=True)
         }
     except Exception as e:
-        print(f"Details error: {e}")
         raise HTTPException(status_code=500, detail="Failed to fetch details")
 
 @app.get("/audit/queries")
