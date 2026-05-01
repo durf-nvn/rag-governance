@@ -709,36 +709,66 @@ def get_popular_topics():
     return topics
 
 @app.get("/system-stats")
-def get_system_stats(role: str = "STUDENT"): # Default to student for maximum safety
+def get_system_stats(role: str = "STUDENT", db: Session = Depends(get_db)):
     from vector_store import supabase
+    import json
+
+    total_docs = 0
+    total_users = 0
+    total_queries = 0
+
+    # 1. Count Users (Safely from PostgreSQL)
     try:
-        # Fetch all metadata from the vector database
-        response = supabase.table("document_sections").select("metadata").execute()
-        
-        unique_active_docs = set()
-        
-        if response.data:
-            for item in response.data:
-                meta = item.get("metadata", {})
-                doc_name = meta.get("name")
-                status = meta.get("status", "Active") 
-                category = meta.get("category", "")
+        total_users = db.query(models.User).count()
+    except Exception as e:
+        print(f"User count error: {e}")
+
+    # 2. Count Documents (Safely from Supabase)
+    try:
+        docs_response = supabase.table("document_sections").select("metadata").execute()
+        unique_docs = set()
+        if docs_response.data:
+            for row in docs_response.data:
+                meta = row.get("metadata", {})
                 
-                # Must have a name and not be archived
-                if doc_name and status != "Archived":
-                    # THE FIX: If the user is a STUDENT, hide the Accreditation Evidence
-                    if role.upper() == "STUDENT" and category == "Accreditation Evidence":
+                # Failsafe: if Supabase returns metadata as a string, convert it to a dictionary
+                if isinstance(meta, str):
+                    try: 
+                        meta = json.loads(meta)
+                    except: 
+                        meta = {}
+
+                # Failsafe: Check every possible key name for the document
+                doc_name = meta.get("document_name") or meta.get("title") or meta.get("name") or meta.get("file_name") or meta.get("source")
+                category = meta.get("category", "")
+                status = meta.get("status", "Active")
+
+                if doc_name:
+                    # Skip if the document is archived
+                    if str(status).lower() == "archived":
+                        continue
+                    # Hide Accreditation Evidence from students
+                    if role.upper() not in ["FACULTY", "ADMIN"] and category == "Accreditation Evidence":
                         continue
                     
-                    # Otherwise (Faculty or Admin), add it to the total count!
-                    unique_active_docs.add(doc_name)
+                    unique_docs.add(doc_name)
                     
-        return {
-            "documents": len(unique_active_docs)
-        }
+        total_docs = len(unique_docs)
     except Exception as e:
-        print(f"Stats error: {e}")
-        return {"documents": 0}
+        print(f"Document count error: {e}")
+
+    # 3. Count Chat Queries (Safely without using the buggy count='exact' syntax)
+    try:
+        query_response = supabase.table("chat_history").select("id").eq("role", "user").execute()
+        total_queries = len(query_response.data) if query_response.data else 0
+    except Exception as e:
+        print(f"Chat count error: {e}")
+
+    return {
+        "documents": total_docs,
+        "users": total_users,
+        "queries": total_queries
+    }
 
 @app.post("/feedback")
 def submit_feedback(request: FeedbackRequest):
