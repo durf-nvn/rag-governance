@@ -87,6 +87,13 @@ class AccessLogRequest(BaseModel):
     user_email: str
     user_role: str
 
+class SendOTPRequest(BaseModel):
+    email: EmailStr
+
+class VerifyOTPRequest(BaseModel):
+    email: EmailStr
+    otp_code: str
+
 models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
@@ -113,6 +120,47 @@ def test_db_connection(db: Session = Depends(get_db)):
         return {"status": "Success", "message": f"Connected to Supabase! Current users: {users_count}"}
     except Exception as e:
         return {"status": "Failed", "error": str(e)}
+    
+@app.post("/auth/send-otp")
+def send_otp(req: SendOTPRequest, db: Session = Depends(get_db)):
+    # 1. Check if email is already taken
+    existing_user = db.query(models.User).filter(models.User.email == req.email).first()
+    if existing_user:
+        raise HTTPException(status_code=400, detail="This email is already registered.")
+
+    # 2. Generate OTP and Expiration
+    otp = utils.generate_otp()
+    expiration = datetime.utcnow() + timedelta(minutes=10)
+
+    # 3. Update or create OTP record
+    record = db.query(models.OTPVerification).filter(models.OTPVerification.email == req.email).first()
+    if record:
+        record.otp_code = otp
+        record.expires_at = expiration
+    else:
+        record = models.OTPVerification(email=req.email, otp_code=otp, expires_at=expiration)
+        db.add(record)
+    db.commit()
+
+    # 4. Send Email
+    try:
+        utils.send_otp_email(req.email, otp)
+        return {"message": "Verification code sent to email."}
+    except Exception as e:
+        print(f"SMTP Error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to send verification email. Please try again.")
+
+@app.post("/auth/verify-otp")
+def verify_otp(req: VerifyOTPRequest, db: Session = Depends(get_db)):
+    record = db.query(models.OTPVerification).filter(models.OTPVerification.email == req.email).first()
+    
+    if not record or record.otp_code != req.otp_code:
+        raise HTTPException(status_code=400, detail="Invalid verification code.")
+    
+    if datetime.utcnow() > record.expires_at:
+        raise HTTPException(status_code=400, detail="This verification code has expired. Please request a new one.")
+
+    return {"message": "Email verified successfully!"}
     
 @app.post("/register", response_model=schemas.UserResponse, status_code=status.HTTP_201_CREATED)
 def register_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
