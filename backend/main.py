@@ -579,8 +579,17 @@ async def upload_new_version(
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/ask-policy")
-def ask_policy(request: QuestionRequest):
+def ask_policy(request: QuestionRequest, db: Session = Depends(get_db)):
     question = request.question
+
+    # 1. Fetch Dynamic System Settings
+    settings = db.query(models.SystemSettings).filter(models.SystemSettings.id == 1).first()
+    
+    # Fallback defaults just in case the database hasn't initialized
+    ai_model = settings.ai_model if settings else "llama-3.1-8b-instant"
+    ai_temperature = settings.ai_temperature if settings else 0.3
+    ai_prompt_base = settings.ai_system_prompt if settings else "You are the friendly AI Policy Assistant for CTU."
+    rag_limit = settings.rag_max_chunks if settings else 5
 
     try:
         from vector_store import supabase
@@ -601,18 +610,24 @@ def ask_policy(request: QuestionRequest):
     except Exception as e:
         print(f"Failed to log query: {e}")
     
-    relevant_chunks = vector_store.search_knowledge(question)
+    # 2. Vector Search (Pass the dynamic rag_limit if your vector_store supports it!)
+    # NOTE: If your vector_store.py doesn't accept 'limit', just use: vector_store.search_knowledge(question)
+    try:
+        relevant_chunks = vector_store.search_knowledge(question, limit=rag_limit)
+    except TypeError:
+        # Fallback if your vector_store function isn't expecting a limit argument yet
+        relevant_chunks = vector_store.search_knowledge(question)
     
     # --- SUPERCHARGED AI FILTERING ---
     safe_chunks = []
     for chunk in relevant_chunks:
         chunk_meta = chunk.get('metadata', {})
         
-        # 1. Version Control Filter: Ignore archived documents
+        # Security Filter: Ignore archived documents
         if chunk_meta.get('status') == "Archived":
             continue 
             
-        # 2. Security Filter: Block students from Accreditation Evidence
+        # Security Filter: Block students from Accreditation Evidence
         if request.user_role.upper() == "STUDENT" and chunk_meta.get('category') == "Accreditation Evidence":
             continue 
             
@@ -623,33 +638,28 @@ def ask_policy(request: QuestionRequest):
     
     context_text = "\n\n".join([chunk['content'] for chunk in relevant_chunks])
     
-    system_prompt = f"""You are the friendly and professional AI Policy Assistant for Cebu Technological University (CTU) Argao Campus.
-    
-    YOUR PERSONALITY:
-    - You are warm, welcoming, and helpful.
-    - You represent the CTU Argao brand.
-
-    INSTRUCTIONS:
-    1. POLICY QUESTIONS: If the question is about university rules, grades, research, or handbooks, use the CONTEXT provided below to answer.
-    2. NO CONTEXT: If a question is asked that is NOT in the context, say: "I'm sorry, I don't have the specific details for that in our current records. You might want to visit the relevant campus office for more info!"
-    3. FOLLOW-UPS: At the very end of your response, you MUST generate exactly 3 logical follow-up questions the user might want to ask next based on the topic.
+    # 3. Dynamic System Prompt Construction
+    # We combine the Admin's custom personality with the strict UI formatting rules
+    system_prompt = f"""{ai_prompt_base}
     
     FORMATTING RULE:
     You must separate your main answer from the follow-up questions using exactly this string: |FOLLOWUPS|
     Put each follow-up question on a new line. Do not number them.
+    You MUST generate exactly 3 logical follow-up questions.
 
     CONTEXT FROM HANDBOOKS:
     {context_text}
     """
     
     try:
+        # 4. Inject Dynamic Model and Temperature
         response = groq_client.chat.completions.create(
             messages=[
                 {'role': 'system', 'content': system_prompt},
                 {'role': 'user', 'content': question}
             ],
-            model="llama-3.1-8b-instant",
-            temperature=0.3
+            model=ai_model,
+            temperature=ai_temperature
         )
         
         raw_answer = response.choices[0].message.content
