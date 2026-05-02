@@ -318,6 +318,19 @@ def verify_user(user_id: str, db: Session = Depends(get_db)):
     
     user.is_verified = True
     db.commit()
+
+    # --- SILENT AUDIT LOG ---
+    try:
+        from vector_store import supabase
+        supabase.table("system_events_logs").insert({
+            "user_email": user.email, # Logging the user who got verified
+            "event_type": "Account Verification",
+            "description": f"Admin successfully verified this {user.role.capitalize()} account"
+        }).execute()
+    except Exception as e:
+        print(f"Failed to log verification: {e}")
+    # ------------------------
+
     return {"message": "User approved successfully!"}
 
 @app.delete("/users/{user_id}")
@@ -1419,6 +1432,18 @@ def change_password(req: ChangePasswordRequest, db: Session = Depends(get_db)):
     # 3. Hash and save the new password
     user.hashed_password = utils.hash_password(req.new_password)
     db.commit()
+
+    # --- SILENT AUDIT LOG ---
+    try:
+        from vector_store import supabase
+        supabase.table("system_events_logs").insert({
+            "user_email": req.email,
+            "event_type": "Security Update",
+            "description": "User successfully changed their password"
+        }).execute()
+    except Exception as e:
+        print(f"Failed to log password change: {e}")
+    # ------------------------
     
     return {"message": "Password successfully updated!"}
 
@@ -1431,7 +1456,6 @@ def update_profile(req: UpdateProfileRequest, db: Session = Depends(get_db)):
     
     # 2. Handle Email Change Logic
     if req.new_email != req.email:
-        # Check if someone else is already using this new email
         existing_email = db.query(models.User).filter(models.User.email == req.new_email).first()
         if existing_email:
             raise HTTPException(status_code=400, detail="This email is already in use by another account.")
@@ -1451,12 +1475,24 @@ def update_profile(req: UpdateProfileRequest, db: Session = Depends(get_db)):
         user.department = req.program
         
     db.commit()
+
+    # --- SILENT AUDIT LOG ---
+    try:
+        from vector_store import supabase
+        supabase.table("system_events_logs").insert({
+            "user_email": user.email, # Use the confirmed email
+            "event_type": "Profile Update",
+            "description": f"Updated profile details (Name: {req.full_name}, Program: {req.program})"
+        }).execute()
+    except Exception as e:
+        print(f"Failed to log profile update: {e}")
+    # ------------------------
     
     return {
         "message": "Profile updated successfully!", 
         "full_name": user.full_name, 
         "program": req.program,
-        "email": user.email  # Send back the confirmed email
+        "email": user.email  
     }
 
 # --- NEW: ANNOUNCEMENT ROUTES ---
