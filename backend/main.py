@@ -897,6 +897,17 @@ def update_document(request: UpdateDocumentRequest):
         
         supabase.table("document_sections").update({"metadata": base_metadata}).eq("metadata->>name", request.old_name).execute()
         
+        # --- SILENT AUDIT LOG ---
+        try:
+            supabase.table("system_events_logs").insert({
+                "user_email": "Admin/Librarian", 
+                "event_type": "Document Edited",
+                "description": f"Updated metadata for document: '{request.old_name}' (New Name: '{request.new_name}')"
+            }).execute()
+        except Exception as e:
+            print(f"Failed to log document edit: {e}")
+        # ------------------------
+        
         return {"message": "Document metadata updated successfully!"}
     except Exception as e:
         print(f"Update error: {e}")
@@ -920,6 +931,17 @@ def archive_document(doc_name: str):
             
             # Save the modified metadata back to the database
             supabase.table("document_sections").update({"metadata": chunk_meta}).eq("id", chunk['id']).execute()
+
+        # --- SILENT AUDIT LOG ---
+        try:
+            supabase.table("system_events_logs").insert({
+                "user_email": "Admin/Librarian", 
+                "event_type": "Document Archived",
+                "description": f"Archived document: '{document_name}'"
+            }).execute()
+        except Exception as e:
+            print(f"Failed to log document archive: {e}")
+        # ------------------------
 
         return {"message": f"Document '{doc_name}' successfully archived and removed from active AI context!"}
         
@@ -987,6 +1009,19 @@ async def upload_accreditation_evidence(
         }
 
         add_to_vector_db(extracted_text, metadata)
+
+        # --- SILENT AUDIT LOG ---
+        try:
+            from vector_store import supabase
+            supabase.table("system_events_logs").insert({
+                "user_email": uploaded_by, # We use the uploader's name/email here
+                "event_type": "Accreditation Upload",
+                "description": f"Uploaded '{document_name}' for {program} ({area_code}) - Pending Review"
+            }).execute()
+        except Exception as e:
+            print(f"Failed to log accreditation upload: {e}")
+        # ------------------------
+
         return {"message": "Evidence successfully uploaded and is pending Admin review!"}
 
     except Exception as e:
@@ -1038,8 +1073,20 @@ def review_accreditation(req: AccreditationReviewRequest):
             
             supabase.table("document_sections").update({"metadata": chunk_meta}).eq("id", chunk['id']).execute()
 
-        # NOTE FOR YOUR TEAMMATE: Insert the Notification Trigger right here!
-        # Example: if req.status == "Approved", trigger "Your document was approved!" to the specific faculty member.
+        # --- SILENT AUDIT LOG ---
+        try:
+            action_desc = f"Admin marked '{req.document_name}' as {req.status}."
+            if req.status == "Needs Revision":
+                action_desc += f" Feedback: {req.feedback}"
+                
+            supabase.table("system_events_logs").insert({
+                "user_email": "System Admin", # Can be dynamic if you pass admin email
+                "event_type": "QA Review",
+                "description": action_desc
+            }).execute()
+        except Exception as e:
+            print(f"Failed to log QA Review: {e}")
+        # ------------------------
 
         return {"message": f"Document successfully marked as {req.status}!"}
     except Exception as e:
