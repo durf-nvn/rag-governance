@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Text, DateTime, Boolean, ForeignKey, Integer
+from sqlalchemy import Column, String, Text, DateTime, Boolean, ForeignKey, Integer, Float
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 import uuid
@@ -48,3 +48,23 @@ class Announcement(Base):
     status = Column(String(50), default="Sent") # Sent, Scheduled, Draft
     read_count = Column(Integer, default=0)
     total_recipients = Column(Integer, default=0)
+
+# --- NEW: SYSTEM SETTINGS TABLE ---
+class SystemSettings(Base):
+    __tablename__ = "system_settings"
+    id = Column(Integer, primary_key=True, index=True, default=1) # Always ID 1
+    
+    # Profile Settings
+    platform_name = Column(String(255), default="CTU Institutional Knowledge System")
+    campus = Column(String(255), default="Argao Campus")
+    admin_email = Column(String(255), default="admin@ctu.edu.ph")
+    
+    # Security Settings
+    jwt_expiration = Column(Integer, default=30)
+    otp_expiration = Column(Integer, default=10)
+    
+    # AI Engine Settings
+    ai_model = Column(String(100), default="llama-3.1-8b-instant")
+    ai_temperature = Column(Float, default=0.3)
+    ai_system_prompt = Column(Text, default="You are the friendly and professional AI Policy Assistant for Cebu Technological University (CTU) Argao Campus. INSTRUCTIONS: 1. If the question is about university rules, grades, or handbooks, use the CONTEXT provided below to answer. 2. If NO CONTEXT is found, apologize and direct them to the campus office.")
+    rag_max_chunks = Column(Integer, default=5)

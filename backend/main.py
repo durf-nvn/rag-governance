@@ -99,6 +99,19 @@ class AccreditationReviewRequest(BaseModel):
     status: str # "Approved" or "Needs Revision"
     feedback: str = ""
 
+
+# --- SETTINGS SCHEMAS ---
+class SettingsSchema(BaseModel):
+    platform_name: str
+    campus: str
+    admin_email: str
+    jwt_expiration: int
+    otp_expiration: int
+    ai_model: str
+    ai_temperature: float
+    ai_system_prompt: str
+    rag_max_chunks: int
+
 models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
@@ -1637,3 +1650,50 @@ def delete_announcement(announcement_id: str, db: Session = Depends(get_db)):
     db.delete(announcement)
     db.commit()
     return {"message": "Announcement deleted successfully."}
+
+# --- SETTINGS ROUTES ---
+@app.get("/settings", response_model=SettingsSchema)
+def get_system_settings(db: Session = Depends(get_db)):
+    settings = db.query(models.SystemSettings).filter(models.SystemSettings.id == 1).first()
+    
+    # If settings don't exist yet, create the default row
+    if not settings:
+        settings = models.SystemSettings(id=1)
+        db.add(settings)
+        db.commit()
+        db.refresh(settings)
+        
+    return settings
+
+@app.put("/settings")
+def update_system_settings(req: SettingsSchema, db: Session = Depends(get_db)):
+    settings = db.query(models.SystemSettings).filter(models.SystemSettings.id == 1).first()
+    if not settings:
+        settings = models.SystemSettings(id=1)
+        db.add(settings)
+    
+    # Update all fields
+    settings.platform_name = req.platform_name
+    settings.campus = req.campus
+    settings.admin_email = req.admin_email
+    settings.jwt_expiration = req.jwt_expiration
+    settings.otp_expiration = req.otp_expiration
+    settings.ai_model = req.ai_model
+    settings.ai_temperature = req.ai_temperature
+    settings.ai_system_prompt = req.ai_system_prompt
+    settings.rag_max_chunks = req.rag_max_chunks
+    
+    db.commit()
+    
+    # --- SILENT AUDIT LOG ---
+    try:
+        from vector_store import supabase
+        supabase.table("system_events_logs").insert({
+            "user_email": "System Admin",
+            "event_type": "System Config Update",
+            "description": "Administrator modified core system and AI settings."
+        }).execute()
+    except Exception as e:
+        pass
+    
+    return {"message": "Settings successfully updated!"}
