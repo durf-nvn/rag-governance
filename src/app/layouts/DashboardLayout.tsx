@@ -12,7 +12,7 @@ import { useState, useEffect, useRef } from "react";
 import {
   LayoutDashboard, Database, MessageSquare, Award, FileText,
   Clock, Users, Settings, Search, Bell, ChevronLeft, ChevronRight,
-  GraduationCap, LogOut, User, Shield, BookOpen, Radio, ClipboardCheck,
+  GraduationCap, LogOut, Shield, BookOpen, Radio, ClipboardCheck,
 } from "lucide-react";
 import { useRole } from "../contexts/RoleContext";
 import { hasPermission } from "../utils/rolePermissions";
@@ -23,26 +23,16 @@ import { useNotifications } from "../utils/useNotifications";
 export function DashboardLayout() {
   const location = useLocation();
   const navigate = useNavigate();
-<<<<<<< HEAD
   const { userRole } = useRole();
-=======
-  
-  const { userRole } = useRole();
-  
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [showUserMenu, setShowUserMenu] = useState(false);
-  const [showNotifications, setShowNotifications] = useState(false);
-  
-  // Reference for the dropdown menu to detect outside clicks
-  const userMenuRef = useRef<HTMLDivElement>(null);
 
-  // Check if we are currently on the Profile Settings page
   const isProfileSettings = location.pathname === '/app/profile-settings';
->>>>>>> d55535284ff1601f08ffab16a2985b1d99892ea6
+
 
   const [sidebarCollapsed,  setSidebarCollapsed]  = useState(false);
   const [showUserMenu,      setShowUserMenu]       = useState(false);
   const [showNotifications, setShowNotifications]  = useState(false);
+
+  const userMenuRef = useRef<HTMLDivElement>(null);
 
   // ── ONE hook call — shared by bell badge AND sidebar panel ───────
   const notifs = useNotifications();
@@ -72,7 +62,6 @@ export function DashboardLayout() {
   }, [location.pathname]);
 
   const allMenuItems = [
-<<<<<<< HEAD
     { path: "/app",                        label: "Dashboard",              icon: LayoutDashboard,  permission: "canAccessDashboard"             },
     { path: "/app/knowledge-repository",   label: "Knowledge Repository",   icon: Database,         permission: "canAccessKnowledgeRepository"    },
     { path: "/app/ask-policy",             label: "Ask Policy",             icon: MessageSquare,    permission: "canAccessAskPolicy"             },
@@ -84,18 +73,6 @@ export function DashboardLayout() {
     { path: "/app/document-generator",     label: "Document Generator",     icon: FileText,         permission: "canAccessDocumentGenerator"      },
     { path: "/app/grade-evaluation",       label: "Grade Evaluation",       icon: ClipboardCheck,   permission: "canAccessGradeEvaluation"        },
     { path: "/app/settings",               label: "Settings",               icon: Settings,         permission: "canAccessSettings"              },
-=======
-    { path: "/app", label: "Dashboard", icon: LayoutDashboard, permission: "canAccessDashboard" },
-    { path: "/app/knowledge-repository", label: "Knowledge Repository", icon: Database, permission: "canAccessKnowledgeRepository" },
-    { path: "/app/ask-policy", label: "Ask Policy", icon: MessageSquare, permission: "canAccessAskPolicy" },
-    { path: "/app/accreditation-support", label: "Accreditation Support", icon: Award, permission: "canAccessAccreditationSupport" },
-    { path: "/app/audit-trail", label: "Audit Trail", icon: Clock, permission: "canAccessAuditTrail" },
-    { path: "/app/users-roles", label: "Users & Roles", icon: Users, permission: "canAccessUsersRoles" },
-    { path: "/app/broadcast-announcement", label: "Broadcast Announcement", icon: Radio, permission: "canAccessBroadcastAnnouncement" },
-    { path: "/app/document-generator", label: "Document Generator", icon: FileText, permission: "canAccessDocumentGenerator" },
-    { path: "/app/grade-evaluation", label: "Grade Evaluation", icon: ClipboardCheck, permission: "canAccessGradeEvaluation" },
-    { path: "/app/settings", label: "Settings", icon: Settings, permission: "canAccessSettings" },
->>>>>>> d55535284ff1601f08ffab16a2985b1d99892ea6
   ];
 
   const menuItems = allMenuItems.filter((item) =>
@@ -113,11 +90,7 @@ export function DashboardLayout() {
   const badge = getRoleBadge();
 
   const handleLogout = () => {
-<<<<<<< HEAD
     localStorage.removeItem("token");
-=======
-    localStorage.removeItem('token');
->>>>>>> d55535284ff1601f08ffab16a2985b1d99892ea6
     navigate("/login");
   };
 
@@ -139,7 +112,6 @@ export function DashboardLayout() {
             </div>
           </div>
 
-<<<<<<< HEAD
           {/* Search */}
           <div className="flex items-center gap-3 flex-1 max-w-xl mx-8">
             <div className="relative flex-1">
@@ -151,9 +123,6 @@ export function DashboardLayout() {
               />
             </div>
           </div>
-=======
-          
->>>>>>> d55535284ff1601f08ffab16a2985b1d99892ea6
 
           {/* Right controls */}
           <div className="flex items-center gap-3">
@@ -162,16 +131,11 @@ export function DashboardLayout() {
             {/* ── Bell with live badge ───────────────────────────── */}
             <button
               onClick={() => setShowNotifications(true)}
-<<<<<<< HEAD
-              className="relative p-2 hover:bg-[#F5F7FA] rounded-lg transition-colors"
-              aria-label={`Notifications${notifs.unreadCount > 0 ? ` — ${notifs.unreadCount} unread` : ""}`}
-=======
               className="relative p-2 hover:bg-[#F5F7FA] rounded-lg transition-colors cursor-pointer"
->>>>>>> d55535284ff1601f08ffab16a2985b1d99892ea6
+              aria-label={`Notifications${notifs.unreadCount > 0 ? ` — ${notifs.unreadCount} unread` : ""}`}
             >
               <Bell className="h-5 w-5 text-[#6B7280]" />
 
-<<<<<<< HEAD
               {notifs.unreadCount > 0 && (
                 <span className="
                   absolute -top-0.5 -right-0.5
@@ -188,11 +152,7 @@ export function DashboardLayout() {
             {/* ──────────────────────────────────────────────────── */}
 
             {/* User menu */}
-            <div className="relative">
-=======
-            {/* Menu container with reference for outside clicks */}
             <div className="relative" ref={userMenuRef}>
->>>>>>> d55535284ff1601f08ffab16a2985b1d99892ea6
               <button
                 onClick={() => setShowUserMenu(!showUserMenu)}
                 className="flex items-center gap-2 px-3 py-2 hover:bg-[#F5F7FA] rounded-lg transition-colors cursor-pointer"
@@ -214,15 +174,6 @@ export function DashboardLayout() {
                     <p className="text-sm font-medium text-[#1F2937]">{userProfile.name}</p>
                     <p className="text-xs text-[#6B7280]">{userProfile.email}</p>
                   </div>
-<<<<<<< HEAD
-                  <button className="w-full px-4 py-2 text-left text-sm text-[#1F2937] hover:bg-[#F5F7FA] flex items-center gap-2 transition-colors">
-                    <User className="h-4 w-4 text-[#6B7280]" /> My Profile
-                  </button>
-                  <button className="w-full px-4 py-2 text-left text-sm text-[#1F2937] hover:bg-[#F5F7FA] flex items-center gap-2 transition-colors">
-                    <Settings className="h-4 w-4 text-[#6B7280]" /> Settings
-                  </button>
-                  <div className="border-t border-[#E5E7EB] my-1" />
-=======
                   <Link 
                     to="/app/profile-settings" 
                     className="w-full px-4 py-2 text-left text-sm text-[#1F2937] hover:bg-[#F5F7FA] flex items-center gap-2 transition-colors cursor-pointer"
@@ -231,7 +182,6 @@ export function DashboardLayout() {
                     <span>Settings</span>
                   </Link>
                   <div className="border-t border-[#E5E7EB] my-1"></div>
->>>>>>> d55535284ff1601f08ffab16a2985b1d99892ea6
                   <button
                     onClick={handleLogout}
                     className="w-full px-4 py-2 text-left text-sm text-[#EF4444] hover:bg-red-50 flex items-center gap-2 transition-colors cursor-pointer"
@@ -245,38 +195,6 @@ export function DashboardLayout() {
         </div>
       </nav>
 
-<<<<<<< HEAD
-      {/* ══ Sidebar ═══════════════════════════════════════════════ */}
-      <aside className={`
-        fixed left-0 top-20 bottom-0 bg-white border-r border-[#E5E7EB]
-        transition-all duration-300 z-20
-        ${sidebarCollapsed ? "w-16" : "w-64"}
-      `}>
-        <div className="flex flex-col h-full">
-          <div className="flex-1 overflow-y-auto py-4 px-3">
-            {menuItems.map((item) => {
-              const isActive = location.pathname === item.path;
-              const Icon = item.icon;
-              return (
-                <Link
-                  key={item.path}
-                  to={item.path}
-                  className={`
-                    flex items-center gap-3 px-3 py-2.5 mb-1 rounded-lg transition-all
-                    ${isActive
-                      ? "bg-[#1D6FA3] text-white"
-                      : "text-[#6B7280] hover:bg-[#F5F7FA] hover:text-[#1F2937]"}
-                  `}
-                  title={sidebarCollapsed ? item.label : undefined}
-                >
-                  <Icon className={`h-5 w-5 flex-shrink-0 ${isActive ? "text-white" : ""}`} />
-                  {!sidebarCollapsed && (
-                    <span className="text-sm font-medium">{item.label}</span>
-                  )}
-                </Link>
-              );
-            })}
-=======
       {/* Conditionally hide sidebar when in Profile Settings */}
       {!isProfileSettings && (
         <aside
@@ -323,43 +241,16 @@ export function DashboardLayout() {
                 )}
               </button>
             </div>
->>>>>>> d55535284ff1601f08ffab16a2985b1d99892ea6
           </div>
         </aside>
       )}
 
-<<<<<<< HEAD
-          <div className="border-t border-[#E5E7EB] p-3">
-            <button
-              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-              className="w-full flex items-center justify-center p-2 hover:bg-[#F5F7FA] rounded-lg transition-colors"
-            >
-              {sidebarCollapsed ? (
-                <ChevronRight className="h-5 w-5 text-[#6B7280]" />
-              ) : (
-                <div className="flex items-center gap-2 text-sm text-[#6B7280]">
-                  <ChevronLeft className="h-5 w-5" />
-                  <span>Collapse</span>
-                </div>
-              )}
-            </button>
-          </div>
-        </div>
-      </aside>
-
-      {/* ══ Main Content ══════════════════════════════════════════ */}
-      <main className={`
-        transition-all duration-300 pt-[65px] min-h-screen
-        ${sidebarCollapsed ? "ml-16" : "ml-64"}
-      `}>
-=======
       {/* Main Content conditionally adjusts margins if sidebar is hidden */}
       <main
         className={`transition-all duration-300 pt-[73px] min-h-screen ${
           isProfileSettings ? "ml-0" : (sidebarCollapsed ? "ml-16" : "ml-64")
         }`}
       >
->>>>>>> d55535284ff1601f08ffab16a2985b1d99892ea6
         <div className="p-8">
           <Outlet />
         </div>
