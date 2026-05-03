@@ -35,3 +35,35 @@ class Token(BaseModel):
     email: str      # NEW
     role: str       # NEW
     department: str or "BSIT"
+
+# --- NEW: ANNOUNCEMENT SCHEMAS ---
+class AnnouncementCreate(BaseModel):
+    title: str
+    content: str
+    recipients: str
+    schedule_date: Optional[str] = None
+    status: str
+    sent_by: str
+    total_recipients: int
+
+class AnnouncementResponse(BaseModel):
+    id: uuid.UUID
+    title: str
+    content: str
+    recipients: str
+    sent_date: datetime
+    sent_by: str
+    status: str
+    read_count: int
+    total_recipients: int
+
+    class Config:
+        from_attributes = True
+
+class AnnouncementUpdate(BaseModel):
+    title: str
+    content: str
+    recipients: str
+    schedule_date: Optional[str] = None
+    status: str
+    total_recipients: int

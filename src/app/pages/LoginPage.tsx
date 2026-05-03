@@ -227,30 +227,21 @@ export function LoginPage() {
               </button>
             </form>
 
-            <div className="mt-6 text-center pt-6 border-t border-[#E5E7EB]">
+            <div className="mt-6 text-center pt-6 border-t border-[#E5E7EB] space-y-4">
               <p className="text-sm text-[#6B7280]">
                 Don't have an account?{" "}
                 <Link to="/signup" className="text-[#1D6FA3] hover:text-[#0B3C5D] font-medium">
                   Sign up here
                 </Link>
               </p>
+              <div>
+                  <Link to="/" className="text-sm text-[#1D6FA3] hover:text-[#0B3C5D] font-medium transition-colors">
+                    ← Back to Home
+                  </Link>
+                </div>
             </div>
           </div>
 
-          <div className="mt-6 bg-[#FFC107]/10 rounded-lg p-4 border-l-4 border-[#FFC107]">
-            <div className="flex items-start gap-3">
-              <AlertCircle className="h-5 w-5 text-[#FFC107] flex-shrink-0 mt-0.5" />
-              <p className="text-sm text-[#1F2937]">
-                <strong>Security Notice:</strong> Unauthorized access is strictly prohibited. 
-              </p>
-            </div>
-          </div>
-
-          <div className="mt-6 text-center">
-            <Link to="/" className="text-sm text-[#1D6FA3] hover:text-[#0B3C5D] font-medium">
-              ← Back to Home
-            </Link>
-          </div>
         </div>
       </div>
 

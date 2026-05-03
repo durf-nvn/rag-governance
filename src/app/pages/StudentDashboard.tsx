@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { BookOpen, MessageSquare, Calendar, GraduationCap, Clock, Search, ArrowRight, TrendingUp, History, FileText, Loader2 } from "lucide-react";
+import { BookOpen, MessageSquare, Calendar, GraduationCap, Clock, Search, ArrowRight, TrendingUp, History, FileText, Loader2, X, Radio } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import axios from "axios";
 import { useNavigate } from "react-router";
@@ -14,13 +14,10 @@ export function StudentDashboard() {
   const [recentViewsCount, setRecentViewsCount] = useState(0);
   const [chartData, setChartData] = useState<any[]>([]);
   const [recentDocs, setRecentDocs] = useState<any[]>([]);
-
-  // Mock Announcements (As requested)
-  const announcements = [
-    { title: "Midterm Examination Schedule Released", date: "March 10, 2026" },
-    { title: "Library Extended Hours This Week", date: "March 9, 2026" },
-    { title: "New Research Database Available", date: "March 8, 2026" },
-  ];
+  
+  // --- NEW: Live Announcements State ---
+  const [announcements, setAnnouncements] = useState<any[]>([]);
+  const [selectedAnnouncement, setSelectedAnnouncement] = useState<any>(null); // For the view modal
 
   useEffect(() => {
     const fetchDashboardData = async () => {
@@ -28,19 +25,19 @@ export function StudentDashboard() {
       try {
         const userEmail = localStorage.getItem('userEmail') || '';
 
-        // Fetch all the data we need in parallel!
-        const [statsRes, historyRes, accessRes, queriesRes] = await Promise.all([
+        // Fetch all the data we need in parallel (Added /announcements)
+        const [statsRes, historyRes, accessRes, queriesRes, announcementsRes] = await Promise.all([
           axios.get("http://localhost:8000/system-stats"),
           axios.get(`http://localhost:8000/chat-history?email=${userEmail}`),
           axios.get("http://localhost:8000/audit/access"),
-          axios.get("http://localhost:8000/audit/queries")
+          axios.get("http://localhost:8000/audit/queries"),
+          axios.get("http://localhost:8000/announcements")
         ]);
 
         // 1. Available Resources (Global)
         setTotalDocs(statsRes.data.documents || 0);
 
         // 2. My Queries (This Week) 
-        // The backend already filters history to the last 7 days!
         const userQueries = historyRes.data.filter((msg: any) => msg.role === 'user');
         setWeeklyQueries(userQueries.length);
 
@@ -48,32 +45,27 @@ export function StudentDashboard() {
         const myAccessLogs = accessRes.data.filter((log: any) => log.user === userEmail);
         setRecentViewsCount(myAccessLogs.length);
 
-        // Map the most recent 4 views for the UI list
         const formattedRecentDocs = myAccessLogs.slice(0, 4).map((log: any) => ({
           title: log.document,
-          category: log.action, // e.g., "View" or "Download"
-          date: log.timestamp.split(' - ')[0] // Just taking the date part
+          category: log.action, 
+          date: log.timestamp.split(' - ')[0] 
         }));
         setRecentDocs(formattedRecentDocs);
 
         // 4. Process Chart Data
         const myAllTimeQueries = queriesRes.data.filter((log: any) => log.user === userEmail);
-        
-        // Initialize an object to count queries per month
         const monthCounts: Record<string, number> = { 
           "Jan": 0, "Feb": 0, "Mar": 0, "Apr": 0, "May": 0, "Jun": 0, 
           "Jul": 0, "Aug": 0, "Sep": 0, "Oct": 0, "Nov": 0, "Dec": 0 
         };
 
         myAllTimeQueries.forEach((q: any) => {
-          // The timestamp from backend looks like "April 29, 2026 - 05:51 PM"
-          const monthStr = q.timestamp.split(' ')[0].substring(0, 3); // Extracts "Apr"
+          const monthStr = q.timestamp.split(' ')[0].substring(0, 3); 
           if (monthCounts[monthStr] !== undefined) {
              monthCounts[monthStr]++;
           }
         });
 
-        // Get the last 6 months dynamically based on the current date
         const currentMonthIndex = new Date().getMonth();
         const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
         const displayMonths = [];
@@ -84,13 +76,32 @@ export function StudentDashboard() {
             displayMonths.push(monthNames[mIndex]);
         }
 
-        // Finalize the array for Recharts
         const finalChartData = displayMonths.map(m => ({ 
           month: m, 
           queries: monthCounts[m] || 0 
         }));
         
         setChartData(finalChartData);
+
+        // --- NEW: Process Live Announcements ---
+        const validAnnouncements = announcementsRes.data
+          .filter((a: any) => 
+            a.status === "Sent" && 
+            (a.recipients.includes("All Users") || a.recipients.includes("All Students"))
+          )
+          .map((a: any) => {
+            const d = new Date(a.sent_date);
+            return {
+              id: a.id,
+              title: a.title,
+              content: a.content,
+              sent_by: a.sent_by,
+              date: d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+            };
+          })
+          .slice(0, 4); // Only show the 4 most recent ones
+
+        setAnnouncements(validAnnouncements);
 
       } catch (error) {
         console.error("Failed to fetch dashboard data", error);
@@ -127,7 +138,7 @@ export function StudentDashboard() {
   ];
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500">
+    <div className="space-y-6 animate-in fade-in duration-500 relative pb-10">
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -140,7 +151,7 @@ export function StudentDashboard() {
         </div>
       </div>
 
-      {/* Stats Cards (Updated to 3 columns) */}
+      {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {stats.map((stat) => {
           const Icon = stat.icon;
@@ -149,7 +160,6 @@ export function StudentDashboard() {
               key={stat.label}
               className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden"
             >
-              {/* Decorative background accent */}
               <div className="absolute -right-6 -top-6 w-24 h-24 rounded-full opacity-10 pointer-events-none" style={{ backgroundColor: stat.color }}></div>
               
               <div className="flex items-center justify-between mb-4">
@@ -175,7 +185,7 @@ export function StudentDashboard() {
       {/* Middle Row: Chart & Announcements */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
-        {/* Query Activity Chart (Takes up 2/3 of the space) */}
+        {/* Query Activity Chart */}
         <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm lg:col-span-2">
           <h2 className="text-lg font-bold text-gray-900 mb-6 flex items-center gap-2">
             <TrendingUp className="h-5 w-5 text-[#1D6FA3]" />
@@ -210,25 +220,41 @@ export function StudentDashboard() {
           )}
         </div>
 
-        {/* Announcements (Takes up 1/3 of the space) */}
+        {/* Live Announcements */}
         <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm flex flex-col h-full">
-          <div className="flex items-center gap-2 mb-6">
-            <Calendar className="h-5 w-5 text-[#CE0000]" />
-            <h2 className="text-lg font-bold text-gray-900">Recent Announcements</h2>
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-2">
+              <Calendar className="h-5 w-5 text-[#CE0000]" />
+              <h2 className="text-lg font-bold text-gray-900">Recent Announcements</h2>
+            </div>
+            {announcements.length > 0 && (
+              <span className="bg-red-50 text-red-600 text-xs font-bold px-2 py-0.5 rounded-full">{announcements.length} New</span>
+            )}
           </div>
-          <div className="space-y-4 flex-1">
-            {announcements.map((announcement, index) => (
-              <div
-                key={index}
-                className="flex items-start gap-3 p-4 bg-[#F9FAFB] rounded-xl hover:bg-white hover:shadow-md transition-all border border-transparent hover:border-gray-200 cursor-pointer"
-              >
-                <div className="mt-1 w-2 h-2 rounded-full bg-[#FDB913] flex-shrink-0"></div>
-                <div>
-                  <p className="text-sm text-gray-900 font-bold leading-snug">{announcement.title}</p>
-                  <p className="text-xs text-gray-500 font-medium mt-1.5">{announcement.date}</p>
+          
+          <div className="space-y-3 flex-1 overflow-y-auto pr-1">
+            {isLoading ? (
+               <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-gray-300" /></div>
+            ) : announcements.length === 0 ? (
+               <div className="text-center py-10 text-sm text-gray-500 italic border-2 border-dashed border-gray-100 rounded-xl flex flex-col items-center gap-2">
+                 <Radio className="h-8 w-8 text-gray-300" />
+                 No recent announcements.
+               </div>
+            ) : (
+              announcements.map((announcement, index) => (
+                <div
+                  key={index}
+                  onClick={() => setSelectedAnnouncement(announcement)}
+                  className="flex items-start gap-3 p-3.5 bg-[#F9FAFB] rounded-xl hover:bg-white hover:shadow-md transition-all border border-gray-100 cursor-pointer group"
+                >
+                  <div className="mt-1.5 w-2 h-2 rounded-full bg-[#FDB913] flex-shrink-0 group-hover:scale-125 transition-transform"></div>
+                  <div>
+                    <p className="text-sm text-gray-900 font-bold leading-snug line-clamp-2 group-hover:text-[#1D6FA3] transition-colors">{announcement.title}</p>
+                    <p className="text-xs text-gray-500 font-medium mt-1.5">{announcement.date}</p>
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </div>
       </div>
@@ -236,7 +262,6 @@ export function StudentDashboard() {
       {/* Bottom Row: Recently Viewed Docs & Quick Actions */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         
-        {/* Recently Viewed Documents */}
         <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
           <h2 className="text-lg font-bold text-gray-900 mb-6 flex items-center gap-2">
             <History className="h-5 w-5 text-[#006837]" />
@@ -270,9 +295,7 @@ export function StudentDashboard() {
           )}
         </div>
 
-        {/* Quick Actions (Two large buttons) */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          
           <button 
             onClick={() => navigate('/app/knowledge-repository')} 
             className="bg-gradient-to-br from-[#1D6FA3] to-[#0B3C5D] rounded-xl p-6 text-left hover:shadow-lg transition-all group flex flex-col justify-between relative overflow-hidden active:scale-95 cursor-pointer"
@@ -301,8 +324,55 @@ export function StudentDashboard() {
             <ArrowRight className="absolute bottom-6 right-6 h-5 w-5 text-white/50 group-hover:text-white group-hover:translate-x-1 transition-all" />
           </button>
         </div>
-
       </div>
+
+      {/* --- NEW: ANNOUNCEMENT VIEW MODAL --- */}
+      {selectedAnnouncement && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-gray-900/60 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200">
+            
+            <div className="flex items-center justify-between p-5 border-b border-gray-100 bg-[#F5F7FA]">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-sm border border-gray-200">
+                  <Radio className="h-5 w-5 text-[#CE0000]" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-gray-900">Official Broadcast</h3>
+                  <p className="text-xs text-gray-500 font-medium">{selectedAnnouncement.date}</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setSelectedAnnouncement(null)} 
+                className="text-gray-400 hover:text-gray-900 bg-white hover:bg-gray-50 p-1.5 rounded-full border border-gray-200 transition-colors cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            
+            <div className="p-6">
+              <h4 className="text-xl font-bold text-[#1F2937] mb-4 leading-tight">{selectedAnnouncement.title}</h4>
+              <div className="p-5 bg-gray-50 rounded-xl border border-gray-100 text-sm text-gray-700 whitespace-pre-wrap leading-relaxed max-h-[400px] overflow-y-auto">
+                {selectedAnnouncement.content}
+              </div>
+              
+              <div className="mt-4 flex items-center justify-between text-xs text-gray-500 font-medium pt-4 border-t border-gray-100">
+                <span>Sender: <span className="text-gray-900">{selectedAnnouncement.sent_by}</span></span>
+                <span>CTU Argao Campus</span>
+              </div>
+            </div>
+
+            <div className="p-4 border-t border-gray-100 bg-[#F9FAFB] flex justify-end">
+              <button 
+                onClick={() => setSelectedAnnouncement(null)} 
+                className="px-6 py-2 text-sm font-bold text-gray-700 bg-white border border-gray-300 rounded-xl hover:bg-gray-50 transition-colors cursor-pointer shadow-sm active:scale-95"
+              >
+                Close Window
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

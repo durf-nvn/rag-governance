@@ -4,7 +4,7 @@ import { hasPermission } from "../utils/rolePermissions"
 
 interface ProtectedRouteProps {
   children: React.ReactNode
-  permission: string
+  permission?: string // <-- The '?' makes this prop optional!
 }
 
 export function ProtectedRoute({ children, permission }: ProtectedRouteProps) {
@@ -12,8 +12,9 @@ export function ProtectedRoute({ children, permission }: ProtectedRouteProps) {
 
   const currentRole = userRole || "STUDENT"
 
-  if (!hasPermission(currentRole, permission as any)) {
-    return <Navigate to="/app" replace />
+  // Only check permissions if a specific permission was actually requested
+  if (permission && !hasPermission(currentRole, permission as any)) {
+    return <Navigate to="/dashboard" replace /> 
   }
 
   return <>{children}</>
