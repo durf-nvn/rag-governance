@@ -1,80 +1,199 @@
-from fastapi import FastAPI, Depends, HTTPException, status, File, UploadFile, Form
+import os
+import io
+import json
+import time
+from datetime import datetime, timedelta
+from typing import List, Optional
+
+# Third-party imports
+from dotenv import load_dotenv
+from fastapi import FastAPI, Depends, HTTPException, status, File, UploadFile, Form, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
-from dotenv import load_dotenv
-import os
-import models, schemas, utils, vector_store
-from database import engine, get_db
-from typing import List
-import PyPDF2
-import io
-from groq import Groq
 from pydantic import BaseModel, EmailStr
-from datetime import datetime, timedelta 
-import os
-from dotenv import load_dotenv
-from fastapi import FastAPI, Depends, HTTPException
-import json
+from groq import Groq
+from supabase import create_client, Client
+import PyPDF2
+import groq
 
-# 1. LOAD THE ENVIRONMENT FIRST
+# Local module imports
+import models
+import schemas
+import utils
+import vector_store
+from database import engine, get_db
+
+
 load_dotenv()
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_KEY")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
-# 2. ASSIGN THE VARIABLES
-SMTP_USER = os.getenv("EMAIL_ADDRESS")
+# Initialize clients — single instances used throughout the file
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+groq_client = Groq(api_key=GROQ_API_KEY)
+
+SMTP_USER     = os.getenv("EMAIL_ADDRESS")
 SMTP_PASSWORD = os.getenv("EMAIL_APP_PASSWORD")
 
-app = FastAPI()
 
-load_dotenv()
-groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+# ─────────────────────────────────────────────────────────────────────────────
+# NOTIFICATION HELPERS
+# ─────────────────────────────────────────────────────────────────────────────
+
+VALID_NOTIF_TYPES = {"info", "success", "warning", "error"}
+
+
+def _send_notification(user_email: str, n_type: str, title: str, message: str) -> None:
+    """
+    Insert one notification row for a specific user.
+    Silent on failure — never blocks the main request.
+    """
+    if n_type not in VALID_NOTIF_TYPES:
+        n_type = "info"
+    try:
+        supabase.table("notifications").insert({
+            "user_email": user_email,
+            "type":       n_type,
+            "title":      title,
+            "message":    message,
+            "is_read":    False,
+        }).execute()
+    except Exception as exc:
+        print(f"[_send_notification] silent failure — {exc}")
+
+
+def _notify_all_admins(db: Session, n_type: str, title: str, message: str) -> None:
+    """
+    Send the same notification to every active ADMIN in the system.
+    Only ADMINs receive this — faculty and students are excluded.
+    """
+    try:
+        admins = (
+            db.query(models.User)
+            .filter(models.User.role == "ADMIN", models.User.status != "Disabled")
+            .all()
+        )
+        for admin in admins:
+            _send_notification(admin.email, n_type, title, message)
+    except Exception as exc:
+        print(f"[_notify_all_admins] silent failure — {exc}")
+
+
+def _notify_role(db: Session, role: str, n_type: str, title: str, message: str) -> None:
+    """
+    Send the same notification to every active user of a given role.
+    role: 'STUDENT' | 'FACULTY' | 'ADMIN'
+    """
+    try:
+        users = (
+            db.query(models.User)
+            .filter(models.User.role == role, models.User.status != "Disabled")
+            .all()
+        )
+        for user in users:
+            _send_notification(user.email, n_type, title, message)
+    except Exception as exc:
+        print(f"[_notify_role:{role}] silent failure — {exc}")
+
+
+def _notify_non_admin(db: Session, n_type: str, title: str, message: str) -> None:
+    """
+    Send to all active FACULTY and STUDENT users — excludes ADMINs.
+    Used for document and announcement notifications.
+    """
+    try:
+        users = (
+            db.query(models.User)
+            .filter(
+                models.User.role.in_(["FACULTY", "STUDENT"]),
+                models.User.status != "Disabled"
+            )
+            .all()
+        )
+        for user in users:
+            _send_notification(user.email, n_type, title, message)
+    except Exception as exc:
+        print(f"[_notify_non_admin] silent failure — {exc}")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PYDANTIC SCHEMAS (request / response models)
+# ─────────────────────────────────────────────────────────────────────────────
 
 class QuestionRequest(BaseModel):
-    question: str
+    question:   str
     user_email: str
-    user_role: str
+    user_role:  str
 
 class FeedbackRequest(BaseModel):
-    question: str
-    answer: str
+    question:   str
+    answer:     str
     is_helpful: bool
 
 class UpdateDocumentRequest(BaseModel):
-    old_name: str
-    new_name: str
-    category: str
-    office: str
-    version: str
+    old_name:         str
+    new_name:         str
+    category:         str
+    office:           str
+    version:          str
     effectivity_date: str
 
 class AccreditationUploadRequest(BaseModel):
     document_name: str
-    program: str
-    area_code: str
-    category: str = "Accreditation Evidence"
+    program:       str
+    area_code:     str
+    category:      str = "Accreditation Evidence"
 
 class ForgotPasswordRequest(BaseModel):
     email: EmailStr
 
-# --- ADDED FOR PASSWORD RESET ---
 class UpdatePasswordRequest(BaseModel):
-    email: EmailStr
+    email:        EmailStr
     new_password: str
-# --------------------------------
 
-# --- NEW: ADD USER FROM ADMIN DASHBOARD ---
 class UserCreateRequest(BaseModel):
     full_name: str
-    email: str
-    role: str
-    password: str
-# ------------------------------------------
+    email:     str
+    role:      str
+    password:  str
 
 class AccessLogRequest(BaseModel):
     document_name: str
-    action_type: str
+    action_type:   str
+    user_email:    str
+    user_role:     str
+
+# Notification schemas
+class NotificationCreate(BaseModel):
     user_email: str
-    user_role: str
+    type:       str
+    title:      str
+    message:    str
+
+class NotificationOut(BaseModel):
+    id:         int
+    user_email: str
+    type:       str
+    title:      str
+    message:    str
+    is_read:    bool
+    created_at: str
+
+# ── FIXED BroadcastRequest ───────────────────────────────────────
+# target_role = "ALL" | "STUDENT" | "FACULTY"
+# Admin is excluded from mass broadcasts — they manage the system.
+class BroadcastRequest(BaseModel):
+    title:       str
+    message:     str
+    target_role: str = "ALL"   # default: send to everyone (non-admin)
+    sender_email: str = ""
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# APP SETUP
+# ─────────────────────────────────────────────────────────────────────────────
 
 models.Base.metadata.create_all(bind=engine)
 
@@ -91,6 +210,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# HEALTH
+# ─────────────────────────────────────────────────────────────────────────────
+
 @app.get("/")
 def read_root():
     return {"message": "Welcome to the CTU Knowledge System API! The server is running perfectly."}
@@ -102,16 +226,24 @@ def test_db_connection(db: Session = Depends(get_db)):
         return {"status": "Success", "message": f"Connected to Supabase! Current users: {users_count}"}
     except Exception as e:
         return {"status": "Failed", "error": str(e)}
-    
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# AUTH — REGISTER
+# ─────────────────────────────────────────────────────────────────────────────
+
 @app.post("/register", response_model=schemas.UserResponse, status_code=status.HTTP_201_CREATED)
 def register_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
+    # 1. Duplicate check
     existing_user = db.query(models.User).filter(models.User.email == user.email).first()
     if existing_user:
         raise HTTPException(status_code=400, detail="Email already registered")
 
-    hashed_pwd = utils.hash_password(user.password)
-    auto_verify = True if user.role.upper() == "STUDENT" else False
+    # 2. Hash password — students are auto-verified, faculty require admin approval
+    hashed_pwd  = utils.hash_password(user.password)
+    auto_verify = user.role.upper() == "STUDENT"
 
+    # 3. Persist user
     new_user = models.User(
         email=user.email,
         full_name=user.full_name,
@@ -120,23 +252,11 @@ def register_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
         department=user.department,
         is_verified=auto_verify
     )
-    
     db.add(new_user)
     db.commit()
-
-    # --- NEW: LOG THE REGISTRATION EVENT SILENTLY ---
-    try:
-        from vector_store import supabase
-        supabase.table("system_events_logs").insert({
-            "user_email": new_user.email,
-            "event_type": "Account Creation",
-            "description": f"New {new_user.role} account registered"
-        }).execute()
-    except Exception as e:
-        print(f"Failed to log registration: {e}")
-
     db.refresh(new_user)
 
+    # 4. Student profile
     if user.role.upper() == "STUDENT":
         new_student_profile = models.StudentProfile(
             user_id=new_user.id,
@@ -146,13 +266,73 @@ def register_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
         db.add(new_student_profile)
         db.commit()
 
+    # 5. Audit log
+    try:
+        supabase.table("system_events_logs").insert({
+            "user_email":  new_user.email,
+            "event_type":  "Account Creation",
+            "description": f"New {new_user.role} account registered: {new_user.full_name}"
+        }).execute()
+    except Exception as exc:
+        print(f"[register] audit log failed: {exc}")
+
+    # 6. Notifications — role-specific, correct recipients only
+    role_upper = new_user.role  # already uppercased above
+
+    if role_upper == "FACULTY":
+        # ── Tell the registering faculty member their status ──
+        _send_notification(
+            user_email=new_user.email,
+            n_type="info",
+            title="Account Pending Verification",
+            message=(
+                f"Hi {new_user.full_name or 'there'}! Your faculty account has been registered "
+                "and is awaiting administrator verification. You'll be notified once approved."
+            ),
+        )
+        # ── Notify ONLY admins (NOT other faculty, NOT students) ──
+        _notify_all_admins(
+            db=db,
+            n_type="warning",
+            title="New Faculty Awaiting Verification",
+            message=(
+                f"{new_user.full_name} ({new_user.email}) has registered as Faculty "
+                "and is pending your verification. Go to Users & Roles to accept or decline."
+            ),
+        )
+
+    elif role_upper == "STUDENT":
+        # ── Welcome the student ──
+        _send_notification(
+            user_email=new_user.email,
+            n_type="success",
+            title="Welcome to CTU Argao KMS!",
+            message=(
+                f"Hi {new_user.full_name or 'there'}! Your student account is active. "
+                "You can now access the Knowledge Repository, Ask Policy, and more."
+            ),
+        )
+        # ── Notify ONLY admins (NOT faculty, NOT other students) ──
+        _notify_all_admins(
+            db=db,
+            n_type="info",
+            title="New Student Registered",
+            message=(
+                f"{new_user.full_name} ({new_user.email}) has created a new student account."
+            ),
+        )
+
     return new_user
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# AUTH — LOGIN
+# ─────────────────────────────────────────────────────────────────────────────
 
 @app.post("/login", response_model=schemas.Token)
 def login_user(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     user = db.query(models.User).filter(models.User.email == form_data.username).first()
-    
-    # 1. Check if email exists and password is correct
+
     if not user or not utils.verify_password(form_data.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -160,238 +340,303 @@ def login_user(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = D
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    # --- NEW: Check if the account is Disabled ---
     if user.status == "Disabled":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Your account has been disabled. Please contact the system administrator."
         )
-    # ---------------------------------------------
 
-    # 3. Check if Faculty account is still pending
     if not user.is_verified:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Your Faculty account is currently pending Admin verification."
         )
 
-    # 4. Generate the login token
     access_token = utils.create_access_token(data={"sub": user.email})
 
-    # --- NEW: LOG THE LOGIN EVENT SILENTLY ---
+    # Audit log
     try:
-        from vector_store import supabase
         supabase.table("system_events_logs").insert({
-            "user_email": user.email,
-            "event_type": "Authentication",
+            "user_email":  user.email,
+            "event_type":  "Authentication",
             "description": "User successfully logged in"
         }).execute()
-    except Exception as e:
-        print(f"Failed to log login: {e}")
+    except Exception as exc:
+        print(f"[login] audit log failed: {exc}")
 
-    # --- NEW: Get the correct department/course ---
     user_dept = user.department
     if user.role == "STUDENT" and user.student_profile:
         user_dept = user.student_profile.course
-        
-    # THE FIX: Prevent 'None' from crashing the Token schema validation
     if not user_dept:
         user_dept = "ADMIN" if user.role == "ADMIN" else "Unassigned"
-    
+
     return {
-        "access_token": access_token, 
-        "token_type": "bearer",
-        "full_name": user.full_name or "CTU User", 
-        "email": user.email,
-        "role": user.role,
-        "department": user_dept
+        "access_token": access_token,
+        "token_type":   "bearer",
+        "full_name":    user.full_name or "CTU User",
+        "email":        user.email,
+        "role":         user.role,
+        "department":   user_dept,
     }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PASSWORD RESET
+# ─────────────────────────────────────────────────────────────────────────────
 
 @app.post("/send-reset-email")
 def send_reset_email(request: ForgotPasswordRequest, db: Session = Depends(get_db)):
     user = db.query(models.User).filter(models.User.email == request.email).first()
     if not user:
         raise HTTPException(status_code=404, detail="Email not found")
-    
+
     try:
         utils.send_forgot_password_email(user.email)
         return {"message": "Success! Please check your email for the reset link."}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to send email: {str(e)}")
 
-# --- UPDATED FOR PASSWORD RESET ---
+
 @app.post("/update-password")
 def update_password(request: UpdatePasswordRequest, db: Session = Depends(get_db)):
     user = db.query(models.User).filter(models.User.email == request.email).first()
-    
     if not user:
         raise HTTPException(status_code=404, detail="User not found in records")
-    
+
     try:
-        new_hashed_password = utils.hash_password(request.new_password)
-        user.hashed_password = new_hashed_password
-        
+        user.hashed_password = utils.hash_password(request.new_password)
         db.add(user)
         db.commit()
         db.refresh(user)
-        
+
+        _send_notification(
+            user_email=request.email,
+            n_type="warning",
+            title="Password Changed",
+            message=(
+                "Your account password was recently changed. "
+                "If you did not do this, contact the administrator immediately."
+            ),
+        )
+
         return {"message": "Password updated successfully!"}
-        
     except Exception as e:
         db.rollback()
         print(f"CRITICAL DB ERROR: {str(e)}")
         raise HTTPException(status_code=500, detail="Could not update database")
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# USER MANAGEMENT
+# ─────────────────────────────────────────────────────────────────────────────
+
 @app.get("/users", response_model=List[schemas.UserResponse])
 def get_all_users(db: Session = Depends(get_db)):
     return db.query(models.User).all()
+
 
 @app.put("/users/{user_id}/verify")
 def verify_user(user_id: str, db: Session = Depends(get_db)):
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    
+
     user.is_verified = True
     db.commit()
+
+    # Notify the faculty member — their account is now active
+    _send_notification(
+        user_email=user.email,
+        n_type="success",
+        title="Account Verified — You Can Now Log In",
+        message=(
+            "Your faculty account has been verified by the administrator. "
+            "You now have full access to the CTU Argao Knowledge Management System."
+        ),
+    )
+
     return {"message": "User approved successfully!"}
+
 
 @app.delete("/users/{user_id}")
 def delete_user(user_id: str, db: Session = Depends(get_db)):
-    # Find the user and completely remove them from the database
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    
+
     db.delete(user)
     db.commit()
     return {"message": "User rejected and removed successfully!"}
+
 
 @app.put("/users/{user_id}/disable")
 def disable_user(user_id: str, db: Session = Depends(get_db)):
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    
-    # Perform the Soft Delete
+
     user.status = "Disabled"
     db.commit()
+
+    _send_notification(
+        user_email=user.email,
+        n_type="error",
+        title="Account Disabled",
+        message=(
+            "Your account has been disabled by the system administrator. "
+            "Please contact admin@ctu.edu.ph for assistance."
+        ),
+    )
+
     return {"message": f"Account for {user.full_name or user.email} has been disabled!"}
+
 
 @app.put("/users/{user_id}/enable")
 def enable_user(user_id: str, db: Session = Depends(get_db)):
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    
-    # Reactivate the account
+
     user.status = "Active"
     db.commit()
+
+    _send_notification(
+        user_email=user.email,
+        n_type="success",
+        title="Account Re-enabled",
+        message=(
+            "Your account has been re-enabled by the administrator. "
+            "You can now log in to the system."
+        ),
+    )
+
     return {"message": f"Account for {user.full_name or user.email} has been re-enabled!"}
+
 
 @app.post("/users")
 def create_user_admin(request: UserCreateRequest, db: Session = Depends(get_db)):
-    # 1. Check if email exists
     existing_user = db.query(models.User).filter(models.User.email == request.email).first()
     if existing_user:
         raise HTTPException(status_code=400, detail="User with that email already exists.")
 
-    # 2. Hash the password using your existing utils
     hashed_pwd = utils.hash_password(request.password)
 
-    # 3. Create the user (Auto-verified because an Admin created them)
     new_user = models.User(
         email=request.email,
         full_name=request.full_name,
         hashed_password=hashed_pwd,
         role=request.role.upper(),
-        department="ADMIN" if request.role.upper() == "ADMIN" else "Unassigned", # <--- NEW AUTOMATIC ASSIGNMENT
-        is_verified=True 
+        department="ADMIN" if request.role.upper() == "ADMIN" else "Unassigned",
+        is_verified=True
     )
-    
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
 
-    # 4. If it's a student, create a default profile so the database doesn't break
     if request.role.upper() == "STUDENT":
         new_student_profile = models.StudentProfile(
             user_id=new_user.id,
-            course="BSIT", # Default placeholder
-            year_level=1   # Default placeholder
+            course="BSIT",
+            year_level=1
         )
         db.add(new_student_profile)
         db.commit()
 
+    # Notify the new user their account is ready
+    _send_notification(
+        user_email=new_user.email,
+        n_type="success",
+        title="Account Created by Administrator",
+        message=(
+            f"Your {request.role.capitalize()} account was created by the Administrator. "
+            "You can now log in to the CTU Argao Knowledge Management System."
+        ),
+    )
+
     return {"message": f"{request.role.capitalize()} {request.full_name} created successfully!"}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# DOCUMENTS — UPLOAD
+# ─────────────────────────────────────────────────────────────────────────────
 
 @app.post("/upload-document")
 async def upload_document(
-    file: UploadFile = File(...),
-    name: str = Form(...),
-    category: str = Form(...),
-    office: str = Form(...),
-    version: str = Form(...),
-    effectivity_date: str = Form(...)
+    file:             UploadFile = File(...),
+    name:             str = Form(...),
+    category:         str = Form(...),
+    office:           str = Form(...),
+    version:          str = Form(...),
+    effectivity_date: str = Form(...),
+    uploaded_by:      str = Form(None),   # pass userEmail from the frontend
+    db: Session = Depends(get_db),        # ← added so we can fan-out notifications
 ):
-    contents = await file.read()
+    contents       = await file.read()
     extracted_text = ""
-    
+
     try:
-        # 1. Extract text based on file type
         filename_lower = file.filename.lower()
-        
+
         if filename_lower.endswith(".pdf"):
             pdf_reader = PyPDF2.PdfReader(io.BytesIO(contents))
             for page in pdf_reader.pages:
                 text = page.extract_text()
                 if text:
                     extracted_text += text + "\n"
-                    
         elif filename_lower.endswith(".txt"):
             extracted_text = contents.decode("utf-8")
-            
         elif filename_lower.endswith(".docx"):
             import docx
             doc = docx.Document(io.BytesIO(contents))
             extracted_text = "\n".join([paragraph.text for paragraph in doc.paragraphs])
-            
         else:
             raise HTTPException(status_code=400, detail="Unsupported file format. Please upload PDF, DOCX, or TXT.")
 
         if not extracted_text.strip():
             raise HTTPException(status_code=400, detail="Could not extract text from document.")
 
-        # --- NEW: SUPABASE STORAGE UPLOAD ---
-
-        # --- NEW: SUPABASE STORAGE UPLOAD ---
-        from vector_store import supabase
-        import time
-        
-        safe_filename = file.filename.replace(" ", "_")
+        safe_filename   = file.filename.replace(" ", "_")
         unique_filename = f"{int(time.time())}_{safe_filename}"
-        
+
         supabase.storage.from_("documents").upload(
             file=contents,
             path=unique_filename,
             file_options={"content-type": "application/pdf"}
         )
-        
         public_url = supabase.storage.from_("documents").get_public_url(unique_filename)
-        # ------------------------------------
 
         metadata = {
-            "name": name,
-            "category": category,
-            "office": office,
-            "version": version,
+            "name":             name,
+            "category":         category,
+            "office":           office,
+            "version":          version,
             "effectivity_date": effectivity_date,
-            "uploaded_at": datetime.now().isoformat(),
-            "file_url": public_url,
-            "status": "Active"
+            "upload_date":      datetime.now().isoformat(),
+            "file_url":         public_url,
+            "status":           "Active",
+            "uploaded_by":      uploaded_by or "Unknown",
         }
 
         chunks_count = vector_store.add_to_vector_db(extracted_text, metadata)
+
+        # ── Notify admins ──
+        _notify_all_admins(
+            db=db,
+            n_type="info",
+            title="New Document Added to Repository",
+            message=f"'{name}' (v{version}) was uploaded under {office} — {category}.",
+        )
+
+        # ── Notify all faculty and students ──
+        _notify_non_admin(
+            db=db,
+            n_type="info",
+            title="New Document Available",
+            message=(
+                f"A new document '{name}' (v{version}) has been added to the "
+                f"Knowledge Repository under {category}. Check it out now."
+            ),
+        )
 
         return {
             "message": f"Successfully processed {name}!",
@@ -401,43 +646,37 @@ async def upload_document(
     except Exception as e:
         print(f"Error: {str(e)}")
         raise HTTPException(status_code=500, detail="Internal Server Error during processing.")
-    
+
+
 @app.post("/upload-new-version")
 async def upload_new_version(
-    file: UploadFile = File(...),
-    old_document_name: str = Form(...),
-    new_version: str = Form(...),
-    new_effectivity_date: str = Form(...)
+    file:                 UploadFile = File(...),
+    old_document_name:    str = Form(...),
+    new_version:          str = Form(...),
+    new_effectivity_date: str = Form(...),
+    uploaded_by:          str = Form(None),
+    db: Session = Depends(get_db),
 ):
-    import time
-    from vector_store import supabase
-    from datetime import datetime
-    import io
-    import PyPDF2
-
     try:
-        # 1. Fetch the old document to copy its Category and Office
         res = supabase.table("document_sections").select("metadata").eq("metadata->>name", old_document_name).limit(1).execute()
         if not res.data:
             raise HTTPException(status_code=404, detail="Old document not found in database.")
-        
-        old_metadata = res.data[0]['metadata']
-        category = old_metadata.get("category", "Policy")
-        office = old_metadata.get("office", "Academic Affairs")
 
-        # 2. Archive the old version (Update all chunks of the old document)
+        old_metadata = res.data[0]['metadata']
+        category     = old_metadata.get("category", "Policy")
+        office       = old_metadata.get("office",   "Academic Affairs")
+
         old_chunks_res = supabase.table("document_sections").select("id, metadata").eq("metadata->>name", old_document_name).execute()
         if old_chunks_res.data:
             for chunk in old_chunks_res.data:
-                chunk_meta = chunk['metadata']
-                chunk_meta['status'] = "Archived" # Mark as archived!
+                chunk_meta           = chunk['metadata']
+                chunk_meta['status'] = "Archived"
                 supabase.table("document_sections").update({"metadata": chunk_meta}).eq("id", chunk['id']).execute()
 
-        # 3. Extract text from the new file (Supports PDF, DOCX, TXT)
-        contents = await file.read()
+        contents       = await file.read()
         extracted_text = ""
         filename_lower = file.filename.lower()
-        
+
         if filename_lower.endswith(".pdf"):
             pdf_reader = PyPDF2.PdfReader(io.BytesIO(contents))
             for page in pdf_reader.pages:
@@ -456,10 +695,9 @@ async def upload_new_version(
         if not extracted_text.strip():
             raise HTTPException(status_code=400, detail="Could not extract text.")
 
-        # 4. Upload to Supabase Storage
-        safe_filename = file.filename.replace(" ", "_")
+        safe_filename   = file.filename.replace(" ", "_")
         unique_filename = f"v{new_version}_{int(time.time())}_{safe_filename}"
-        
+
         supabase.storage.from_("documents").upload(
             file=contents,
             path=unique_filename,
@@ -467,20 +705,41 @@ async def upload_new_version(
         )
         public_url = supabase.storage.from_("documents").get_public_url(unique_filename)
 
-        # 5. Save the new vectors as "Active"
         new_metadata = {
-            "name": old_document_name,  # Keep the same name to link them!
-            "category": category,
-            "office": office,
-            "version": new_version,
+            "name":             old_document_name,
+            "category":         category,
+            "office":           office,
+            "version":          new_version,
             "effectivity_date": new_effectivity_date,
-            "upload_date": datetime.now().isoformat(),
-            "file_url": public_url,
-            "status": "Active" # Make the new one active
+            "upload_date":      datetime.now().isoformat(),
+            "file_url":         public_url,
+            "status":           "Active",
+            "uploaded_by":      uploaded_by or "Unknown",
         }
 
-        import vector_store
         vector_store.add_to_vector_db(extracted_text, new_metadata)
+
+        # ── Notify admins ──
+        _notify_all_admins(
+            db=db,
+            n_type="info",
+            title="Document Updated to New Version",
+            message=(
+                f"'{old_document_name}' has been updated to v{new_version}. "
+                "The previous version has been archived automatically."
+            ),
+        )
+
+        # ── Notify all faculty and students ──
+        _notify_non_admin(
+            db=db,
+            n_type="info",
+            title="Document Updated",
+            message=(
+                f"'{old_document_name}' has been updated to version {new_version}. "
+                "The latest version is now available in the Knowledge Repository."
+            ),
+        )
 
         return {"message": "New version uploaded successfully and old version archived!"}
 
@@ -488,13 +747,95 @@ async def upload_new_version(
         print(f"Update version error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# DOCUMENTS — UPDATE METADATA
+# ─────────────────────────────────────────────────────────────────────────────
+
+@app.put("/documents/update")
+def update_document(request: UpdateDocumentRequest, db: Session = Depends(get_db)):
+    try:
+        res = supabase.table("document_sections").select("metadata").eq("metadata->>name", request.old_name).limit(1).execute()
+        if not res.data:
+            raise HTTPException(status_code=404, detail="Document not found")
+
+        base_metadata = res.data[0]['metadata']
+
+        base_metadata["name"]             = request.new_name
+        base_metadata["category"]         = request.category
+        base_metadata["office"]           = request.office
+        base_metadata["version"]          = request.version
+        base_metadata["effectivity_date"] = request.effectivity_date
+
+        supabase.table("document_sections").update({"metadata": base_metadata}).eq("metadata->>name", request.old_name).execute()
+
+        # ── Notify faculty and students of the edit ──
+        if request.old_name != request.new_name:
+            doc_label = f"'{request.old_name}' (renamed to '{request.new_name}')"
+        else:
+            doc_label = f"'{request.new_name}'"
+
+        _notify_non_admin(
+            db=db,
+            n_type="info",
+            title="Document Information Updated",
+            message=(
+                f"{doc_label} has been updated in the Knowledge Repository. "
+                "The latest details are now available."
+            ),
+        )
+
+        return {"message": "Document metadata updated successfully!"}
+    except Exception as e:
+        print(f"Update error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to update document")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# DOCUMENTS — ARCHIVE / DELETE
+# ─────────────────────────────────────────────────────────────────────────────
+
+@app.delete("/documents/{doc_name}")
+def archive_document(doc_name: str, db: Session = Depends(get_db)):
+    try:
+        chunks_res = supabase.table("document_sections").select("id, metadata").eq("metadata->>name", doc_name).execute()
+
+        if not chunks_res.data:
+            raise HTTPException(status_code=404, detail="Document not found in the database.")
+
+        for chunk in chunks_res.data:
+            chunk_meta           = chunk['metadata']
+            chunk_meta['status'] = "Archived"
+            supabase.table("document_sections").update({"metadata": chunk_meta}).eq("id", chunk['id']).execute()
+
+        # ── Notify faculty and students the document has been removed ──
+        _notify_non_admin(
+            db=db,
+            n_type="warning",
+            title="Document Removed from Repository",
+            message=(
+                f"'{doc_name}' has been archived and is no longer available "
+                "in the Knowledge Repository."
+            ),
+        )
+
+        return {"message": f"Document '{doc_name}' successfully archived and removed from active AI context!"}
+
+    except Exception as e:
+        print(f"Archive error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to archive document")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ASK POLICY
+# ─────────────────────────────────────────────────────────────────────────────
+
 @app.post("/ask-policy")
 def ask_policy(request: QuestionRequest):
     question = request.question
 
     try:
-        from vector_store import supabase
-        topic = "General"
+        topic   = "General"
         q_lower = question.lower()
         if len(question.split()) <= 2 or any(w in q_lower for w in ["test", "asdf"]):
             topic = "Ignored"
@@ -505,290 +846,267 @@ def ask_policy(request: QuestionRequest):
         elif "uniform" in q_lower or "dress" in q_lower or "id" in q_lower: topic = "Dress Code"
 
         supabase.table("query_logs").insert({
-            "query_text": question,
+            "query_text":     question,
             "topic_category": topic
         }).execute()
     except Exception as e:
         print(f"Failed to log query: {e}")
-    
+
     relevant_chunks = vector_store.search_knowledge(question)
-    
+
     # --- SUPERCHARGED AI FILTERING ---
     safe_chunks = []
     for chunk in relevant_chunks:
         chunk_meta = chunk.get('metadata', {})
-        
-        # 1. Version Control Filter: Ignore archived documents
-        if chunk_meta.get('status') == "Archived":
-            continue 
-            
-        # 2. Security Filter: Block students from Accreditation Evidence
-        if request.user_role.upper() == "STUDENT" and chunk_meta.get('category') == "Accreditation Evidence":
-            continue 
-            
+
+        if isinstance(chunk_meta, str):
+            try:    chunk_meta = json.loads(chunk_meta)
+            except: chunk_meta = {}
+
+        chunk_status   = chunk_meta.get("status",   "Active")
+        chunk_category = chunk_meta.get("category", "")
+
+        if str(chunk_status).lower() == "archived":
+            continue
+        if request.user_role.upper() not in ["FACULTY", "ADMIN"] and chunk_category == "Accreditation Evidence":
+            continue
+
         safe_chunks.append(chunk)
-        
-    relevant_chunks = safe_chunks
-    # ---------------------------------
-    
-    context_text = "\n\n".join([chunk['content'] for chunk in relevant_chunks])
-    
-    system_prompt = f"""You are the friendly and professional AI Policy Assistant for Cebu Technological University (CTU) Argao Campus.
-    
-    YOUR PERSONALITY:
-    - You are warm, welcoming, and helpful.
-    - You represent the CTU Argao brand.
 
-    INSTRUCTIONS:
-    1. POLICY QUESTIONS: If the question is about university rules, grades, research, or handbooks, use the CONTEXT provided below to answer.
-    2. NO CONTEXT: If a question is asked that is NOT in the context, say: "I'm sorry, I don't have the specific details for that in our current records. You might want to visit the relevant campus office for more info!"
-    3. FOLLOW-UPS: At the very end of your response, you MUST generate exactly 3 logical follow-up questions the user might want to ask next based on the topic.
-    
-    FORMATTING RULE:
-    You must separate your main answer from the follow-up questions using exactly this string: |FOLLOWUPS|
-    Put each follow-up question on a new line. Do not number them.
+    if not safe_chunks:
+        return {
+            "answer": (
+                "I couldn't find a specific policy or document that answers your question. "
+                "For the most accurate information, please contact the Academic Affairs Office "
+                "or check the official CTU Student Handbook."
+            ),
+            "sources": []
+        }
 
-    CONTEXT FROM HANDBOOKS:
-    {context_text}
-    """
-    
+    context = "\n\n".join([
+        f"[Source: {c.get('metadata', {}).get('name', 'CTU Document')}]\n{c.get('content', '')}"
+        for c in safe_chunks
+    ])
+
+    prompt = f"""You are the official AI Policy Assistant for Cebu Technological University (CTU) Argao Campus.
+Your ONLY job is to answer questions based on the provided CTU policy documents.
+
+RULES:
+1. ONLY use information from the provided context below.
+2. If the answer is not in the context, say: "I couldn't find a specific policy on this. Please contact the Academic Affairs Office."
+3. Be direct, professional, and concise.
+4. Always cite which document your answer comes from.
+
+CONTEXT FROM CTU DOCUMENTS:
+{context}
+
+STUDENT QUESTION: {question}
+
+ANSWER:"""
+
     try:
         response = groq_client.chat.completions.create(
-            messages=[
-                {'role': 'system', 'content': system_prompt},
-                {'role': 'user', 'content': question}
-            ],
-            model="llama-3.1-8b-instant",
-            temperature=0.3
+            model="llama-3.3-70b-versatile",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.1,
+            max_tokens=1024,
         )
-        
-        raw_answer = response.choices[0].message.content
-        parts = raw_answer.split("|FOLLOWUPS|")
-        answer = parts[0].strip()
+        answer = response.choices[0].message.content
 
-        follow_ups = []
-        if len(parts) > 1:
-            raw_questions = parts[1].strip().split('\n')
-            for q in raw_questions:
-                clean_q = q.strip().lstrip('1234567890.- ')
-                if clean_q:
-                    follow_ups.append(clean_q)
-                    if len(follow_ups) == 3: break
-        
+        sources = list({
+            c.get('metadata', {}).get('name', 'CTU Document')
+            for c in safe_chunks
+        })
+
+        try:
+            supabase.table("chat_history").insert({
+                "user_email": request.user_email,
+                "user_role":  request.user_role,
+                "role":       "user",
+                "content":    question,
+            }).execute()
+            supabase.table("chat_history").insert({
+                "user_email": request.user_email,
+                "user_role":  request.user_role,
+                "role":       "assistant",
+                "content":    answer,
+            }).execute()
+        except Exception as e:
+            print(f"Chat history save failed: {e}")
+
+        return {"answer": answer, "sources": sources}
+
+    except groq.RateLimitError:
+        raise HTTPException(
+            status_code=429,
+            detail="The AI is currently busy. Please wait a moment and try again."
+        )
     except Exception as e:
-        print(f"Cloud API Error: {e}")
-        return {"answer": "I'm having a bit of trouble connecting to the network. Please try again in a moment!", "sources": [], "follow_ups": []}
+        print(f"Groq API error: {e}")
+        raise HTTPException(status_code=500, detail="AI service temporarily unavailable.")
 
-    unique_sources = {}
-    for chunk in relevant_chunks:
-        source_name = f"{chunk['metadata']['name']} (v{chunk['metadata']['version']}) - {chunk['metadata']['office']}"
-        
-        if source_name not in unique_sources:
-            clean_snippet = chunk['content'][:150].strip() + "..."
-            raw_similarity = chunk.get('similarity', 0.85)
-            human_score = raw_similarity * 1.5 
-            relevance_percentage = min(99, int(human_score * 100))
-            
-            unique_sources[source_name] = {
-                "name": source_name,
-                "snippet": clean_snippet,
-                "relevance": relevance_percentage 
-            }
-            
-    sources = list(unique_sources.values())
-    final_sources = sources if "I cannot find" not in answer and len(context_text) > 10 else []
 
+# ─────────────────────────────────────────────────────────────────────────────
+# BROADCAST ANNOUNCEMENT  ← FIXED
+# ─────────────────────────────────────────────────────────────────────────────
+
+@app.post("/admin/broadcast")
+def broadcast_notification(request: BroadcastRequest, db: Session = Depends(get_db)):
+    """
+    Send an announcement notification to users by role.
+    target_role = "ALL"     → FACULTY + STUDENT (not admins)
+    target_role = "STUDENT" → students only
+    target_role = "FACULTY" → faculty only
+
+    Admins are deliberately excluded — they are the senders, not receivers.
+    The admin who sends it gets a confirmation notification instead.
+    """
     try:
-        from vector_store import supabase
-        supabase.table("chat_history").insert({
-            "user_email": request.user_email,
-            "role": "user",
-            "content": request.question
-        }).execute()
-        
-        supabase.table("chat_history").insert({
-            "user_email": request.user_email,
-            "role": "ai",
-            "content": answer
-        }).execute()
+        sent = 0
+
+        if request.target_role.upper() in ("ALL", "EVERYONE"):
+            # Faculty + Students
+            users = (
+                db.query(models.User)
+                .filter(
+                    models.User.role.in_(["FACULTY", "STUDENT"]),
+                    models.User.status != "Disabled"
+                )
+                .all()
+            )
+        else:
+            users = (
+                db.query(models.User)
+                .filter(
+                    models.User.role == request.target_role.upper(),
+                    models.User.status != "Disabled"
+                )
+                .all()
+            )
+
+        for user in users:
+            _send_notification(
+                user_email=user.email,
+                n_type="info",
+                title=f"📢 {request.title}",
+                message=request.message,
+            )
+            sent += 1
+
+        # ── Confirm back to the sending admin ──
+        if request.sender_email:
+            _send_notification(
+                user_email=request.sender_email,
+                n_type="success",
+                title="Announcement Sent",
+                message=(
+                    f"Your announcement '{request.title}' was successfully "
+                    f"delivered to {sent} user(s)."
+                ),
+            )
+
+        # ── Log the broadcast ──
+        try:
+            supabase.table("system_events_logs").insert({
+                "user_email":  request.sender_email or "admin",
+                "event_type":  "Broadcast Announcement",
+                "description": f"Announcement '{request.title}' sent to {sent} {request.target_role} user(s)."
+            }).execute()
+        except Exception as exc:
+            print(f"[broadcast] audit log failed: {exc}")
+
+        return {
+            "message": f"Broadcast sent to {sent} {request.target_role} user(s).",
+            "sent":    sent
+        }
+
     except Exception as e:
-        print(f"Failed to save chat history: {e}")
+        print(f"[broadcast] error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
-    return {
-        "answer": answer,
-        "sources": final_sources,
-        "follow_ups": follow_ups
-    }
 
-@app.get("/documents")
-def get_documents():
-    from vector_store import supabase
-    response = supabase.table("document_sections").select("metadata").execute()
-    
-    seen = set()
-    unique_docs = []
-    
-    for item in response.data:
-        meta = item.get('metadata', {})
-        doc_name = meta.get('name')
-        doc_version = meta.get('version', '1.0') # Fallback if missing
-        
-        # --- THE FIX 1: Combine name AND version to make it unique ---
-        unique_key = f"{doc_name}_v{doc_version}"
-        
-        if unique_key not in seen:
-            unique_docs.append({
-                "id": len(unique_docs) + 1,
-                "name": doc_name,
-                "category": meta.get('category'),
-                "office": meta.get('office'),
-                "version": doc_version,
-                "effectivity_date": meta.get('effectivity_date', 'N/A'),
-                "file_url": meta.get('file_url') or meta.get('source'),
-                "status": meta.get('status', 'Active') # <--- THE FIX 2: Send status to React
-            })
-            seen.add(unique_key)
-            
-    # Sort them so the newest/highest versions appear at the top of the table
-    return sorted(unique_docs, key=lambda x: (x['name'], x['version']), reverse=True)
-
-@app.get("/analytics/recent")
-def get_recent_questions():
-    from vector_store import supabase
-    response = supabase.table("query_logs").select("query_text").order("created_at", desc=True).limit(50).execute()
-    
-    seen = set()
-    recent = []
-    question_words = ["what", "how", "when", "where", "why", "who", "is", "are", "can", "do", "does", "will"]
-    blocked_words = ["test", "asdf", "fuck", "shit", "stupid", "idiot", "blah"]
-    
-    for row in response.data:
-        q = row['query_text'].strip()
-        q_lower = q.lower()
-        if len(q.split()) <= 3: continue
-        if any(bad_word in q_lower for bad_word in blocked_words): continue
-        starts_with_q = any(q_lower.startswith(w) for w in question_words)
-        ends_with_q = q.endswith("?")
-        if not (starts_with_q or ends_with_q): continue
-        if q not in seen:
-            seen.add(q)
-            recent.append(q)
-            if len(recent) == 5: break
-                
-    if not recent:
-        return [
-            "What is the grading system for undergraduate programs?", 
-            "How do I apply for research grants?",
-            "What are the requirements for faculty promotion?"
-        ]
-    return recent
-
-@app.get("/analytics/popular")
-def get_popular_topics():
-    from vector_store import supabase
-    response = supabase.table("query_logs").select("topic_category").execute()
-    
-    counts = {}
-    for row in response.data:
-        cat = row['topic_category']
-        if cat in ["General", "Ignored"]: continue
-        counts[cat] = counts.get(cat, 0) + 1
-        
-    sorted_cats = sorted(counts.items(), key=lambda x: x[1], reverse=True)
-    colors = ["blue", "emerald", "purple", "orange"]
-    topics = []
-    for i, (cat, count) in enumerate(sorted_cats[:4]):
-        topics.append({"label": cat, "color": colors[i % len(colors)]})
-        
-    if not topics:
-        return [
-            {"label": "Grading", "color": "blue"}, 
-            {"label": "Research", "color": "emerald"},
-            {"label": "Admissions", "color": "purple"}
-        ]
-    return topics
+# ─────────────────────────────────────────────────────────────────────────────
+# SYSTEM STATS
+# ─────────────────────────────────────────────────────────────────────────────
 
 @app.get("/system-stats")
 def get_system_stats(role: str = "STUDENT", db: Session = Depends(get_db)):
-    from vector_store import supabase
     import json
 
-    total_docs = 0
-    total_users = 0
+    total_docs    = 0
+    total_users   = 0
     total_queries = 0
 
-    # 1. Count Users (Safely from PostgreSQL)
     try:
         total_users = db.query(models.User).count()
     except Exception as e:
         print(f"User count error: {e}")
 
-    # 2. Count Documents (Safely from Supabase)
     try:
         docs_response = supabase.table("document_sections").select("metadata").execute()
-        unique_docs = set()
+        unique_docs   = set()
         if docs_response.data:
             for row in docs_response.data:
                 meta = row.get("metadata", {})
-                
-                # Failsafe: if Supabase returns metadata as a string, convert it to a dictionary
-                if isinstance(meta, str):
-                    try: 
-                        meta = json.loads(meta)
-                    except: 
-                        meta = {}
 
-                # Failsafe: Check every possible key name for the document
+                if isinstance(meta, str):
+                    try:    meta = json.loads(meta)
+                    except: meta = {}
+
                 doc_name = meta.get("document_name") or meta.get("title") or meta.get("name") or meta.get("file_name") or meta.get("source")
                 category = meta.get("category", "")
-                status = meta.get("status", "Active")
+                status   = meta.get("status", "Active")
 
                 if doc_name:
-                    # Skip if the document is archived
                     if str(status).lower() == "archived":
                         continue
-                    # Hide Accreditation Evidence from students
                     if role.upper() not in ["FACULTY", "ADMIN"] and category == "Accreditation Evidence":
                         continue
-                    
                     unique_docs.add(doc_name)
-                    
+
         total_docs = len(unique_docs)
     except Exception as e:
         print(f"Document count error: {e}")
 
-    # 3. Count Chat Queries (Safely without using the buggy count='exact' syntax)
     try:
         query_response = supabase.table("chat_history").select("id").eq("role", "user").execute()
-        total_queries = len(query_response.data) if query_response.data else 0
+        total_queries  = len(query_response.data) if query_response.data else 0
     except Exception as e:
         print(f"Chat count error: {e}")
 
     return {
         "documents": total_docs,
-        "users": total_users,
-        "queries": total_queries
+        "users":     total_users,
+        "queries":   total_queries,
     }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# FEEDBACK
+# ─────────────────────────────────────────────────────────────────────────────
 
 @app.post("/feedback")
 def submit_feedback(request: FeedbackRequest):
-    from vector_store import supabase
     try:
         supabase.table("feedback_logs").insert({
             "question_text": request.question,
-            "ai_response": request.answer,
-            "is_helpful": request.is_helpful
+            "ai_response":   request.answer,
+            "is_helpful":    request.is_helpful
         }).execute()
         return {"status": "success", "message": "Feedback recorded!"}
     except Exception as e:
         print(f"Failed to log feedback: {e}")
         return {"status": "error", "message": str(e)}
-    
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CHAT HISTORY
+# ─────────────────────────────────────────────────────────────────────────────
+
 @app.get("/chat-history")
 def get_chat_history(email: str):
-    from vector_store import supabase
     seven_days_ago = (datetime.now() - timedelta(days=7)).isoformat()
-    
+
     try:
         response = supabase.table("chat_history")\
             .select("*")\
@@ -796,78 +1114,33 @@ def get_chat_history(email: str):
             .gte("created_at", seven_days_ago)\
             .order("created_at", desc=False)\
             .execute()
-            
         return response.data
     except Exception as e:
         print(f"Error fetching history: {e}")
         return []
-    
-@app.put("/documents/update")
-def update_document(request: UpdateDocumentRequest):
-    from vector_store import supabase
-    try:
-        res = supabase.table("document_sections").select("metadata").eq("metadata->>name", request.old_name).limit(1).execute()
-        if not res.data:
-            raise HTTPException(status_code=404, detail="Document not found")
-        
-        base_metadata = res.data[0]['metadata']
-        
-        base_metadata["name"] = request.new_name
-        base_metadata["category"] = request.category
-        base_metadata["office"] = request.office
-        base_metadata["version"] = request.version
-        base_metadata["effectivity_date"] = request.effectivity_date
-        
-        supabase.table("document_sections").update({"metadata": base_metadata}).eq("metadata->>name", request.old_name).execute()
-        
-        return {"message": "Document metadata updated successfully!"}
-    except Exception as e:
-        print(f"Update error: {e}")
-        raise HTTPException(status_code=500, detail="Failed to update document")
 
-@app.delete("/documents/{doc_name}")
-def archive_document(doc_name: str):
-    from vector_store import supabase
-    try:
-        # 1. Fetch ALL chunks/vectors belonging to this specific document
-        chunks_res = supabase.table("document_sections").select("id, metadata").eq("metadata->>name", doc_name).execute()
-        
-        if not chunks_res.data:
-            raise HTTPException(status_code=404, detail="Document not found in the database.")
 
-        # 2. Loop through every chunk and update its status to "Archived"
-        # We do this instead of a hard delete to preserve the audit trail.
-        for chunk in chunks_res.data:
-            chunk_meta = chunk['metadata']
-            chunk_meta['status'] = "Archived" 
-            
-            # Save the modified metadata back to the database
-            supabase.table("document_sections").update({"metadata": chunk_meta}).eq("id", chunk['id']).execute()
+# ─────────────────────────────────────────────────────────────────────────────
+# ACCREDITATION
+# ─────────────────────────────────────────────────────────────────────────────
 
-        return {"message": f"Document '{doc_name}' successfully archived and removed from active AI context!"}
-        
-    except Exception as e:
-        print(f"Archive error: {e}")
-        raise HTTPException(status_code=500, detail="Failed to archive document")
-    
-# 1. THE UPLOAD ROUTE
 @app.post("/upload-accreditation-evidence")
 async def upload_accreditation_evidence(
-    file: UploadFile = File(...),
-    document_name: str = Form(...),
-    program: str = Form(...),
-    area_code: str = Form(...),
-    requirement_target: str = Form(...) # <--- NEW: Catch the exact requirement
+    file:                UploadFile = File(...),
+    document_name:       str = Form(...),
+    program:             str = Form(...),
+    area_code:           str = Form(...),
+    requirement_target:  str = Form(...),
+    uploaded_by:         str = Form(None),
 ):
     import time, io, PyPDF2
-    from vector_store import supabase, add_to_vector_db
     from datetime import datetime
 
     try:
-        contents = await file.read()
+        contents       = await file.read()
         extracted_text = ""
         filename_lower = file.filename.lower()
-        
+
         if filename_lower.endswith(".pdf"):
             pdf_reader = PyPDF2.PdfReader(io.BytesIO(contents))
             for page in pdf_reader.pages:
@@ -885,381 +1158,389 @@ async def upload_accreditation_evidence(
         if not extracted_text.strip():
             raise HTTPException(status_code=400, detail="Could not extract text.")
 
-        safe_filename = file.filename.replace(" ", "_")
+        safe_filename   = file.filename.replace(" ", "_")
         unique_filename = f"evid_{int(time.time())}_{safe_filename}"
-        
+
         supabase.storage.from_("documents").upload(
             file=contents, path=unique_filename, file_options={"content-type": file.content_type}
         )
         public_url = supabase.storage.from_("documents").get_public_url(unique_filename)
 
         metadata = {
-            "name": document_name,
-            "category": "Accreditation Evidence",
-            "office": "Quality Assurance",
-            "version": "1.0",
-            "status": "Active",
-            "program": program,
-            "area_code": area_code,
-            "requirement_target": requirement_target, # <--- NEW: Save it to database!
-            "upload_date": datetime.now().isoformat(),
-            "file_url": public_url
+            "name":                document_name,
+            "category":            "Accreditation Evidence",
+            "office":              "Quality Assurance",
+            "version":             "1.0",
+            "status":              "Active",
+            "program":             program,
+            "area_code":           area_code,
+            "requirement_target":  requirement_target,
+            "upload_date":         datetime.now().isoformat(),
+            "file_url":            public_url,
+            "uploaded_by":         uploaded_by or "Unknown",
         }
 
-        add_to_vector_db(extracted_text, metadata)
+        vector_store.add_to_vector_db(extracted_text, metadata)
+
+        if uploaded_by:
+            _send_notification(
+                user_email=uploaded_by,
+                n_type="success",
+                title="Evidence Submitted Successfully",
+                message=(
+                    f"Your document '{document_name}' has been submitted for "
+                    f"{program} {area_code} and is now pending admin review."
+                ),
+            )
+
         return {"message": "Evidence successfully uploaded and linked to specific requirement!"}
 
     except Exception as e:
         print(f"Evidence upload error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-# 2. THE STATUS ROUTE
+
 @app.get("/accreditation-status/{program}")
 def get_accreditation_status(program: str):
-    from vector_store import supabase
     try:
-        res = supabase.table("document_sections").select("metadata").eq("metadata->>category", "Accreditation Evidence").eq("metadata->>program", program).eq("metadata->>status", "Active").execute()
-        
-        # Group unique fulfilled requirements by Area Code
+        res = supabase.table("document_sections")\
+            .select("metadata")\
+            .eq("metadata->>category", "Accreditation Evidence")\
+            .eq("metadata->>program",  program)\
+            .eq("metadata->>status",   "Active")\
+            .execute()
+
         fulfilled_reqs = {}
         if res.data:
             for item in res.data:
-                meta = item.get('metadata', {})
-                area = meta.get('area_code')
-                req_target = meta.get('requirement_target') # <--- Look for the explicit target
-                
+                meta       = item.get('metadata', {})
+                area       = meta.get('area_code')
+                req_target = meta.get('requirement_target')
                 if area and req_target:
                     if area not in fulfilled_reqs:
                         fulfilled_reqs[area] = set()
-                    fulfilled_reqs[area].add(req_target) # Add the unique requirement
+                    fulfilled_reqs[area].add(req_target)
 
         AREA_TEMPLATES = {
-            "Area I": ["Approved Board Resolution of VMGO", "Dissemination Evidence (Photos, Memos)", "Stakeholder Awareness Survey Rating"],
-            "Area II": ["Faculty Manual", "201 Files / Credentials of Faculty", "Faculty Development Plan", "Summary of Faculty Workload and Loading"],
-            "Area III": ["CMO / Syllabi for all subjects", "Curriculum Map", "Sample Exams and Rubrics"],
-            "Area IV": ["Student Handbook", "Guidance and Counseling Reports", "Student Organization Activities"],
-            "Area V": ["Institutional Research Agenda", "Published Research Papers", "Research Incentives Memo"],
-            "Area VI": ["Extension Program Plan", "MOA/MOU with Partner Communities", "Impact Assessment Report"],
-            "Area VII": ["Library Manual", "Inventory of Books and Journals", "Library Utilization Reports"],
+            "Area I":    ["Approved Board Resolution of VMGO", "Dissemination Evidence (Photos, Memos)", "Stakeholder Awareness Survey Rating"],
+            "Area II":   ["Faculty Manual", "201 Files / Credentials of Faculty", "Faculty Development Plan", "Summary of Faculty Workload and Loading"],
+            "Area III":  ["CMO / Syllabi for all subjects", "Curriculum Map", "Sample Exams and Rubrics"],
+            "Area IV":   ["Student Handbook", "Guidance and Counseling Reports", "Student Organization Activities"],
+            "Area V":    ["Institutional Research Agenda", "Published Research Papers", "Research Incentives Memo"],
+            "Area VI":   ["Extension Program Plan", "MOA/MOU with Partner Communities", "Impact Assessment Report"],
+            "Area VII":  ["Library Manual", "Inventory of Books and Journals", "Library Utilization Reports"],
             "Area VIII": ["Campus Development Plan", "Building Permits and Fire Safety Certs", "Maintenance Logs"],
-            "Area IX": ["Laboratory Manuals", "Inventory of Equipment", "Safety and Hazard Protocols"],
-            "Area X": ["Organizational Chart", "Strategic Plan", "Financial Audit Reports"]
+            "Area IX":   ["Laboratory Manuals", "Inventory of Equipment", "Safety and Hazard Protocols"],
+            "Area X":    ["Organizational Chart", "Strategic Plan", "Financial Audit Reports"],
         }
-        
+
         AREA_TITLES = {
-            "Area I": "Vision, Mission, Goals and Objectives", "Area II": "Faculty",
-            "Area III": "Curriculum and Instruction", "Area IV": "Support to Students",
-            "Area V": "Research", "Area VI": "Extension and Community Involvement",
-            "Area VII": "Library", "Area VIII": "Physical Plant and Facilities",
-            "Area IX": "Laboratories", "Area X": "Administration"
+            "Area I":    "Vision, Mission, Goals and Objectives",
+            "Area II":   "Faculty",
+            "Area III":  "Curriculum and Instruction",
+            "Area IV":   "Support to Students",
+            "Area V":    "Research",
+            "Area VI":   "Extension and Community Involvement",
+            "Area VII":  "Library",
+            "Area VIII": "Physical Plant and Facilities",
+            "Area IX":   "Laboratories",
+            "Area X":    "Administration",
         }
-        
+
         areas_list = []
-        total_req = 0
-        total_ev = 0
-        
+        total_req  = 0
+        total_ev   = 0
+
         for code, reqs in AREA_TEMPLATES.items():
             required_count = len(reqs)
-            # Count how many unique requirements were actually met
-            ev_count = len(fulfilled_reqs.get(code, set())) 
-            capped_ev = min(ev_count, required_count)
-            
-            total_req += required_count
-            total_ev += capped_ev
-            comp = int((capped_ev / required_count) * 100) if required_count > 0 else 0
-            
+            ev_count       = len(fulfilled_reqs.get(code, set()))
+            capped_ev      = min(ev_count, required_count)
+            total_req     += required_count
+            total_ev      += capped_ev
+            comp           = int((capped_ev / required_count) * 100) if required_count > 0 else 0
+
             areas_list.append({
-                "id": code.replace(" ", ""),
-                "code": code,
-                "title": AREA_TITLES.get(code, "General Area"),
-                "compliance": comp,
-                "required": required_count,
+                "id":            code.replace(" ", ""),
+                "code":          code,
+                "title":         AREA_TITLES.get(code, "General Area"),
+                "compliance":    comp,
+                "required":      required_count,
                 "evidenceCount": ev_count,
-                "gaps": max(0, required_count - ev_count)
+                "gaps":          max(0, required_count - ev_count),
             })
-            
+
         overall = int((total_ev / total_req) * 100) if total_req > 0 else 0
-        
+
         return {
-            "level": "Level III" if program == "BSIT" else "Level II",
-            "overall": overall,
-            "gaps": total_req - total_ev,
+            "level":    "Level III" if program == "BSIT" else "Level II",
+            "overall":  overall,
+            "gaps":     total_req - total_ev,
             "evidence": total_ev,
-            "areas": areas_list
+            "areas":    areas_list,
         }
     except Exception as e:
         print(f"Status error: {e}")
         raise HTTPException(status_code=500, detail="Failed to calculate status")
 
-# 3. THE DETAILS ROUTE
+
 @app.get("/accreditation-details/{program}/{area_code}")
 def get_accreditation_details(program: str, area_code: str):
-    from vector_store import supabase
     try:
-        response = supabase.table("document_sections").select("metadata").eq("metadata->>category", "Accreditation Evidence").eq("metadata->>program", program).eq("metadata->>area_code", area_code).execute()
-        
-        unique_docs = {}
-        fulfilled_targets = set() # Track exactly which requirements have files
-        
+        response = supabase.table("document_sections")\
+            .select("metadata")\
+            .eq("metadata->>category", "Accreditation Evidence")\
+            .eq("metadata->>program",  program)\
+            .eq("metadata->>area_code", area_code)\
+            .execute()
+
+        unique_docs       = {}
+        fulfilled_targets = set()
+
         if response.data:
             for item in response.data:
                 meta = item.get('metadata', {})
                 if meta.get('status') == "Archived": continue
-                
-                doc_name = meta.get('name')
-                req_target = meta.get('requirement_target') # Get the tag
-                
+
+                doc_name   = meta.get('name')
+                req_target = meta.get('requirement_target')
+
                 if req_target:
-                    fulfilled_targets.add(req_target) # Add to fulfilled list
-                
+                    fulfilled_targets.add(req_target)
+
                 if doc_name and doc_name not in unique_docs:
                     unique_docs[doc_name] = {
-                        "name": doc_name,
-                        "date": meta.get('upload_date', '').split('T')[0] if 'upload_date' in meta else 'Recently',
-                        "url": meta.get('file_url') or meta.get('source', '#'),
-                        "target": req_target or "Uncategorized" # Show in UI table
+                        "name":   doc_name,
+                        "date":   meta.get('upload_date', '').split('T')[0] if 'upload_date' in meta else 'Recently',
+                        "url":    meta.get('file_url') or meta.get('source', '#'),
+                        "target": req_target or "Uncategorized",
                     }
-                    
+
         uploaded_files = list(unique_docs.values())
-        
+
         AREA_TEMPLATES = {
-            "Area I": ["Approved Board Resolution of VMGO", "Dissemination Evidence (Photos, Memos)", "Stakeholder Awareness Survey Rating"],
-            "Area II": ["Faculty Manual", "201 Files / Credentials of Faculty", "Faculty Development Plan", "Summary of Faculty Workload and Loading"],
-            "Area III": ["CMO / Syllabi for all subjects", "Curriculum Map", "Sample Exams and Rubrics"],
-            "Area IV": ["Student Handbook", "Guidance and Counseling Reports", "Student Organization Activities"],
-            "Area V": ["Institutional Research Agenda", "Published Research Papers", "Research Incentives Memo"],
-            "Area VI": ["Extension Program Plan", "MOA/MOU with Partner Communities", "Impact Assessment Report"],
-            "Area VII": ["Library Manual", "Inventory of Books and Journals", "Library Utilization Reports"],
+            "Area I":    ["Approved Board Resolution of VMGO", "Dissemination Evidence (Photos, Memos)", "Stakeholder Awareness Survey Rating"],
+            "Area II":   ["Faculty Manual", "201 Files / Credentials of Faculty", "Faculty Development Plan", "Summary of Faculty Workload and Loading"],
+            "Area III":  ["CMO / Syllabi for all subjects", "Curriculum Map", "Sample Exams and Rubrics"],
+            "Area IV":   ["Student Handbook", "Guidance and Counseling Reports", "Student Organization Activities"],
+            "Area V":    ["Institutional Research Agenda", "Published Research Papers", "Research Incentives Memo"],
+            "Area VI":   ["Extension Program Plan", "MOA/MOU with Partner Communities", "Impact Assessment Report"],
+            "Area VII":  ["Library Manual", "Inventory of Books and Journals", "Library Utilization Reports"],
             "Area VIII": ["Campus Development Plan", "Building Permits and Fire Safety Certs", "Maintenance Logs"],
-            "Area IX": ["Laboratory Manuals", "Inventory of Equipment", "Safety and Hazard Protocols"],
-            "Area X": ["Organizational Chart", "Strategic Plan", "Financial Audit Reports"]
+            "Area IX":   ["Laboratory Manuals", "Inventory of Equipment", "Safety and Hazard Protocols"],
+            "Area X":    ["Organizational Chart", "Strategic Plan", "Financial Audit Reports"],
         }
-        
+
         template_reqs = AREA_TEMPLATES.get(area_code, [])
-        
-        requirements = []
+        requirements  = []
         for index, req_text in enumerate(template_reqs):
-            # THE FIX: Is the exact text inside the fulfilled targets set?
-            is_met = req_text in fulfilled_targets 
-            
             requirements.append({
-                "id": index + 1,
-                "text": req_text,
-                "is_met": is_met
+                "id":     index + 1,
+                "text":   req_text,
+                "is_met": req_text in fulfilled_targets,
             })
-            
+
         return {
-            "requirements": requirements,
-            "uploadedFiles": sorted(uploaded_files, key=lambda x: x['date'], reverse=True)
+            "requirements":  requirements,
+            "uploadedFiles": sorted(uploaded_files, key=lambda x: x['date'], reverse=True),
         }
     except Exception as e:
         print(f"Details error: {e}")
         raise HTTPException(status_code=500, detail="Failed to fetch details")
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# AUDIT TRAIL
+# ─────────────────────────────────────────────────────────────────────────────
+
 @app.get("/audit/queries")
 def get_query_logs():
-    from vector_store import supabase
-    from datetime import datetime
     try:
-        # Fetch only the questions (where role == 'user'), ordered by newest first.
-        # We limit to 100 to prevent the dashboard from lagging.
         response = supabase.table("chat_history").select("*").eq("role", "user").order("created_at", desc=True).limit(100).execute()
-        
+
         logs = []
         if response.data:
             for index, item in enumerate(response.data):
-                # Format the timestamp beautifully
-                raw_date = item.get("created_at", "")
+                raw_date       = item.get("created_at", "")
                 formatted_date = "Unknown Date"
                 if raw_date:
                     try:
-                        dt = datetime.fromisoformat(raw_date.replace("Z", "+00:00"))
+                        dt             = datetime.fromisoformat(raw_date.replace("Z", "+00:00"))
                         formatted_date = dt.strftime("%B %d, %Y - %I:%M %p")
                     except:
                         formatted_date = raw_date.split("T")[0]
 
                 logs.append({
-                    "id": item.get("id", index),
-                    "user": item.get("user_email", "Unknown User"),
-                    "role": item.get("user_role", "User"), 
-                    "query": item.get("content", ""),
+                    "id":        item.get("id", index),
+                    "user":      item.get("user_email", "Unknown User"),
+                    "role":      item.get("user_role",  "User"),
+                    "query":     item.get("content",    ""),
                     "timestamp": formatted_date,
-                    "status": "Answered"
+                    "status":    "Answered",
                 })
-                
+
         return logs
     except Exception as e:
         print(f"Audit log error: {e}")
         raise HTTPException(status_code=500, detail="Failed to fetch query logs")
-    
-# 1. The Route to SAVE the log (Triggered when someone clicks View/Download)
+
+
 @app.post("/audit/access")
 def log_document_access(log: AccessLogRequest):
-    from vector_store import supabase
     try:
         supabase.table("document_access_logs").insert({
             "document_name": log.document_name,
-            "action_type": log.action_type,
-            "user_email": log.user_email,
-            "user_role": log.user_role
+            "action_type":   log.action_type,
+            "user_email":    log.user_email,
+            "user_role":     log.user_role,
         }).execute()
         return {"message": "Access successfully logged"}
     except Exception as e:
         print(f"Failed to log access: {e}")
         return {"message": "Silent failure - do not disrupt user experience"}
 
-# 2. The Route to FETCH the logs (Triggered by the Audit Trail Dashboard)
+
 @app.get("/audit/access")
 def get_access_logs():
-    from vector_store import supabase
-    from datetime import datetime
     try:
         response = supabase.table("document_access_logs").select("*").order("accessed_at", desc=True).limit(100).execute()
-        
+
         logs = []
         if response.data:
             for item in response.data:
-                # Format the timestamp beautifully
-                raw_date = item.get("accessed_at", "")
+                raw_date       = item.get("accessed_at", "")
                 formatted_date = "Unknown Date"
                 if raw_date:
                     try:
-                        dt = datetime.fromisoformat(raw_date.replace("Z", "+00:00"))
+                        dt             = datetime.fromisoformat(raw_date.replace("Z", "+00:00"))
                         formatted_date = dt.strftime("%B %d, %Y - %I:%M %p")
                     except:
                         formatted_date = raw_date.split("T")[0]
 
                 logs.append({
-                    "id": item.get("id"),
-                    "user": item.get("user_email", "Unknown"),
-                    "role": item.get("user_role", "User"),
-                    "document": item.get("document_name", "Unknown Document"),
-                    "action": item.get("action_type", "Accessed"),
-                    "timestamp": formatted_date
+                    "id":        item.get("id"),
+                    "user":      item.get("user_email",    "Unknown"),
+                    "role":      item.get("user_role",     "User"),
+                    "document":  item.get("document_name", "Unknown Document"),
+                    "action":    item.get("action_type",   "Accessed"),
+                    "timestamp": formatted_date,
                 })
         return logs
     except Exception as e:
         print(f"Access log fetch error: {e}")
         raise HTTPException(status_code=500, detail="Failed to fetch access logs")
 
+
 @app.get("/audit/versions")
 def get_version_history():
-    from vector_store import supabase
-    from datetime import datetime
     try:
-        # Fetch metadata for all documents in the database
-        response = supabase.table("document_sections").select("metadata").execute()
-        
-        raw_logs = []
+        response  = supabase.table("document_sections").select("metadata").execute()
+        raw_logs  = []
+
         if response.data:
             for item in response.data:
-                meta = item.get("metadata", {})
+                meta     = item.get("metadata", {})
                 doc_name = meta.get("name")
-                version = meta.get("version", "1.0")
-                
+                version  = meta.get("version", "1.0")
+
                 if doc_name:
-                    raw_date = meta.get("upload_date", "")
+                    raw_date       = meta.get("upload_date", "")
                     formatted_date = "Unknown Date"
                     if raw_date:
                         try:
-                            dt = datetime.fromisoformat(raw_date.replace("Z", "+00:00"))
+                            dt             = datetime.fromisoformat(raw_date.replace("Z", "+00:00"))
                             formatted_date = dt.strftime("%B %d, %Y - %I:%M %p")
                         except:
                             formatted_date = raw_date.split("T")[0]
 
                     raw_logs.append({
-                        "document": doc_name,
-                        "version": version,
-                        # Fallback to 'System Admin' if user isn't tagged in old uploads
-                        "user": meta.get("uploaded_by", "System Admin"), 
-                        "status": meta.get("status", "Active"),
+                        "document":  doc_name,
+                        "version":   version,
+                        "user":      meta.get("uploaded_by", "System Admin"),
+                        "status":    meta.get("status", "Active"),
                         "timestamp": formatted_date,
-                        "raw_date": raw_date
+                        "raw_date":  raw_date,
                     })
-        
-        # Sort chronologically (newest first)
+
         raw_logs.sort(key=lambda x: x["raw_date"], reverse=True)
-        
-        # THE FIX: Deduplicate vector chunks! 
-        # We only want to show ONE row per document per version.
+
         unique_logs = []
-        seen = set()
-        
+        seen        = set()
         for idx, log in enumerate(raw_logs):
             identifier = f"{log['document']}_v{log['version']}"
             if identifier not in seen:
                 seen.add(identifier)
-                # Assign a unique React ID
                 log["id"] = f"ver_{idx}"
                 unique_logs.append(log)
 
         return unique_logs[:100]
-        
+
     except Exception as e:
         print(f"Version log fetch error: {e}")
         raise HTTPException(status_code=500, detail="Failed to fetch version history")
 
+
 @app.get("/audit/system")
 def get_system_events():
-    from vector_store import supabase
-    from datetime import datetime
     try:
         response = supabase.table("system_events_logs").select("*").order("event_date", desc=True).limit(100).execute()
-        
+
         logs = []
         if response.data:
             for item in response.data:
-                raw_date = item.get("event_date", "")
+                raw_date       = item.get("event_date", "")
                 formatted_date = "Unknown Date"
                 if raw_date:
                     try:
-                        dt = datetime.fromisoformat(raw_date.replace("Z", "+00:00"))
+                        dt             = datetime.fromisoformat(raw_date.replace("Z", "+00:00"))
                         formatted_date = dt.strftime("%B %d, %Y - %I:%M %p")
                     except:
                         formatted_date = raw_date.split("T")[0]
 
                 logs.append({
-                    "id": item.get("id"),
-                    "user": item.get("user_email", "Unknown"),
-                    "type": item.get("event_type", "System Event"),
+                    "id":          item.get("id"),
+                    "user":        item.get("user_email",  "Unknown"),
+                    "type":        item.get("event_type",  "System Event"),
                     "description": item.get("description", ""),
-                    "timestamp": formatted_date
+                    "timestamp":   formatted_date,
                 })
         return logs
     except Exception as e:
         print(f"System log fetch error: {e}")
         raise HTTPException(status_code=500, detail="Failed to fetch system events")
-    
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# GRADE EVALUATION
+# ─────────────────────────────────────────────────────────────────────────────
+
 @app.post("/evaluate-grades")
 async def evaluate_grades(file: UploadFile = File(...)):
     try:
-        # 1. Ephemeral In-Memory Parsing (DO NOT save to database!)
-        content = await file.read()
+        content    = await file.read()
         pdf_reader = PyPDF2.PdfReader(io.BytesIO(content))
-        raw_text = ""
+        raw_text   = ""
         for page in pdf_reader.pages:
             raw_text += page.extract_text() + "\n"
-            
-        # 2. Strict Institutional AI Prompt (70B Optimized & Clean Extraction)
+
         system_prompt = """
         You are a meticulous Academic Data Extractor for Cebu Technological University (CTU).
         Your job is to parse scrambled PDF text and extract subjects, units, and grades into a clean JSON structure.
-        
+
         CRITICAL PARSING RULES FOR PDFs:
         1. PyPDF2 flattens tables. A subject row might look like: "CS46 FUNCTIONAL ENGLISH 3.00 01:00PM Wed CAS 3 1.6"
         2. UNITS are typically integers or decimals like 2.00, 3.00, or 5.00.
-        3. GRADES are strictly between 1.0 and 5.0. 
-        4. DO NOT INVENT GRADES. If a subject does not have a clear grade (1.0 to 5.0) explicitly associated with it on its line, mark the grade as 0 and 'has_missing_grades' as true. Do NOT borrow grades from other rows!
-        5. If there are multiple grades on a single line (e.g., a midterm and a final), ALWAYS extract the LAST valid numerical grade on that line.
-        
-        You MUST respond with a pure JSON object in this EXACT format. 
+        3. GRADES are strictly between 1.0 and 5.0.
+        4. DO NOT INVENT GRADES. If a subject does not have a clear grade (1.0 to 5.0) explicitly associated with it on its line, mark the grade as 0 and 'has_missing_grades' as true.
+        5. If there are multiple grades on a single line, ALWAYS extract the LAST valid numerical grade on that line.
+
+        You MUST respond with a pure JSON object in this EXACT format.
         {
           "semesters": [
             {
               "semester_name": "1st Semester SY 2023-2024",
               "subjects_scratchpad": [
                 {"subject": "CS46 FUNCTIONAL ENGLISH", "units": 3.0, "grade": 1.6, "weighted_score": 4.8},
-                {"subject": "CS47 ART APP", "units": 3.0, "grade": 0, "weighted_score": 0} 
+                {"subject": "CS47 ART APP", "units": 3.0, "grade": 0, "weighted_score": 0}
               ],
               "has_missing_grades": true
             }
@@ -1268,22 +1549,156 @@ async def evaluate_grades(file: UploadFile = File(...)):
           "recommendations": ["Recommendation 1", "Recommendation 2", "Recommendation 3"]
         }
         """
-        
-        # 3. Request Evaluation from Groq
-        response = groq_client.chat.completions.create(
-            model="llama-3.3-70b-versatile", # Fast and capable model
+
+        response    = groq_client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
             messages=[
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"Here is the raw text from the grade slip:\n\n{raw_text}"}
+                {"role": "user",   "content": f"Here is the raw text from the grade slip:\n\n{raw_text}"}
             ],
-            temperature=0.1, # Keep it strictly logical
+            temperature=0.1,
             response_format={"type": "json_object"}
         )
-        
-        # 4. Parse and return the JSON
+
         result_json = response.choices[0].message.content
         return json.loads(result_json)
-        
+
     except Exception as e:
         print(f"Grade Evaluation Error: {e}")
         raise HTTPException(status_code=500, detail="Failed to evaluate grades.")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# NOTIFICATION SYSTEM ENDPOINTS
+# ─────────────────────────────────────────────────────────────────────────────
+
+@app.get("/notifications", response_model=List[NotificationOut])
+def get_notifications(email: str, filter: str = "all"):
+    if not email:
+        raise HTTPException(status_code=400, detail="email query param is required")
+
+    try:
+        query = (
+            supabase.table("notifications")
+            .select("*")
+            .eq("user_email", email)
+            .order("created_at", desc=True)
+            .limit(100)
+        )
+
+        if filter == "unread":
+            query = query.eq("is_read", False)
+
+        response = query.execute()
+        return response.data if response.data else []
+
+    except Exception as e:
+        print(f"[notifications] GET error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch notifications")
+
+
+@app.get("/notifications/count")
+def get_notification_count(email: str):
+    if not email:
+        raise HTTPException(status_code=400, detail="email query param is required")
+
+    try:
+        response = (
+            supabase.table("notifications")
+            .select("id", count="exact")
+            .eq("user_email", email)
+            .eq("is_read", False)
+            .execute()
+        )
+        return {"unread_count": response.count if response.count is not None else 0}
+
+    except Exception as e:
+        print(f"[notifications] COUNT error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to count notifications")
+
+
+@app.patch("/notifications/mark-all-read")
+def mark_all_notifications_read(payload: dict = Body(...)):
+    email = payload.get("email")
+    if not email:
+        raise HTTPException(status_code=400, detail="email is required in request body")
+
+    try:
+        response = (
+            supabase.table("notifications")
+            .update({"is_read": True})
+            .eq("user_email", email)
+            .eq("is_read", False)
+            .execute()
+        )
+        updated = len(response.data) if response.data else 0
+        return {"message": f"Marked {updated} notification(s) as read", "updated": updated}
+
+    except Exception as e:
+        print(f"[notifications] MARK-ALL-READ error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to mark notifications")
+
+
+@app.patch("/notifications/{notification_id}/read")
+def mark_notification_read(notification_id: int):
+    try:
+        response = (
+            supabase.table("notifications")
+            .update({"is_read": True})
+            .eq("id", notification_id)
+            .execute()
+        )
+        if not response.data:
+            raise HTTPException(status_code=404, detail="Notification not found")
+        return {"message": "Notification marked as read"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[notifications] MARK-READ error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to update notification")
+
+
+@app.delete("/notifications/delete-read")
+def delete_read_notifications(payload: dict = Body(...)):
+    email = payload.get("email")
+    if not email:
+        raise HTTPException(status_code=400, detail="email is required in request body")
+
+    try:
+        response = (
+            supabase.table("notifications")
+            .delete()
+            .eq("user_email", email)
+            .eq("is_read", True)
+            .execute()
+        )
+        deleted = len(response.data) if response.data else 0
+        return {"message": f"Deleted {deleted} read notification(s)", "deleted": deleted}
+
+    except Exception as e:
+        print(f"[notifications] DELETE-READ error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to delete read notifications")
+
+
+@app.post("/notifications", response_model=NotificationOut, status_code=201)
+def create_notification_endpoint(notification: NotificationCreate):
+    if notification.type not in VALID_NOTIF_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"type must be one of: {', '.join(VALID_NOTIF_TYPES)}"
+        )
+
+    try:
+        response = supabase.table("notifications").insert({
+            "user_email": notification.user_email,
+            "type":       notification.type,
+            "title":      notification.title,
+            "message":    notification.message,
+            "is_read":    False,
+        }).execute()
+        return response.data[0]
+
+    except Exception as e:
+        print(f"[notifications] CREATE error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to create notification")
