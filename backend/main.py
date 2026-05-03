@@ -16,6 +16,18 @@ from groq import Groq
 from supabase import create_client, Client
 import PyPDF2
 import groq
+import time
+
+def supabase_query_with_retry(query_fn, retries=3, delay=1):
+    """Retry a Supabase query on connection drops."""
+    for attempt in range(retries):
+        try:
+            return query_fn()
+        except Exception as e:
+            if attempt < retries - 1 and "disconnect" in str(e).lower():
+                time.sleep(delay)
+                continue
+            raise
 
 # Local module imports
 import models
@@ -1028,6 +1040,14 @@ RULES:
 2. If the answer is not in the context, say: "I couldn't find a specific policy on this. Please contact the Academic Affairs Office."
 3. Be direct, professional, and concise.
 4. Always cite which document your answer comes from.
+5. After your answer, on a NEW LINE write EXACTLY this format (no extra text):
+   FOLLOW_UPS: <question 1> | <question 2> | <question 3>
+   Rules for follow-ups:
+   - Exactly 3 questions separated by the | character
+   - Each question must be short (under 15 words)
+   - Each question must be different and standalone
+   - Do NOT number them, do NOT add punctuation after the last one
+   Example: FOLLOW_UPS: What is the passing grade? | How are absences counted? | Can a student appeal a grade?
 
 CONTEXT FROM CTU DOCUMENTS:
 {context}
@@ -1046,30 +1066,70 @@ ANSWER:"""
             model=ai_model,
             temperature=ai_temperature
         )
-        answer = response.choices[0].message.content
+        raw_answer = response.choices[0].message.content
 
-        sources = list({
-            c.get('metadata', {}).get('name', 'CTU Document')
-            for c in safe_chunks
-        })
+        # Parse follow-up questions from the AI response
+        follow_ups = []
+        if "FOLLOW_UPS:" in raw_answer:
+            parts = raw_answer.split("FOLLOW_UPS:", 1)
+            answer = parts[0].strip()
+            follow_ups_line = parts[1].strip()
+
+            if "|" in follow_ups_line:
+                # Correct format: split by pipe
+                follow_ups = [q.strip(" \n\t?") for q in follow_ups_line.split("|") if q.strip()][:3]
+            else:
+                # Fallback: AI ignored the pipe, skip follow-ups rather than show one giant chip
+                follow_ups = []
+        else:
+            answer = raw_answer
+
+        # Build structured sources with name, relevance score, and snippet
+        seen_sources = {}
+        for c in safe_chunks:
+            meta = c.get('metadata', {})
+            if isinstance(meta, str):
+                try:    meta = json.loads(meta)
+                except: meta = {}
+            name = meta.get('name', 'CTU Document')
+            content_text = c.get('content', '')
+            score = c.get('score', None)
+
+            # Convert score to a 0-100 relevance percentage
+            if score is not None:
+                try:
+                    relevance = min(100, max(0, round(float(score) * 100)))
+                except:
+                    relevance = 75
+            else:
+                relevance = 75
+
+            snippet = content_text[:200].strip() if content_text else ""
+
+            if name not in seen_sources or relevance > seen_sources[name]['relevance']:
+                seen_sources[name] = {
+                    "name":      name,
+                    "relevance": relevance,
+                    "snippet":   snippet,
+                }
+
+        sources = sorted(seen_sources.values(), key=lambda x: x['relevance'], reverse=True)
 
         try:
             supabase.table("chat_history").insert({
                 "user_email": request.user_email,
-                "user_role":  request.user_role,
                 "role":       "user",
                 "content":    question,
             }).execute()
             supabase.table("chat_history").insert({
                 "user_email": request.user_email,
-                "user_role":  request.user_role,
                 "role":       "assistant",
                 "content":    answer,
             }).execute()
         except Exception as e:
             print(f"Chat history save failed: {e}")
 
-        return {"answer": answer, "sources": sources}
+        return {"answer": answer, "sources": sources, "follow_ups": follow_ups}
 
     except groq.RateLimitError:
         raise HTTPException(
@@ -1550,13 +1610,104 @@ def get_accreditation_details(program: str, area_code: str):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# ANALYTICS
+# ─────────────────────────────────────────────────────────────────────────────
+
+@app.get("/analytics/recent")
+def get_recent_questions():
+    """Return the last 5 unique questions asked — shown in the AskPolicy sidebar."""
+    try:
+        response = supabase_query_with_retry(lambda: (
+            supabase.table("chat_history")
+            .select("content")
+            .eq("role", "user")
+            .order("created_at", desc=True)
+            .limit(50)
+            .execute()
+        ))
+
+        seen = []
+        if response.data:
+            for row in response.data:
+                q = (row.get("content") or "").strip()
+                if q and q not in seen:
+                    seen.append(q)
+                if len(seen) >= 5:
+                    break
+
+        return seen
+
+    except Exception as e:
+        print(f"[get_recent_questions] error: {e}")
+        return []
+
+
+@app.get("/analytics/popular")
+def get_popular_topics():
+    """Return the top recurring topics from chat history to power the Popular Topics panel."""
+    try:
+        response = supabase_query_with_retry(lambda: supabase.table("chat_history").select("content").eq("role", "user").execute())
+
+        keyword_map = {
+            "enrollment":   ("Enrollment",   "blue"),
+            "grade":        ("Grading",      "emerald"),
+            "scholarship":  ("Scholarship",  "purple"),
+            "attendance":   ("Attendance",   "blue"),
+            "graduation":   ("Graduation",   "emerald"),
+            "discipline":   ("Discipline",   "purple"),
+            "thesis":       ("Thesis",       "blue"),
+            "ojt":          ("OJT",          "emerald"),
+            "tuition":      ("Tuition",      "purple"),
+            "examination":  ("Examination",  "blue"),
+            "accreditation":("Accreditation","emerald"),
+            "leave":        ("Leave",        "purple"),
+        }
+
+        counts = {k: 0 for k in keyword_map}
+        if response.data:
+            for row in response.data:
+                text = (row.get("content") or "").lower()
+                for keyword in keyword_map:
+                    if keyword in text:
+                        counts[keyword] += 1
+
+        # Sort by frequency, return top 6
+        sorted_topics = sorted(counts.items(), key=lambda x: x[1], reverse=True)
+        top_topics = [
+            {"label": keyword_map[k][0], "color": keyword_map[k][1]}
+            for k, v in sorted_topics if v > 0
+        ][:6]
+
+        # Fallback defaults if no chat history yet
+        if not top_topics:
+            top_topics = [
+                {"label": "Enrollment",  "color": "blue"},
+                {"label": "Grading",     "color": "emerald"},
+                {"label": "Scholarship", "color": "purple"},
+                {"label": "Attendance",  "color": "blue"},
+                {"label": "Graduation",  "color": "emerald"},
+                {"label": "Discipline",  "color": "purple"},
+            ]
+
+        return top_topics
+
+    except Exception as e:
+        print(f"[get_popular_topics] error: {e}")
+        return [
+            {"label": "Enrollment",  "color": "blue"},
+            {"label": "Grading",     "color": "emerald"},
+            {"label": "Scholarship", "color": "purple"},
+        ]
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # AUDIT TRAIL
 # ─────────────────────────────────────────────────────────────────────────────
 
 @app.get("/audit/queries")
 def get_query_logs():
     try:
-        response = supabase.table("chat_history").select("*").eq("role", "user").order("created_at", desc=True).limit(100).execute()
+        response = supabase_query_with_retry(lambda: supabase.table("chat_history").select("*").eq("role", "user").order("created_at", desc=True).limit(100).execute())
 
         logs = []
         if response.data:
@@ -1573,7 +1724,7 @@ def get_query_logs():
                 logs.append({
                     "id":        item.get("id", index),
                     "user":      item.get("user_email", "Unknown User"),
-                    "role":      item.get("user_role",  "User"),
+                    "role":      item.get("user_role",  item.get("role", "User")),
                     "query":     item.get("content",    ""),
                     "timestamp": formatted_date,
                     "status":    "Answered",
@@ -1603,7 +1754,7 @@ def log_document_access(log: AccessLogRequest):
 @app.get("/audit/access")
 def get_access_logs():
     try:
-        response = supabase.table("document_access_logs").select("*").order("accessed_at", desc=True).limit(100).execute()
+        response = supabase_query_with_retry(lambda: supabase.table("document_access_logs").select("*").order("accessed_at", desc=True).limit(100).execute())
 
         logs = []
         if response.data:
@@ -1634,7 +1785,7 @@ def get_access_logs():
 @app.get("/audit/versions")
 def get_version_history():
     try:
-        response  = supabase.table("document_sections").select("metadata").execute()
+        response  = supabase_query_with_retry(lambda: supabase.table("document_sections").select("metadata").execute())
         raw_logs  = []
 
         if response.data:
@@ -1683,7 +1834,7 @@ def get_version_history():
 @app.get("/audit/system")
 def get_system_events():
     try:
-        response = supabase.table("system_events_logs").select("*").order("event_date", desc=True).limit(100).execute()
+        response = supabase_query_with_retry(lambda: supabase.table("system_events_logs").select("*").order("event_date", desc=True).limit(100).execute())
 
         logs = []
         if response.data:
@@ -1779,18 +1930,19 @@ def get_notifications(email: str, filter: str = "all"):
         raise HTTPException(status_code=400, detail="email query param is required")
 
     try:
-        query = (
-            supabase.table("notifications")
-            .select("*")
-            .eq("user_email", email)
-            .order("created_at", desc=True)
-            .limit(100)
-        )
+        def _query():
+            q = (
+                supabase.table("notifications")
+                .select("*")
+                .eq("user_email", email)
+                .order("created_at", desc=True)
+                .limit(100)
+            )
+            if filter == "unread":
+                q = q.eq("is_read", False)
+            return q.execute()
 
-        if filter == "unread":
-            query = query.eq("is_read", False)
-
-        response = query.execute()
+        response = supabase_query_with_retry(_query)
         return response.data if response.data else []
 
     except Exception as e:
