@@ -8,6 +8,7 @@ interface Announcement {
   content: string;
   recipients: string;
   sent_date: string;
+  schedule_date: string | null;
   sent_by: string;
   status: "Sent" | "Scheduled" | "Draft";
   read_count: number;
@@ -113,12 +114,22 @@ export function BroadcastAnnouncement() {
     );
   };
 
+  // Maps recipient label to the backend's target_role format
+  const getTargetRole = (recipients: string[]): string => {
+    if (recipients.includes("All Users")) return "ALL";
+    if (recipients.includes("All Faculty") && recipients.includes("All Students")) return "ALL";
+    if (recipients.includes("All Faculty")) return "FACULTY";
+    if (recipients.includes("All Students")) return "STUDENT";
+    return "ALL";
+  };
+
   const handleSendAnnouncement = async (statusOverride: "Sent" | "Scheduled" | "Draft" = "Sent") => {
     if (!title || !content || selectedRecipients.length === 0) {
       showToast("Please fill in all required fields and select a recipient.", "error");
       return;
     }
     setIsLoading(true);
+    const isSending = statusOverride === "Sent" && !scheduleDate;
     const payload = {
       title,
       content,
@@ -131,8 +142,19 @@ export function BroadcastAnnouncement() {
 
     try {
       await axios.post("http://localhost:8000/announcements", payload);
+
+      // Send live notifications to users only when broadcasting immediately
+      if (isSending) {
+        await axios.post("http://localhost:8000/admin/broadcast", {
+          title,
+          message: content,
+          target_role: getTargetRole(selectedRecipients),
+          sender_email: userEmail,
+        });
+      }
+
       setTitle(""); setContent(""); setSelectedRecipients([]); setScheduleDate("");
-      setIsCreateOpen(false); 
+      setIsCreateOpen(false);
       showToast(`Broadcast successfully ${statusOverride === 'Sent' ? 'sent' : 'saved'}!`, "success");
       fetchAnnouncements();
     } catch (error) {
@@ -162,6 +184,17 @@ export function BroadcastAnnouncement() {
 
     try {
       await axios.put(`http://localhost:8000/announcements/${id}`, payload);
+
+      // Send live notifications when sending a draft/scheduled announcement now
+      if (isSendingNow) {
+        await axios.post("http://localhost:8000/admin/broadcast", {
+          title: editingAnnouncement.title,
+          message: editingAnnouncement.content,
+          target_role: getTargetRole(editingAnnouncement.recipients.split(", ")),
+          sender_email: userEmail,
+        });
+      }
+
       setEditingAnnouncement(null);
       showToast(isSendingNow ? "Broadcast sent successfully!" : "Draft updated.", "success");
       fetchAnnouncements();

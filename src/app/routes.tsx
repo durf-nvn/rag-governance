@@ -76,6 +76,14 @@ export const router = createBrowserRouter([
             ),
           },
           {
+            path: "governance-reference",
+            element: (
+              <ProtectedRoute permission="canAccessGovernanceReference">
+                <GovernanceReference />
+              </ProtectedRoute>
+            ),
+          },
+          {
             path: "audit-trail",
             element: (
               <ProtectedRoute permission="canAccessAuditTrail">
