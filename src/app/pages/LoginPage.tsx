@@ -1,5 +1,5 @@
 import { Link, useNavigate, useLocation } from "react-router";
-import { GraduationCap, AlertCircle, Mail, Lock, X, CheckCircle2 } from "lucide-react";
+import { GraduationCap, AlertCircle, Mail, Lock, X, CheckCircle2, Eye, EyeOff } from "lucide-react";
 import { useState, useEffect } from "react";
 import axios from "axios";
 import { useRole } from "../contexts/RoleContext";
@@ -17,6 +17,9 @@ export function LoginPage() {
     email: "",
     password: "",
   });
+
+  // --- NEW: Password Visibility State ---
+  const [showPassword, setShowPassword] = useState(false);
 
   // --- NEW: Remember Me State ---
   const [rememberMe, setRememberMe] = useState(false);
@@ -182,13 +185,20 @@ export function LoginPage() {
                   <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-[#6B7280]" />
                   <input
                     id="password"
-                    type="password"
+                    type={showPassword ? "text" : "password"}
                     required
                     value={formData.password}
                     onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                    className="w-full pl-10 pr-4 py-3 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm text-[#1F2937] focus:outline-none focus:ring-2 focus:ring-[#1D6FA3] focus:border-transparent"
+                    className="w-full pl-10 pr-12 py-3 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm text-[#1F2937] focus:outline-none focus:ring-2 focus:ring-[#1D6FA3] focus:border-transparent"
                     placeholder="••••••••"
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-[#6B7280] hover:text-[#1F2937] transition-colors focus:outline-none cursor-pointer"
+                  >
+                    {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                  </button>
                 </div>
               </div>
 
@@ -199,14 +209,14 @@ export function LoginPage() {
                     type="checkbox" 
                     checked={rememberMe}
                     onChange={(e) => setRememberMe(e.target.checked)}
-                    className="mr-2 w-4 h-4 rounded border-[#E5E7EB] text-[#1D6FA3] focus:ring-[#1D6FA3] cursor-pointer" 
+                    className="mr-2 w-4 h-4 rounded border-[#E5E7EB] text-[#1D6FA3] focus:ring-[#1D6FA3] cursor-pointer transition-colors" 
                   />
-                  <span className="text-sm text-[#6B7280] select-none">Remember me</span>
+                  <span className="text-sm text-[#6B7280] select-none transition-colors">Remember me</span>
                 </label>
                 <button 
                   type="button" 
                   onClick={() => setIsModalOpen(true)}
-                  className="text-sm text-[#1D6FA3] hover:text-[#0B3C5D] font-medium"
+                  className="text-sm text-[#1D6FA3] hover:text-[#0B3C5D] font-medium cursor-pointer transition-colors"
                 >
                   Forgot password?
                 </button>
