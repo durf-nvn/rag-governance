@@ -17,6 +17,7 @@ from supabase import create_client, Client
 import PyPDF2
 import groq
 import time
+import re
 
 def supabase_query_with_retry(query_fn, retries=3, delay=1):
     """Retry a Supabase query on connection drops."""
@@ -962,19 +963,64 @@ def archive_document(doc_name: str, db: Session = Depends(get_db)):
 @app.post("/ask-policy")
 def ask_policy(request: QuestionRequest, db: Session = Depends(get_db)):
     question = request.question
+    user_email = request.user_email
+    user_role = request.user_role
 
-    # 1. Fetch Dynamic System Settings
+    # ==========================================
+    # 1. FETCH DYNAMIC SETTINGS
+    # ==========================================
     settings = db.query(models.SystemSettings).filter(models.SystemSettings.id == 1).first()
     
-    # Fallback defaults just in case the database hasn't initialized
+    # Fallbacks in case settings aren't set yet
     ai_model = settings.ai_model if settings else "llama-3.1-8b-instant"
-    ai_temperature = settings.ai_temperature if settings else 0.3
-    ai_prompt_base = settings.ai_system_prompt if settings else "You are the friendly AI Policy Assistant for CTU."
-    rag_limit = settings.rag_max_chunks if settings else 5
+    ai_temp = settings.ai_temperature if settings else 0.3
+    base_prompt = settings.ai_system_prompt if settings else "You are the friendly and professional AI Policy Assistant for Cebu Technological University (CTU) Argao Campus."
 
+    # ==========================================
+    # 2. FAST-PATH: GREETING DETECTOR
+    # ==========================================
+    q_lower = question.strip().lower()
+    chat_pattern = r'^(hi|hello|hey|good morning|good afternoon|good evening|greetings)[.!?,]*$'
+    
+    if re.match(chat_pattern, q_lower):
+        greeting_prompt = f"""{base_prompt}
+        YOUR PERSONALITY: Warm, welcoming, and helpful.
+        The user just said: "{question}"
+        Respond with a brief, warm greeting and ask how you can help them with university policies today.
+        
+        FORMATTING RULE:
+        You must separate your main answer from the follow-up questions using exactly this string: |FOLLOWUPS|
+        Put exactly 3 logical follow-up questions they might ask about university policies on a new line. Do not number them.
+        """
+        
+        try:
+            response = groq_client.chat.completions.create(
+                messages=[{'role': 'system', 'content': greeting_prompt}],
+                model=ai_model,
+                temperature=0.5 # slightly higher for natural greetings
+            )
+            raw_answer = response.choices[0].message.content
+            parts = raw_answer.split("|FOLLOWUPS|")
+            answer = parts[0].strip()
+            follow_ups = []
+            if len(parts) > 1:
+                follow_ups = [q.strip().lstrip('1234567890.- ') for q in parts[1].strip().split('\n') if q.strip()]
+            
+            # Save Chat History for Greeting
+            from vector_store import supabase
+            supabase.table("chat_history").insert({"user_email": user_email, "role": "user", "content": question}).execute()
+            supabase.table("chat_history").insert({"user_email": user_email, "role": "ai", "content": answer}).execute()
+            
+            return {"answer": answer, "sources": [], "follow_ups": follow_ups[:3]}
+        except Exception as e:
+            print(f"Greeting Error: {e}")
+
+    # ==========================================
+    # 3. ORIGINAL TOPIC CATEGORIZATION
+    # ==========================================
     try:
-        topic   = "General"
-        q_lower = question.lower()
+        from vector_store import supabase
+        topic = "General"
         if len(question.split()) <= 2 or any(w in q_lower for w in ["test", "asdf"]):
             topic = "Ignored"
         elif "grade" in q_lower or "pass" in q_lower or "fail" in q_lower or "unit" in q_lower: topic = "Grading"
@@ -984,161 +1030,118 @@ def ask_policy(request: QuestionRequest, db: Session = Depends(get_db)):
         elif "uniform" in q_lower or "dress" in q_lower or "id" in q_lower: topic = "Dress Code"
 
         supabase.table("query_logs").insert({
-            "query_text":     question,
+            "query_text": question,
             "topic_category": topic
         }).execute()
     except Exception as e:
         print(f"Failed to log query: {e}")
-    
-    # 2. Vector Search (Pass the dynamic rag_limit if your vector_store supports it!)
-    # NOTE: If your vector_store.py doesn't accept 'limit', just use: vector_store.search_knowledge(question)
-    try:
-        relevant_chunks = vector_store.search_knowledge(question, limit=rag_limit)
-    except TypeError:
-        # Fallback if your vector_store function isn't expecting a limit argument yet
-        relevant_chunks = vector_store.search_knowledge(question)
-    
-    # --- SUPERCHARGED AI FILTERING ---
+
+    # ==========================================
+    # 4. ORIGINAL RAG RETRIEVAL & FILTERING
+    # ==========================================
+    relevant_chunks = vector_store.search_knowledge(question)
+
     safe_chunks = []
     for chunk in relevant_chunks:
         chunk_meta = chunk.get('metadata', {})
-
-        if isinstance(chunk_meta, str):
-            try:    chunk_meta = json.loads(chunk_meta)
-            except: chunk_meta = {}
-
-        chunk_status   = chunk_meta.get("status",   "Active")
-        chunk_category = chunk_meta.get("category", "")
-
-        if str(chunk_status).lower() == "archived":
-            continue
-        if request.user_role.upper() not in ["FACULTY", "ADMIN"] and chunk_category == "Accreditation Evidence":
-            continue
-
+        if chunk_meta.get('status') == "Archived":
+            continue 
+        if user_role.upper() == "STUDENT" and chunk_meta.get('category') == "Accreditation Evidence":
+            continue 
         safe_chunks.append(chunk)
 
-    if not safe_chunks:
-        return {
-            "answer": (
-                "I couldn't find a specific policy or document that answers your question. "
-                "For the most accurate information, please contact the Academic Affairs Office "
-                "or check the official CTU Student Handbook."
-            ),
-            "sources": []
-        }
+    relevant_chunks = safe_chunks
+    context_text = "\n\n".join([chunk['content'] for chunk in relevant_chunks])
 
-    context = "\n\n".join([
-        f"[Source: {c.get('metadata', {}).get('name', 'CTU Document')}]\n{c.get('content', '')}"
-        for c in safe_chunks
-    ])
+    # ==========================================
+    # 5. DYNAMIC PROMPT WITH ORIGINAL FORMATTING
+    # ==========================================
+    system_prompt = f"""{base_prompt}
+    
+    YOUR PERSONALITY:
+    - You are warm, welcoming, and helpful.
+    - You represent the CTU Argao brand.
+    
+    INSTRUCTIONS:
+    1. POLICY QUESTIONS: If the question is about university rules, grades, research, or handbooks, use the CONTEXT provided below to answer.
+    2. NO CONTEXT: If a question is asked that is NOT in the context, say: "I'm sorry, I don't have the specific details for that in our current records. You might want to visit the relevant campus office for more info!"
+    3. FOLLOW-UPS: At the very end of your response, you MUST generate exactly 3 logical follow-up questions the user might want to ask next based on the topic.
+    
+    FORMATTING RULE:
+    You must separate your main answer from the follow-up questions using exactly this string: |FOLLOWUPS|
+    Put each follow-up question on a new line. Do not number them.
+    
+    CONTEXT FROM HANDBOOKS:
+    {context_text}
+    """
 
-    prompt = f"""You are the official AI Policy Assistant for Cebu Technological University (CTU) Argao Campus.
-Your ONLY job is to answer questions based on the provided CTU policy documents.
-
-RULES:
-1. ONLY use information from the provided context below.
-2. If the answer is not in the context, say: "I couldn't find a specific policy on this. Please contact the Academic Affairs Office."
-3. Be direct, professional, and concise.
-4. Always cite which document your answer comes from.
-5. After your answer, on a NEW LINE write EXACTLY this format (no extra text):
-   FOLLOW_UPS: <question 1> | <question 2> | <question 3>
-   Rules for follow-ups:
-   - Exactly 3 questions separated by the | character
-   - Each question must be short (under 15 words)
-   - Each question must be different and standalone
-   - Do NOT number them, do NOT add punctuation after the last one
-   Example: FOLLOW_UPS: What is the passing grade? | How are absences counted? | Can a student appeal a grade?
-
-CONTEXT FROM CTU DOCUMENTS:
-{context}
-
-STUDENT QUESTION: {question}
-
-ANSWER:"""
-
+    # ==========================================
+    # 6. AI CALL WITH DYNAMIC SETTINGS
+    # ==========================================
     try:
-        # 4. Inject Dynamic Model and Temperature
         response = groq_client.chat.completions.create(
             messages=[
-                {'role': 'system', 'content': ai_prompt_base},
-                {'role': 'user', 'content': prompt}
+                {'role': 'system', 'content': system_prompt},
+                {'role': 'user', 'content': question}
             ],
-            model=ai_model,
-            temperature=ai_temperature
+            model=ai_model,       # Dynamic Model!
+            temperature=ai_temp   # Dynamic Temperature!
         )
+
+        # ORIGINAL SPLIT PARSING
         raw_answer = response.choices[0].message.content
+        parts = raw_answer.split("|FOLLOWUPS|")
+        answer = parts[0].strip()
 
-        # Parse follow-up questions from the AI response
         follow_ups = []
-        if "FOLLOW_UPS:" in raw_answer:
-            parts = raw_answer.split("FOLLOW_UPS:", 1)
-            answer = parts[0].strip()
-            follow_ups_line = parts[1].strip()
+        if len(parts) > 1:
+            raw_questions = parts[1].strip().split('\n')
+            for q in raw_questions:
+                clean_q = q.strip().lstrip('1234567890.- ')
+                if clean_q:
+                    follow_ups.append(clean_q)
+                if len(follow_ups) == 3: break
 
-            if "|" in follow_ups_line:
-                # Correct format: split by pipe
-                follow_ups = [q.strip(" \n\t?") for q in follow_ups_line.split("|") if q.strip()][:3]
-            else:
-                # Fallback: AI ignored the pipe, skip follow-ups rather than show one giant chip
-                follow_ups = []
-        else:
-            answer = raw_answer
-
-        # Build structured sources with name, relevance score, and snippet
-        seen_sources = {}
-        for c in safe_chunks:
-            meta = c.get('metadata', {})
-            if isinstance(meta, str):
-                try:    meta = json.loads(meta)
-                except: meta = {}
-            name = meta.get('name', 'CTU Document')
-            content_text = c.get('content', '')
-            score = c.get('score', None)
-
-            # Convert score to a 0-100 relevance percentage
-            if score is not None:
-                try:
-                    relevance = min(100, max(0, round(float(score) * 100)))
-                except:
-                    relevance = 75
-            else:
-                relevance = 75
-
-            snippet = content_text[:200].strip() if content_text else ""
-
-            if name not in seen_sources or relevance > seen_sources[name]['relevance']:
-                seen_sources[name] = {
-                    "name":      name,
-                    "relevance": relevance,
-                    "snippet":   snippet,
-                }
-
-        sources = sorted(seen_sources.values(), key=lambda x: x['relevance'], reverse=True)
-
-        try:
-            supabase.table("chat_history").insert({
-                "user_email": request.user_email,
-                "role":       "user",
-                "content":    question,
-            }).execute()
-            supabase.table("chat_history").insert({
-                "user_email": request.user_email,
-                "role":       "assistant",
-                "content":    answer,
-            }).execute()
-        except Exception as e:
-            print(f"Chat history save failed: {e}")
-
-        return {"answer": answer, "sources": sources, "follow_ups": follow_ups}
-
-    except groq.RateLimitError:
-        raise HTTPException(
-            status_code=429,
-            detail="The AI is currently busy. Please wait a moment and try again."
-        )
     except Exception as e:
-        print(f"Groq API error: {e}")
-        raise HTTPException(status_code=500, detail="AI service temporarily unavailable.")
+        print(f"Cloud API Error: {e}")
+        return {"answer": "I'm having a bit of trouble connecting to the network. Please try again in a moment!", "sources": [], "follow_ups": []}
+
+    # ==========================================
+    # 7. ORIGINAL SOURCE FORMATTING & MATH
+    # ==========================================
+    unique_sources = {}
+    for chunk in relevant_chunks:
+        source_name = f"{chunk['metadata']['name']} (v{chunk.get('metadata', {}).get('version', '1.0')}) - {chunk['metadata']['office']}"
+
+        if source_name not in unique_sources:
+            clean_snippet = chunk['content'][:150].strip() + "..."
+            raw_similarity = chunk.get('similarity', 0.85)
+            human_score = raw_similarity * 1.5 
+            relevance_percentage = min(99, int(human_score * 100))
+
+            unique_sources[source_name] = {
+                "name": source_name,
+                "snippet": clean_snippet,
+                "relevance": relevance_percentage 
+            }
+
+    sources = list(unique_sources.values())
+    final_sources = sources if "I'm sorry, I don't have" not in answer and len(context_text) > 10 else []
+
+    # ==========================================
+    # 8. ORIGINAL CHAT HISTORY SAVING
+    # ==========================================
+    try:
+        supabase.table("chat_history").insert({"user_email": user_email, "role": "user", "content": question}).execute()
+        supabase.table("chat_history").insert({"user_email": user_email, "role": "ai", "content": answer}).execute()
+    except Exception as e:
+        print(f"Failed to save chat history: {e}")
+
+    return {
+        "answer": answer,
+        "sources": final_sources,
+        "follow_ups": follow_ups
+    }
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1615,31 +1618,69 @@ def get_accreditation_details(program: str, area_code: str):
 
 @app.get("/analytics/recent")
 def get_recent_questions():
-    """Return the last 5 unique questions asked — shown in the AskPolicy sidebar."""
+    """Return recent user queries, aggressively filtering out greetings and small talk."""
     try:
-        response = supabase_query_with_retry(lambda: (
-            supabase.table("chat_history")
-            .select("content")
-            .eq("role", "user")
-            .order("created_at", desc=True)
-            .limit(50)
-            .execute()
-        ))
+        from vector_store import supabase
+        
+        # Fetch a large batch so we have enough left after the aggressive filtering
+        response = supabase.table("chat_history").select("content").eq("role", "user").order("created_at", desc=True).limit(40).execute()
 
-        seen = []
+        valid_recent_questions = []
+        
+        # The ultimate blacklist of small talk (no punctuation needed here)
+        chitchat_blacklist = [
+            "hi", "hello", "hey", "good morning", "good afternoon", "good evening", "greetings",
+            "how are you", "good morning how are you", "hello how are you", "hi how are you",
+            "how are you doing", "what is up", "sup", "hello there", "hi there",
+            "thank you", "thanks", "thank you very much", "thanks for the help", 
+            "ok", "okay", "yes", "no", "bye", "goodbye"
+        ]
+
         if response.data:
             for row in response.data:
-                q = (row.get("content") or "").strip()
-                if q and q not in seen:
-                    seen.append(q)
-                if len(seen) >= 5:
+                raw_question = (row.get("content") or "").strip()
+                
+                # 1. NORMALIZE: Convert to lowercase and completely remove commas, ?, !, and periods
+                # "Good morning, how are you?"  -> becomes -> "good morning how are you"
+                normalized_q = re.sub(r'[^a-z0-9\s]', '', raw_question.lower()).strip()
+
+                # FILTER 1: Is the normalized text in our small-talk blacklist?
+                if normalized_q in chitchat_blacklist:
+                    continue
+                
+                # FILTER 2: Does it start with a greeting but is still very short? 
+                # (Catches random things like "hi askpolicy" or "hello chatbot")
+                if normalized_q.startswith(("hi ", "hello ", "good morning", "hey ")) and len(normalized_q.split()) <= 4:
+                    continue
+                    
+                # FILTER 3: Is it just one single word? (e.g. "what", "policy", "test")
+                if len(normalized_q.split()) < 2:
+                    continue
+                
+                # FILTER 4: Prevent exact duplicates from showing up in the UI
+                if raw_question not in valid_recent_questions:
+                    valid_recent_questions.append(raw_question)
+
+                # Stop once we have exactly 5 high-quality policy questions
+                if len(valid_recent_questions) >= 5:
                     break
 
-        return seen
+        # Fallback if the database has no real questions yet
+        if not valid_recent_questions:
+            return [
+                "What is the grading system?",
+                "How do I apply for a scholarship?",
+                "What are the requirements for enrollment?"
+            ]
+
+        return valid_recent_questions
 
     except Exception as e:
         print(f"[get_recent_questions] error: {e}")
-        return []
+        return [
+            "What is the grading system?",
+            "How do I apply for a scholarship?"
+        ]
 
 
 @app.get("/analytics/popular")

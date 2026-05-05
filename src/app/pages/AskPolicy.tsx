@@ -42,17 +42,23 @@ export function AskPolicy() {
 
   useEffect(() => {
     const fetchAnalytics = async () => {
+      // 1. Fetch Recent Questions safely
       try {
-        const [recentRes, topicsRes] = await Promise.all([
-          axios.get("http://localhost:8000/analytics/recent"),
-          axios.get("http://localhost:8000/analytics/popular")
-        ]);
+        const recentRes = await axios.get("http://localhost:8000/analytics/recent");
         setRecentQuestions(recentRes.data);
+      } catch (error) {
+        console.error("Failed to load recent questions", error);
+      }
+
+      // 2. Fetch Popular Topics safely
+      try {
+        const topicsRes = await axios.get("http://localhost:8000/analytics/popular");
         setPopularTopics(topicsRes.data);
       } catch (error) {
-        console.error("Failed to load sidebar analytics", error);
+        console.error("Failed to load popular topics", error);
       }
     };
+    
     fetchAnalytics();
   }, []);
 
