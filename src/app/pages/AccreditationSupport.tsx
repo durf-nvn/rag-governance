@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Search, CheckCircle, AlertCircle, FileText, Award, Target, Upload, ChevronDown, ChevronUp, X, Loader2, ArrowLeft, Archive, Eye, ShieldAlert, Lock, Check, FileQuestion, MessageSquareWarning, Clock } from "lucide-react";
+import { Search, CheckCircle, AlertCircle, FileText, Award, Target, Upload, ChevronDown, ChevronUp, X, Loader2, ArrowLeft, Archive, Eye, ShieldAlert, Lock, Check, FileCheck, MessageSquareWarning, Clock, Download, BarChart2, Calendar } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "../components/ui/tabs";
 import axios from "axios";
 
@@ -316,10 +316,10 @@ export function AccreditationSupport() {
 
       <Tabs defaultValue="aaccup" className="w-full">
         <TabsList className="grid w-full grid-cols-4 bg-gray-100 p-1">
-          <TabsTrigger value="aaccup" className="data-[state=active]:bg-[#CE0000] data-[state=active]:text-white">AACCUP</TabsTrigger>
-          <TabsTrigger value="iso" className="data-[state=active]:bg-[#CE0000] data-[state=active]:text-white">ISO Standards</TabsTrigger>
-          <TabsTrigger value="ched" className="data-[state=active]:bg-[#CE0000] data-[state=active]:text-white">CHED Monitoring</TabsTrigger>
-          <TabsTrigger value="results" className="data-[state=active]:bg-[#CE0000] data-[state=active]:text-white">Accreditation Results</TabsTrigger>
+          <TabsTrigger value="aaccup" className="data-[state=active]:bg-[#CE0000] data-[state=active]:text-white cursor-pointer">AACCUP</TabsTrigger>
+          <TabsTrigger value="iso" className="data-[state=active]:bg-[#CE0000] data-[state=active]:text-white cursor-pointer">ISO Standards</TabsTrigger>
+          <TabsTrigger value="ched" className="data-[state=active]:bg-[#CE0000] data-[state=active]:text-white cursor-pointer">CHED Monitoring</TabsTrigger>
+          <TabsTrigger value="results" className="data-[state=active]:bg-[#CE0000] data-[state=active]:text-white cursor-pointer">Accreditation Results</TabsTrigger>
         </TabsList>
 
         <TabsContent value="aaccup" className="space-y-6 mt-6">
@@ -604,25 +604,189 @@ export function AccreditationSupport() {
           )}
         </TabsContent>
 
-        <TabsContent value="iso" className="space-y-6 mt-6">
-          <div className="bg-white rounded-xl shadow-sm p-12 text-center">
-             <Target className="h-12 w-12 text-gray-300 mx-auto mb-4" />
-             <h3 className="text-lg font-semibold text-gray-900 mb-2">ISO Standards Module</h3>
-             <p className="text-gray-500">ISO institutional tracking will be available in Phase 2 deployment.</p>
+        {/* ISO Standards - Phase 2 Mock UI */}
+        <TabsContent value="iso" className="mt-6 space-y-6">
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+            <div className="border-b border-gray-100 p-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-gray-50/50">
+              <div>
+                <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                  <Target className="w-5 h-5 text-[#1D6FA3]" />
+                  ISO 9001:2015 Quality Management
+                </h2>
+                <p className="text-sm text-gray-500 mt-1">Standardized document mapping and compliance tracking.</p>
+              </div>
+              <span className="px-3 py-1 bg-amber-100 text-amber-700 text-xs font-bold rounded-full uppercase tracking-wider flex items-center gap-1 border border-amber-200">
+                <Lock className="w-3 h-3" />
+                Phase 2 Preview
+              </span>
+            </div>
+            
+            <div className="p-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Clause 4 */}
+                <div className="border border-gray-200 rounded-xl p-5 hover:border-[#1D6FA3]/30 transition-colors bg-white shadow-sm">
+                  <div className="flex justify-between items-start mb-2">
+                    <h3 className="font-semibold text-gray-800">Clause 4: Context of the Organization</h3>
+                    <CheckCircle className="w-5 h-5 text-emerald-500" />
+                  </div>
+                  <p className="text-xs text-gray-500 mb-4 leading-relaxed">Internal and external issues, interested parties, and scope of QMS.</p>
+                  <div className="flex justify-between items-center text-xs mb-1">
+                    <span className="font-medium text-gray-600">Compliance Status</span>
+                    <span className="text-emerald-600 font-bold">100%</span>
+                  </div>
+                  <div className="w-full bg-gray-100 rounded-full h-1.5">
+                    <div className="bg-emerald-500 h-1.5 rounded-full" style={{width: '100%'}}></div>
+                  </div>
+                </div>
+
+                {/* Clause 7 */}
+                <div className="border border-gray-200 rounded-xl p-5 hover:border-[#1D6FA3]/30 transition-colors bg-white shadow-sm">
+                  <div className="flex justify-between items-start mb-2">
+                    <h3 className="font-semibold text-gray-800">Clause 7: Support</h3>
+                    <AlertCircle className="w-5 h-5 text-amber-500" />
+                  </div>
+                  <p className="text-xs text-gray-500 mb-4 leading-relaxed">Resources, competence, awareness, communication, and documented info.</p>
+                  <div className="flex justify-between items-center text-xs mb-1">
+                    <span className="font-medium text-gray-600">Compliance Status</span>
+                    <span className="text-amber-600 font-bold">65%</span>
+                  </div>
+                  <div className="w-full bg-gray-100 rounded-full h-1.5">
+                    <div className="bg-amber-500 h-1.5 rounded-full" style={{width: '65%'}}></div>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </TabsContent>
-        <TabsContent value="ched" className="space-y-6 mt-6">
-           <div className="bg-white rounded-xl shadow-sm p-12 text-center">
-             <Award className="h-12 w-12 text-gray-300 mx-auto mb-4" />
-             <h3 className="text-lg font-semibold text-gray-900 mb-2">CHED Monitoring Module</h3>
-             <p className="text-gray-500">CHED reporting and submissions will be available in Phase 2 deployment.</p>
+
+        {/* CHED Monitoring - Phase 2 Mock UI */}
+        <TabsContent value="ched" className="mt-6 space-y-6">
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+            <div className="border-b border-gray-100 p-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-gray-50/50">
+              <div>
+                <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                  <FileCheck className="w-5 h-5 text-[#1D6FA3]" />
+                  CHED Program Compliance
+                </h2>
+                <p className="text-sm text-gray-500 mt-1">Monitoring of CMO requirements and mandatory submissions.</p>
+              </div>
+              <span className="px-3 py-1 bg-amber-100 text-amber-700 text-xs font-bold rounded-full uppercase tracking-wider flex items-center gap-1 border border-amber-200">
+                <Lock className="w-3 h-3" />
+                Phase 2 Preview
+              </span>
+            </div>
+
+            <div className="p-6">
+              <div className="space-y-3">
+                {/* Mock Item 1 */}
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 border border-gray-100 rounded-xl hover:bg-gray-50 transition-colors gap-4">
+                  <div className="flex items-center gap-4">
+                    <div className="p-2.5 bg-blue-50 border border-blue-100 rounded-lg">
+                      <FileText className="w-5 h-5 text-blue-600" />
+                    </div>
+                    <div>
+                      <p className="font-semibold text-gray-900 text-sm">Faculty Profile & Load Matrix</p>
+                      <p className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
+                        <Clock className="w-3 h-3" /> Due: End of 1st Semester
+                      </p>
+                    </div>
+                  </div>
+                  <button disabled className="px-4 py-2 text-sm font-medium bg-white border border-gray-200 rounded-lg text-gray-400 cursor-not-allowed">
+                    Upload Document
+                  </button>
+                </div>
+
+                {/* Mock Item 2 */}
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 border border-gray-100 rounded-xl hover:bg-gray-50 transition-colors gap-4">
+                  <div className="flex items-center gap-4">
+                    <div className="p-2.5 bg-emerald-50 border border-emerald-100 rounded-lg">
+                      <CheckCircle className="w-5 h-5 text-emerald-600" />
+                    </div>
+                    <div>
+                      <p className="font-semibold text-gray-900 text-sm">Syllabi / Curriculum Map (CMO 25)</p>
+                      <p className="text-xs text-emerald-600 font-medium flex items-center gap-1 mt-0.5">
+                        <Check className="w-3 h-3" /> Compliant & Verified
+                      </p>
+                    </div>
+                  </div>
+                  <button disabled className="px-4 py-2 text-sm font-medium bg-gray-100 border border-gray-200 rounded-lg text-gray-500 cursor-not-allowed">
+                    View Record
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         </TabsContent>
-        <TabsContent value="results" className="space-y-6 mt-6">
-           <div className="bg-white rounded-xl shadow-sm p-12 text-center">
-             <CheckCircle className="h-12 w-12 text-gray-300 mx-auto mb-4" />
-             <h3 className="text-lg font-semibold text-gray-900 mb-2">Accreditation Results Module</h3>
-             <p className="text-gray-500">Historical accreditation results viewing will be available in Phase 2 deployment.</p>
+
+        {/* Accreditation Results - Phase 2 Mock UI */}
+        <TabsContent value="results" className="mt-6 space-y-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Main Graph/Stats Area */}
+            <div className="col-span-1 lg:col-span-2 bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                  <BarChart2 className="w-5 h-5 text-[#1D6FA3]" />
+                  Historical Analytics
+                </h2>
+                <span className="px-3 py-1 bg-amber-100 text-amber-700 text-xs font-bold rounded-full uppercase tracking-wider flex items-center gap-1 border border-amber-200">
+                  <Lock className="w-3 h-3" />
+                  Phase 2 Preview
+                </span>
+              </div>
+              
+              <div className="space-y-4">
+                <div className="p-5 border border-emerald-100 bg-emerald-50/50 rounded-xl flex justify-between items-center relative overflow-hidden">
+                  <div className="absolute right-0 top-0 w-32 h-32 bg-emerald-100 rounded-full blur-3xl opacity-50 -mr-10 -mt-10"></div>
+                  <div className="relative z-10">
+                    <p className="text-xs font-bold text-emerald-600 uppercase tracking-wider mb-1">Latest Achievement</p>
+                    <p className="font-bold text-gray-900 text-lg">AACCUP Level III Re-accredited</p>
+                    <p className="text-sm text-gray-500 mt-1 flex items-center gap-1">
+                      <Calendar className="w-4 h-4" /> Valid until: October 2027
+                    </p>
+                  </div>
+                  <Award className="w-12 h-12 text-emerald-500 relative z-10 opacity-80" />
+                </div>
+                
+                <div className="p-5 border border-gray-100 bg-gray-50 rounded-xl flex justify-between items-center">
+                  <div>
+                    <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Previous Audit</p>
+                    <p className="font-bold text-gray-800">ISO 9001:2015 Surveillance Audit</p>
+                    <p className="text-sm text-gray-500 mt-1">Completed: May 2024</p>
+                  </div>
+                  <CheckCircle className="w-8 h-8 text-gray-400" />
+                </div>
+              </div>
+            </div>
+
+            {/* Certificates Sidebar */}
+            <div className="col-span-1 bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
+              <h3 className="font-bold text-gray-900 mb-4 flex items-center gap-2">
+                <Award className="w-5 h-5 text-[#1D6FA3]" />
+                Official Certificates
+              </h3>
+              
+              <div className="space-y-3">
+                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-100 hover:border-[#1D6FA3]/30 transition-colors cursor-not-allowed opacity-80">
+                  <div className="flex items-center gap-3 overflow-hidden">
+                    <div className="p-2 bg-red-50 rounded-lg shrink-0">
+                      <FileText className="w-4 h-4 text-red-500" />
+                    </div>
+                    <span className="text-sm font-medium text-gray-700 truncate">2023_Level_III_Cert.pdf</span>
+                  </div>
+                  <Download className="w-4 h-4 text-gray-400 shrink-0" />
+                </div>
+
+                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-100 hover:border-[#1D6FA3]/30 transition-colors cursor-not-allowed opacity-80">
+                  <div className="flex items-center gap-3 overflow-hidden">
+                    <div className="p-2 bg-red-50 rounded-lg shrink-0">
+                      <FileText className="w-4 h-4 text-red-500" />
+                    </div>
+                    <span className="text-sm font-medium text-gray-700 truncate">ISO_9001_2024.pdf</span>
+                  </div>
+                  <Download className="w-4 h-4 text-gray-400 shrink-0" />
+                </div>
+              </div>
+            </div>
           </div>
         </TabsContent>
       </Tabs>
