@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { User, Lock, Shield, CheckCircle, AlertCircle, Loader2, Mail, BookOpen, Save, LogOut, ArrowLeft } from "lucide-react";
+import { User, Lock, Shield, CheckCircle, AlertCircle, Loader2, Mail, BookOpen, Save, LogOut, ArrowLeft, Eye, EyeOff, Check, X } from "lucide-react";
 import axios from "axios";
 import { useNavigate } from "react-router";
 
@@ -54,6 +54,11 @@ export function ProfileSettings() {
   const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
   const [passwordStatus, setPasswordStatus] = useState<{ type: "success" | "error", msg: string } | null>(null);
   
+  // NEW: Password Visibility States
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
   // Dynamic Modal State
   const [logoutCountdown, setLogoutCountdown] = useState<number | null>(null);
   const [modalContent, setModalContent] = useState({ title: "", message: "" });
@@ -110,6 +115,19 @@ export function ProfileSettings() {
     }
   };
 
+  // NEW: Strict Password Validation Logic
+  const validatePassword = (password: string) => {
+    return {
+      length: password.length >= 8,
+      uppercase: /[A-Z]/.test(password),
+      number: /\d/.test(password),
+      special: /[!@#$%^&*(),.?":{}|<>]/.test(password)
+    };
+  };
+
+  const passValidation = validatePassword(passwords.new);
+  const isPasswordValid = passValidation.length && passValidation.uppercase && passValidation.number && passValidation.special;
+
   const handlePasswordChange = async (e: React.FormEvent) => {
     e.preventDefault();
     setPasswordStatus(null);
@@ -118,8 +136,8 @@ export function ProfileSettings() {
       setPasswordStatus({ type: "error", msg: "New passwords do not match." });
       return;
     }
-    if (passwords.new.length < 8) {
-      setPasswordStatus({ type: "error", msg: "Password must be at least 8 characters." });
+    if (!isPasswordValid) {
+      setPasswordStatus({ type: "error", msg: "Please meet all password requirements." });
       return;
     }
 
@@ -231,7 +249,6 @@ export function ProfileSettings() {
                       />
                     </div>
                     
-                    {/* NEW EMAIL FIELD */}
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Email Address</label>
                       <input
@@ -307,41 +324,94 @@ export function ProfileSettings() {
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Current Password</label>
-                    <input
-                      type="password"
-                      required
-                      value={passwords.current}
-                      onChange={(e) => setPasswords({...passwords, current: e.target.value})}
-                      className="w-full px-3.5 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-[#1D6FA3] focus:border-[#1D6FA3]"
-                    />
+                    <div className="relative">
+                      <input
+                        type={showCurrentPassword ? "text" : "password"}
+                        required
+                        value={passwords.current}
+                        onChange={(e) => setPasswords({...passwords, current: e.target.value})}
+                        className="w-full px-3.5 py-2 pr-10 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-[#1D6FA3] focus:border-[#1D6FA3]"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none"
+                      >
+                        {showCurrentPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
                   </div>
 
                   <div className="pt-2">
                     <label className="block text-sm font-medium text-gray-700 mb-1">New Password</label>
-                    <input
-                      type="password"
-                      required
-                      value={passwords.new}
-                      onChange={(e) => setPasswords({...passwords, new: e.target.value})}
-                      className="w-full px-3.5 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-[#1D6FA3] focus:border-[#1D6FA3]"
-                    />
+                    <div className="relative">
+                      <input
+                        type={showNewPassword ? "text" : "password"}
+                        required
+                        value={passwords.new}
+                        onChange={(e) => setPasswords({...passwords, new: e.target.value})}
+                        className="w-full px-3.5 py-2 pr-10 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-[#1D6FA3] focus:border-[#1D6FA3]"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowNewPassword(!showNewPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none"
+                      >
+                        {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
+
+                    {/* NEW: Password Requirements Block */}
+                    {passwords.new.length > 0 && (
+                      <div className="mt-2 p-3 bg-gray-50 rounded-lg border border-gray-200 text-xs">
+                        <p className="font-medium text-gray-700 mb-1.5">Password must contain:</p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                          <div className={`flex items-center gap-1.5 ${passValidation.length ? 'text-green-600' : 'text-gray-500'}`}>
+                            {passValidation.length ? <Check className="h-3.5 w-3.5" /> : <X className="h-3.5 w-3.5" />} At least 8 characters
+                          </div>
+                          <div className={`flex items-center gap-1.5 ${passValidation.uppercase ? 'text-green-600' : 'text-gray-500'}`}>
+                            {passValidation.uppercase ? <Check className="h-3.5 w-3.5" /> : <X className="h-3.5 w-3.5" />} 1 uppercase letter
+                          </div>
+                          <div className={`flex items-center gap-1.5 ${passValidation.number ? 'text-green-600' : 'text-gray-500'}`}>
+                            {passValidation.number ? <Check className="h-3.5 w-3.5" /> : <X className="h-3.5 w-3.5" />} 1 number
+                          </div>
+                          <div className={`flex items-center gap-1.5 ${passValidation.special ? 'text-green-600' : 'text-gray-500'}`}>
+                            {passValidation.special ? <Check className="h-3.5 w-3.5" /> : <X className="h-3.5 w-3.5" />} 1 special character
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Confirm New Password</label>
-                    <input
-                      type="password"
-                      required
-                      value={passwords.confirm}
-                      onChange={(e) => setPasswords({...passwords, confirm: e.target.value})}
-                      className="w-full px-3.5 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-[#1D6FA3] focus:border-[#1D6FA3]"
-                    />
+                    <div className="relative">
+                      <input
+                        type={showConfirmPassword ? "text" : "password"}
+                        required
+                        value={passwords.confirm}
+                        onChange={(e) => setPasswords({...passwords, confirm: e.target.value})}
+                        className="w-full px-3.5 py-2 pr-10 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-[#1D6FA3] focus:border-[#1D6FA3]"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none"
+                      >
+                        {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
+                    {/* NEW: Passwords do not match inline warning */}
+                    {passwords.confirm && passwords.new !== passwords.confirm && (
+                      <p className="text-xs text-red-500 mt-1.5">Passwords do not match.</p>
+                    )}
                   </div>
 
                   <div className="pt-4 flex justify-end">
                     <button
                       type="submit"
-                      disabled={isUpdatingPassword || !passwords.current || !passwords.new || !passwords.confirm}
+                      /* NEW: Button strict validation blocker */
+                      disabled={isUpdatingPassword || !passwords.current || !passwords.new || !passwords.confirm || !isPasswordValid || passwords.new !== passwords.confirm}
                       className="px-5 py-2 bg-[#006837] text-white text-sm rounded-lg hover:bg-[#00542c] transition-colors disabled:opacity-50 font-medium flex items-center gap-2 cursor-pointer shadow-sm active:scale-95"
                     >
                       {isUpdatingPassword ? <><Loader2 className="h-4 w-4 animate-spin" /> Updating...</> : "Update Password"}
