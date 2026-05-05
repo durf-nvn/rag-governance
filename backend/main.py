@@ -1745,6 +1745,24 @@ def get_popular_topics():
 # AUDIT TRAIL
 # ─────────────────────────────────────────────────────────────────────────────
 
+def format_ph_time(raw_date: str) -> str:
+    """Helper to convert UTC ISO strings to Philippine Standard Time (UTC+8)."""
+    if not raw_date:
+        return "Unknown Date"
+    try:
+        from datetime import datetime, timezone, timedelta
+        # Parse the UTC time
+        dt = datetime.fromisoformat(raw_date.replace("Z", "+00:00"))
+        
+        # Convert to Philippine Time (UTC+8)
+        ph_tz = timezone(timedelta(hours=8))
+        dt_ph = dt.astimezone(ph_tz)
+        
+        return dt_ph.strftime("%B %d, %Y - %I:%M %p")
+    except Exception:
+        return str(raw_date).split("T")[0]
+
+
 @app.get("/audit/queries")
 def get_query_logs():
     try:
@@ -1753,21 +1771,12 @@ def get_query_logs():
         logs = []
         if response.data:
             for index, item in enumerate(response.data):
-                raw_date       = item.get("created_at", "")
-                formatted_date = "Unknown Date"
-                if raw_date:
-                    try:
-                        dt             = datetime.fromisoformat(raw_date.replace("Z", "+00:00"))
-                        formatted_date = dt.strftime("%B %d, %Y - %I:%M %p")
-                    except:
-                        formatted_date = raw_date.split("T")[0]
-
                 logs.append({
                     "id":        item.get("id", index),
                     "user":      item.get("user_email", "Unknown User"),
                     "role":      item.get("user_role",  item.get("role", "User")),
                     "query":     item.get("content",    ""),
-                    "timestamp": formatted_date,
+                    "timestamp": format_ph_time(item.get("created_at", "")),
                     "status":    "Answered",
                 })
 
@@ -1800,22 +1809,13 @@ def get_access_logs():
         logs = []
         if response.data:
             for item in response.data:
-                raw_date       = item.get("accessed_at", "")
-                formatted_date = "Unknown Date"
-                if raw_date:
-                    try:
-                        dt             = datetime.fromisoformat(raw_date.replace("Z", "+00:00"))
-                        formatted_date = dt.strftime("%B %d, %Y - %I:%M %p")
-                    except:
-                        formatted_date = raw_date.split("T")[0]
-
                 logs.append({
                     "id":        item.get("id"),
                     "user":      item.get("user_email",    "Unknown"),
                     "role":      item.get("user_role",     "User"),
                     "document":  item.get("document_name", "Unknown Document"),
                     "action":    item.get("action_type",   "Accessed"),
-                    "timestamp": formatted_date,
+                    "timestamp": format_ph_time(item.get("accessed_at", "")),
                 })
         return logs
     except Exception as e:
@@ -1836,21 +1836,13 @@ def get_version_history():
                 version  = meta.get("version", "1.0")
 
                 if doc_name:
-                    raw_date       = meta.get("upload_date", "")
-                    formatted_date = "Unknown Date"
-                    if raw_date:
-                        try:
-                            dt             = datetime.fromisoformat(raw_date.replace("Z", "+00:00"))
-                            formatted_date = dt.strftime("%B %d, %Y - %I:%M %p")
-                        except:
-                            formatted_date = raw_date.split("T")[0]
-
+                    raw_date = meta.get("upload_date", "")
                     raw_logs.append({
                         "document":  doc_name,
                         "version":   version,
                         "user":      meta.get("uploaded_by", "System Admin"),
                         "status":    meta.get("status", "Active"),
-                        "timestamp": formatted_date,
+                        "timestamp": format_ph_time(raw_date),
                         "raw_date":  raw_date,
                     })
 
@@ -1880,27 +1872,17 @@ def get_system_events():
         logs = []
         if response.data:
             for item in response.data:
-                raw_date       = item.get("event_date", "")
-                formatted_date = "Unknown Date"
-                if raw_date:
-                    try:
-                        dt             = datetime.fromisoformat(raw_date.replace("Z", "+00:00"))
-                        formatted_date = dt.strftime("%B %d, %Y - %I:%M %p")
-                    except:
-                        formatted_date = raw_date.split("T")[0]
-
                 logs.append({
                     "id":          item.get("id"),
                     "user":        item.get("user_email",  "Unknown"),
                     "type":        item.get("event_type",  "System Event"),
                     "description": item.get("description", ""),
-                    "timestamp":   formatted_date,
+                    "timestamp":   format_ph_time(item.get("event_date", "")),
                 })
         return logs
     except Exception as e:
         print(f"System log fetch error: {e}")
         raise HTTPException(status_code=500, detail="Failed to fetch system events")
-
 
 # ─────────────────────────────────────────────────────────────────────────────
 # GRADE EVALUATION
