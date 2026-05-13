@@ -1,13 +1,14 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router";
-import { GraduationCap, Database, MessageSquare, Award, FileSearch, Shield, Users, ArrowRight, CheckCircle, Sparkles } from "lucide-react";
+import { Database, MessageSquare, Award, FileSearch, Shield, Users, ArrowRight, CheckCircle, Sparkles, X } from "lucide-react";
 import axios from "axios";
 
 export function LandingPage() {
-  // --- NEW: State for sticky navbar ---
+  // --- States ---
   const [isScrolled, setIsScrolled] = useState(false);
+  const [isTermsOpen, setIsTermsOpen] = useState(false);
+  const [isPrivacyOpen, setIsPrivacyOpen] = useState(false);
 
-  // --- NEW: State for real-time statistics ---
   const [stats, setStats] = useState({
     documents: 0,
     queries: 0,
@@ -15,7 +16,7 @@ export function LandingPage() {
     isLoading: true
   });
 
-  // Track scrolling to update the navbar style
+  // Track scrolling
   useEffect(() => {
     const handleScroll = () => {
       setIsScrolled(window.scrollY > 20);
@@ -24,6 +25,7 @@ export function LandingPage() {
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
+  // Fetch stats
   useEffect(() => {
     const fetchStats = async () => {
       try {
@@ -41,7 +43,6 @@ export function LandingPage() {
     };
     fetchStats();
   }, []);
-  // -------------------------------------------
 
   const features = [
     {
@@ -91,9 +92,9 @@ export function LandingPage() {
 
   return (
     <div className="min-h-screen bg-white">
-      {/* Navigation - Sticky with dynamic styling */}
+      {/* Navigation */}
       <nav 
-        className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
+        className={`fixed top-0 left-0 right-0 z-40 transition-all duration-300 ${
           isScrolled 
             ? "bg-white/90 backdrop-blur-md shadow-sm border-b border-[#E5E7EB]" 
             : "bg-transparent"
@@ -140,8 +141,6 @@ export function LandingPage() {
           <div className="grid lg:grid-cols-2 gap-16 items-center">
             {/* Left Column */}
             <div className="space-y-8">
-              
-
               <div className="space-y-4">
                 <h1 className="text-5xl md:text-6xl lg:text-7xl font-bold text-[#1F2937] leading-tight tracking-tight">
                   RAG-Powered
@@ -192,7 +191,6 @@ export function LandingPage() {
                 <div className="w-1 h-1 rounded-full bg-[#E5E7EB]"></div>
                 <div className="flex items-center gap-2">
                   <Users className="h-4 w-4" />
-                  {/* DYNAMIC USER COUNT */}
                   <span>Trusted by {stats.isLoading ? "..." : stats.users} Users</span>
                 </div>
               </div>
@@ -215,7 +213,6 @@ export function LandingPage() {
                       <Database className="h-6 w-6 text-[#FF9501]" />
                     </div>
                     <div>
-                      {/* DYNAMIC DOCUMENT COUNT */}
                       <div className="text-2xl font-bold text-[#1F2937]">
                         {stats.isLoading ? "..." : stats.documents}
                       </div>
@@ -294,14 +291,12 @@ export function LandingPage() {
             </div>
             <div className="grid md:grid-cols-3 gap-12">
               <div className="text-center">
-                {/* DYNAMIC DOCUMENTS */}
                 <div className="text-5xl md:text-6xl font-bold text-white mb-2">
                   {stats.isLoading ? "-" : stats.documents}
                 </div>
                 <div className="text-base text-white/80">Documents Managed</div>
               </div>
               <div className="text-center">
-                {/* DYNAMIC QUERIES */}
                 <div className="text-5xl md:text-6xl font-bold text-white mb-2">
                   {stats.isLoading ? "-" : stats.queries}
                 </div>
@@ -358,14 +353,109 @@ export function LandingPage() {
                 © 2026 Cebu Technological University - Argao Campus
               </div>
             </div>
+            {/* UPDATED FOOTER LINKS */}
             <div className="flex gap-8 text-sm text-[#6B7280]">
-              <a href="#" className="hover:text-[#FF9501] transition-colors">Privacy Policy</a>
-              <a href="#" className="hover:text-[#FF9501] transition-colors">Terms of Service</a>
-              <a href="#" className="hover:text-[#FF9501] transition-colors">Contact</a>
+              <button 
+                onClick={() => setIsPrivacyOpen(true)} 
+                className="hover:text-[#FF9501] transition-colors cursor-pointer"
+              >
+                Privacy Policy
+              </button>
+              <button 
+                onClick={() => setIsTermsOpen(true)} 
+                className="hover:text-[#FF9501] transition-colors cursor-pointer"
+              >
+                Terms of Service
+              </button>
             </div>
           </div>
         </div>
       </footer>
+
+      {/* --- MODALS --- */}
+      
+      {/* Terms of Service Modal */}
+      {isTermsOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-xl border border-[#E5E7EB] w-full max-w-2xl max-h-[80vh] flex flex-col overflow-hidden">
+            <div className="flex items-center justify-between p-6 border-b border-[#E5E7EB]">
+              <h3 className="text-xl font-bold text-[#1F2937]">Terms of Service</h3>
+              <button onClick={() => setIsTermsOpen(false)} className="text-[#6B7280] hover:text-[#1F2937] transition-colors cursor-pointer">
+                <X className="h-6 w-6" />
+              </button>
+            </div>
+            <div className="p-6 overflow-y-auto space-y-6 text-[#4B5563]">
+              <section>
+                <h4 className="text-[#1F2937] text-lg mb-2">1. Acceptance of Terms</h4>
+                <p>By registering for an account on the CTU Argao Institutional Knowledge System, you agree to abide by these Terms of Service. This platform is strictly for the academic, administrative, and internal use of Cebu Technological University students, faculty, and administrators.</p>
+              </section>
+              <section>
+                <h4 className="text-[#1F2937] text-lg mb-2">2. Use of Artificial Intelligence</h4>
+                <p>This system utilizes a Retrieval-Augmented Generation (RAG) AI to answer questions based on official university documents. While the AI is designed to be highly accurate by pulling directly from our manuals, users must always verify critical academic or administrative decisions with official university publications or personnel.</p>
+              </section>
+              <section>
+                <h4 className="text-[#1F2937] text-lg mb-2">3. Account Security</h4>
+                <p>You are entirely responsible for maintaining the confidentiality of your login credentials. Any activities that occur under your account are your responsibility. You agree to notify the IT Department immediately of any unauthorized use of your account.</p>
+              </section>
+              <section>
+                <h4 className="text-[#1F2937] text-lg mb-2">4. Prohibited Conduct</h4>
+                <p>Users may not attempt to breach system security, upload malicious files, spam the AI engine with irrelevant queries, or use the platform to harass other students or faculty members. Violations may result in account suspension and academic disciplinary action.</p>
+              </section>
+            </div>
+            <div className="p-6 border-t border-[#E5E7EB] bg-gray-50 flex justify-end">
+              <button 
+                onClick={() => setIsTermsOpen(false)}
+                className="px-6 py-2.5 bg-[#FF9501] text-white font-medium rounded-xl hover:bg-[#D97E00] transition-colors cursor-pointer"
+              >
+                Understood
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Privacy Policy Modal */}
+      {isPrivacyOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-xl border border-[#E5E7EB] w-full max-w-2xl max-h-[80vh] flex flex-col overflow-hidden">
+            <div className="flex items-center justify-between p-6 border-b border-[#E5E7EB]">
+              <h3 className="text-xl font-bold text-[#1F2937]">Data Privacy Policy</h3>
+              <button onClick={() => setIsPrivacyOpen(false)} className="text-[#6B7280] hover:text-[#1F2937] transition-colors cursor-pointer">
+                <X className="h-6 w-6" />
+              </button>
+            </div>
+            <div className="p-6 overflow-y-auto space-y-6 text-[#4B5563]">
+              <div className="bg-[#FFF4E5] border border-[#FF9501] text-[#D97E00] p-4 rounded-xl text-sm font-medium">
+                In compliance with the Data Privacy Act of 2012 (Republic Act No. 10173).
+              </div>
+              <section>
+                <h4 className="text-[#1F2937] text-lg mb-2">1. Data Collection</h4>
+                <p>When you register for the system, we collect personal identifiers necessary for your account, including your full name, official email address, course/program, and year level. We also maintain secure system usage logs, including AI query history and document access records.</p>
+              </section>
+              <section>
+                <h4 className="text-[#1F2937] text-lg mb-2">2. Data Usage</h4>
+                <p>Your data is used strictly to verify your identity within the campus, grant appropriate role-based access (Student, Faculty, or Admin), and generate anonymized analytics for institutional improvement and system optimization.</p>
+              </section>
+              <section>
+                <h4 className="text-[#1F2937] text-lg mb-2">3. Data Protection and Sharing</h4>
+                <p>We will never sell, distribute, or expose your personal data to third-party advertisers. All sensitive information, including passwords, is encrypted in our secure on-premise database. Access to specific chat logs is strictly limited to authorized system administrators for auditing purposes.</p>
+              </section>
+              <section>
+                <h4 className="text-[#1F2937] text-lg mb-2">4. User Rights</h4>
+                <p>You have the right to request access to the data we hold about you, request corrections to your profile, or request account deactivation by contacting the system administrator.</p>
+              </section>
+            </div>
+            <div className="p-6 border-t border-[#E5E7EB] bg-gray-50 flex justify-end">
+              <button 
+                onClick={() => setIsPrivacyOpen(false)}
+                className="px-6 py-2.5 bg-[#FF9501] text-white font-medium rounded-xl hover:bg-[#D97E00] transition-colors cursor-pointer"
+              >
+                Close Policy
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
