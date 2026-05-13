@@ -102,8 +102,8 @@ export function LoginPage() {
   return (
     <div className="min-h-screen bg-white flex overflow-hidden">
       {/* Left Branding Section */}
-      <div className="hidden lg:flex lg:w-1/2 bg-[#F05A22] flex-col items-center justify-center p-12 relative">
-        <div className="absolute inset-0 bg-[#C23E0F] opacity-20"></div>
+      <div className="hidden lg:flex lg:w-1/2 bg-[#FF9501] flex-col items-center justify-center p-12 relative">
+        <div className="absolute inset-0 bg-[#D97E00] opacity-20"></div>
         <div className="relative z-10 text-center">
           <div className="flex justify-center mb-8">
             <div className="w-32 h-32 bg-white rounded-3xl flex items-center justify-center shadow-xl">
@@ -132,7 +132,7 @@ export function LoginPage() {
         <div className="w-full max-w-xl">
           <div className="lg:hidden text-center mb-8">
             <div className="flex justify-center mb-5">
-              <div className="w-20 h-20 bg-[#F05A22] rounded-2xl flex items-center justify-center shadow-md">
+              <div className="w-20 h-20 bg-[#FF9501] rounded-2xl flex items-center justify-center shadow-md">
                 <img 
                   src="/ctu-logo.png" 
                   alt="CTU Logo" 
@@ -168,7 +168,7 @@ export function LoginPage() {
                     required
                     value={formData.email}
                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    className="w-full pl-12 pr-4 py-4 bg-[#F5F7FA] border border-[#E5E7EB] rounded-xl text-base text-[#1F2937] focus:outline-none focus:ring-2 focus:ring-[#F05A22] focus:border-transparent transition-shadow"
+                    className="w-full pl-12 pr-4 py-4 bg-[#F5F7FA] border border-[#E5E7EB] rounded-xl text-base text-[#1F2937] focus:outline-none focus:ring-2 focus:ring-[#FF9501] focus:border-transparent transition-shadow"
                     placeholder="your.email@ctu.edu.ph"
                   />
                 </div>
@@ -186,7 +186,7 @@ export function LoginPage() {
                     required
                     value={formData.password}
                     onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                    className="w-full pl-12 pr-12 py-4 bg-[#F5F7FA] border border-[#E5E7EB] rounded-xl text-base text-[#1F2937] focus:outline-none focus:ring-2 focus:ring-[#F05A22] focus:border-transparent transition-shadow"
+                    className="w-full pl-12 pr-12 py-4 bg-[#F5F7FA] border border-[#E5E7EB] rounded-xl text-base text-[#1F2937] focus:outline-none focus:ring-2 focus:ring-[#FF9501] focus:border-transparent transition-shadow"
                     placeholder="••••••••"
                   />
                   <button
@@ -205,14 +205,14 @@ export function LoginPage() {
                     type="checkbox" 
                     checked={rememberMe}
                     onChange={(e) => setRememberMe(e.target.checked)}
-                    className="mr-3 w-5 h-5 rounded border-[#E5E7EB] text-[#F05A22] focus:ring-[#F05A22] cursor-pointer transition-colors" 
+                    className="mr-3 w-5 h-5 rounded border-[#E5E7EB] text-[#FF9501] focus:ring-[#FF9501] cursor-pointer transition-colors" 
                   />
                   <span className="text-base text-[#6B7280] select-none group-hover:text-[#1F2937] transition-colors">Remember me</span>
                 </label>
                 <button 
                   type="button" 
                   onClick={() => setIsModalOpen(true)}
-                  className="text-base text-[#C23E0F] hover:text-[#692005] hover:underline font-semibold cursor-pointer transition-colors"
+                  className="text-base text-[#D97E00] hover:text-[#995900] hover:underline font-[550] cursor-pointer transition-colors"
                 >
                   Forgot password?
                 </button>
@@ -221,7 +221,7 @@ export function LoginPage() {
               <button
                 type="submit"
                 disabled={isLoading}
-                className="w-full py-4 mt-2 bg-[#F05A22] text-white rounded-xl hover:bg-[#C23E0F] transition-colors font-bold text-lg shadow-md hover:shadow-lg disabled:opacity-70 disabled:cursor-not-allowed flex justify-center items-center cursor-pointer active:scale-[0.98]"
+                className="w-full py-4 mt-2 bg-[#FF9501] text-white rounded-xl hover:bg-[#D97E00] transition-colors font-bold text-lg shadow-md hover:shadow-lg disabled:opacity-70 disabled:cursor-not-allowed flex justify-center items-center cursor-pointer active:scale-[0.98]"
               >
                 {isLoading ? (
                   <svg className="animate-spin -ml-1 mr-3 h-6 w-6 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -236,14 +236,14 @@ export function LoginPage() {
             <div className="mt-8 text-center pt-8 border-t border-[#E5E7EB] space-y-5">
               <p className="text-base text-[#6B7280]">
                 Don't have an account?{" "}
-                <Link to="/signup" className="text-[#C23E0F] hover:text-[#692005] hover:underline font-bold transition-colors">
+                <Link to="/signup" className="text-[#D97E00] hover:text-[#995900] hover:underline font-bold transition-colors">
                   Sign up here
                 </Link>
               </p>
               <div>
                 <Link 
                   to="/" 
-                  className="group text-base text-[#C23E0F] hover:text-[#692005] font-semibold transition-colors flex items-center justify-center gap-2"
+                  className="group text-base text-[#D97E00] hover:text-[#995900] font-semibold transition-colors flex items-center justify-center gap-2"
                 >
                   <ArrowRight className="h-4 w-4 rotate-180 transition-transform duration-300 group-hover:-translate-x-1" /> 
                   Back to Home
@@ -285,7 +285,7 @@ export function LoginPage() {
                     required
                     value={resetEmail}
                     onChange={(e) => setResetEmail(e.target.value)}
-                    className="w-full pl-12 pr-4 py-4 bg-[#F5F7FA] border border-[#E5E7EB] rounded-xl text-base focus:outline-none focus:ring-2 focus:ring-[#F05A22] transition-shadow"
+                    className="w-full pl-12 pr-4 py-4 bg-[#F5F7FA] border border-[#E5E7EB] rounded-xl text-base focus:outline-none focus:ring-2 focus:ring-[#FF9501] transition-shadow"
                     placeholder="your.email@ctu.edu.ph"
                   />
                 </div>
@@ -294,7 +294,7 @@ export function LoginPage() {
               <button
                 type="submit"
                 disabled={resetLoading}
-                className="w-full py-4 bg-[#F05A22] text-white rounded-xl hover:bg-[#C23E0F] font-bold text-lg shadow-md hover:shadow-lg disabled:opacity-70 disabled:cursor-not-allowed flex justify-center items-center cursor-pointer active:scale-[0.98] transition-all"
+                className="w-full py-4 bg-[#FF9501] text-white rounded-xl hover:bg-[#D97E00] font-bold text-lg shadow-md hover:shadow-lg disabled:opacity-70 disabled:cursor-not-allowed flex justify-center items-center cursor-pointer active:scale-[0.98] transition-all"
               >
                 {resetLoading ? 'Sending...' : 'Send Reset Link'}
               </button>
