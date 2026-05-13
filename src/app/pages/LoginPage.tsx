@@ -115,7 +115,7 @@ export function LoginPage() {
             </div>
           </div>
           <h1 className="text-5xl font-bold text-white mb-6 leading-tight">
-            CTU-Argao Institutional Knowledge System
+            CTU-Argao Knowledge System
           </h1>
           <p className="text-2xl text-white/90 mb-3 font-medium">Cebu Technological University</p>
           <p className="text-xl text-white/80">Argao Campus</p>
@@ -212,7 +212,7 @@ export function LoginPage() {
                 <button 
                   type="button" 
                   onClick={() => setIsModalOpen(true)}
-                  className="text-base text-[#D97E00] hover:text-[#995900] hover:underline font-[550] cursor-pointer transition-colors"
+                  className="text-base text-[#D97E00] hover:text-[#995900] hover:underline font-semibold cursor-pointer transition-colors"
                 >
                   Forgot password?
                 </button>
