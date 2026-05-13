@@ -13,7 +13,7 @@ export function KnowledgeRepository() {
 
   const [documents, setDocuments] = useState<any[]>([])
   
-  // --- NEW: TOAST NOTIFICATION STATE ---
+  // --- TOAST NOTIFICATION STATE ---
   const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' } | null>(null)
   
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
@@ -24,7 +24,7 @@ export function KnowledgeRepository() {
   // Modals State
   const [showEditModal, setShowEditModal] = useState(false)
   const [editingDocName, setEditingDocName] = useState("")
-  const [isEditing, setIsEditing] = useState(false) // NEW: Loading state for editing
+  const [isEditing, setIsEditing] = useState(false)
 
   const [showUploadModal, setShowUploadModal] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
@@ -32,7 +32,7 @@ export function KnowledgeRepository() {
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [docToDelete, setDocToDelete] = useState<any>(null)
   const [deleteConfirmText, setDeleteConfirmText] = useState("")
-  const [isArchiving, setIsArchiving] = useState(false) // NEW: Loading state for archiving
+  const [isArchiving, setIsArchiving] = useState(false)
   
   const [showArchived, setShowArchived] = useState(false)
 
@@ -75,9 +75,11 @@ export function KnowledgeRepository() {
 
   const getAccessBadge = () => {
     if (canUpload && canEdit) {
-      return { label: "Full Access", color: "bg-green-50 text-green-700 border-green-200", icon: CheckCircle }
+      // Changed to the updated amber scheme tint
+      return { label: "Full Access", color: "bg-orange-50 text-[#D97E00] border-[#FF9501]/20", icon: CheckCircle }
     } else {
-      return { label: "View Only", color: "bg-blue-50 text-blue-700 border-blue-200", icon: Eye }
+      // Changed to a neutral amber tint
+      return { label: "View Only", color: "bg-[#FFF4E5] text-[#995900] border-[#FF9501]/10", icon: Eye }
     }
   }
 
@@ -105,14 +107,12 @@ export function KnowledgeRepository() {
 
   const handleView = (doc: any) => {
     if (doc.file_url) {
-      // Get the current user info from sessionStorage
       const userEmail = sessionStorage.getItem('userEmail') || 'Unknown';
       const userRole = sessionStorage.getItem('userRole') || 'STUDENT';
 
-      // Send the log silently in the background
       axios.post("http://localhost:8000/audit/access", {
-        document_name: doc.name,   // or whatever the document name variable is
-        action_type: "View",       // change to "Download" for the download button
+        document_name: doc.name,
+        action_type: "View",
         user_email: userEmail,
         user_role: userRole
       }).catch(err => console.error("Silently failed to log access"));
@@ -128,14 +128,12 @@ export function KnowledgeRepository() {
       return;
     }
     try {
-      // Get the current user info from sessionStorage
       const userEmail = sessionStorage.getItem('userEmail') || 'Unknown';
       const userRole = sessionStorage.getItem('userRole') || 'STUDENT';
 
-      // Send the log silently in the background
       axios.post("http://localhost:8000/audit/access", {
-        document_name: doc.name,   // or whatever the document name variable is
-        action_type: "View",       // change to "Download" for the download button
+        document_name: doc.name,
+        action_type: "Download",
         user_email: userEmail,
         user_role: userRole
       }).catch(err => console.error("Silently failed to log access"));
@@ -175,7 +173,7 @@ export function KnowledgeRepository() {
       showToast("Please fill out all fields.", "error")
       return
     }
-    setIsEditing(true) // Start loading
+    setIsEditing(true)
     try {
       await axios.put("http://localhost:8000/documents/update", {
         old_name: editingDocName,
@@ -193,7 +191,7 @@ export function KnowledgeRepository() {
     } catch (error) {
       showToast("Failed to update document.", "error")
     } finally {
-      setIsEditing(false) // Stop loading
+      setIsEditing(false)
     }
   }
 
@@ -205,7 +203,7 @@ export function KnowledgeRepository() {
 
   const executeArchive = async () => {
     if (!docToDelete) return
-    setIsArchiving(true) // Start loading
+    setIsArchiving(true)
     try {
       await axios.delete(`http://localhost:8000/documents/${encodeURIComponent(docToDelete.name)}`)
       setShowDeleteModal(false)
@@ -217,7 +215,7 @@ export function KnowledgeRepository() {
     } catch (error) {
       showToast("Failed to archive document.", "error")
     } finally {
-      setIsArchiving(false) // Stop loading
+      setIsArchiving(false)
     }
   }
 
@@ -320,11 +318,11 @@ export function KnowledgeRepository() {
   return (
     <div className="space-y-6 flex flex-col h-[calc(100vh-6rem)] relative">
       
-      {/* --- TOAST NOTIFICATION --- */}
+      {/* TOAST NOTIFICATION - Updated to Amber scheme */}
       {toast && (
         <div className={`fixed bottom-8 right-8 px-6 py-4 rounded-xl shadow-xl flex items-center gap-3 text-sm font-bold z-[100] transition-all duration-300 animate-in slide-in-from-bottom-5 fade-in ${
           toast.type === 'success' 
-            ? 'bg-[#E6F7ED] text-[#006837] border-2 border-[#006837]/20' 
+            ? 'bg-[#FFF4E5] text-[#D97E00] border-2 border-[#FF9501]/20' 
             : 'bg-red-50 text-red-700 border-2 border-red-200'
         }`}>
           {toast.type === 'success' ? <CheckCircle className="h-5 w-5" /> : <AlertCircle className="h-5 w-5" />}
@@ -349,8 +347,8 @@ export function KnowledgeRepository() {
                 onClick={() => setShowArchived(!showArchived)}
                 className={`flex items-center justify-center w-40 gap-2 px-4 py-2 rounded-lg border transition-all cursor-pointer ${
                   showArchived 
-                    ? "bg-gray-800 text-white border-gray-800 hover:bg-gray-700" 
-                    : "bg-white text-gray-700 border-[#E5E7EB] hover:bg-gray-50"
+                    ? "bg-[#1F2937] text-white border-[#1F2937] hover:bg-gray-700" 
+                    : "bg-white text-gray-700 border-[#E5E7EB] hover:bg-[#F9FAFB]"
                 }`}
               >
                 <Archive className="h-4 w-4 flex-shrink-0" />
@@ -363,7 +361,7 @@ export function KnowledgeRepository() {
             {canUpload && (
               <button
                 onClick={() => setShowUploadModal(true)}
-                className="flex items-center gap-2 px-4 py-2 bg-[#1D6FA3] text-white rounded-lg hover:bg-[#0B3C5D] transition-all cursor-pointer shadow-sm active:scale-95"
+                className="flex items-center gap-2 px-4 py-2 bg-[#FF9501] text-white rounded-lg hover:bg-[#D97E00] transition-all cursor-pointer shadow-sm active:scale-95"
               >
                 <Upload className="h-4 w-4" />
                 <span className="text-sm font-medium">Upload Document</span>
@@ -379,14 +377,14 @@ export function KnowledgeRepository() {
               <input
                 type="text"
                 placeholder="Search by document name, category, office, or date..."
-                className="w-full pl-11 pr-4 py-2.5 bg-[#F9FAFB] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1D6FA3] transition-colors"
+                className="w-full pl-11 pr-4 py-2.5 bg-[#F9FAFB] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#FF9501] transition-colors"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
             </div>
             <div className="flex flex-col sm:flex-row gap-4">
               <select
-                className="sm:w-48 px-4 py-2.5 bg-[#F9FAFB] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1D6FA3] text-[#374151] cursor-pointer hover:bg-gray-50 transition-colors"
+                className="sm:w-48 px-4 py-2.5 bg-[#F9FAFB] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#FF9501] text-[#374151] cursor-pointer hover:bg-gray-50 transition-colors"
                 value={selectedCategory}
                 onChange={(e) => setSelectedCategory(e.target.value)}
               >
@@ -401,7 +399,7 @@ export function KnowledgeRepository() {
               </select>
               
               <select
-                className="sm:w-48 px-4 py-2.5 bg-[#F9FAFB] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1D6FA3] text-[#374151] cursor-pointer hover:bg-gray-50 transition-colors"
+                className="sm:w-48 px-4 py-2.5 bg-[#F9FAFB] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#FF9501] text-[#374151] cursor-pointer hover:bg-gray-50 transition-colors"
                 value={selectedOffice}
                 onChange={(e) => setSelectedOffice(e.target.value)}
               >
@@ -419,7 +417,7 @@ export function KnowledgeRepository() {
       <div className="flex-1 h-auto bg-white rounded-lg border border-[#E5E7EB] shadow-sm flex flex-col min-h-0 overflow-hidden">
         <div className="flex-1 h-auto overflow-auto">
           <table className="w-full whitespace-nowrap relative table-fixed">
-            <thead className="bg-[#1D6FA3] text-white sticky top-0 z-20 shadow-md outline outline-1 outline-[#1D6FA3]">
+            <thead className="bg-[#FF9501] text-white sticky top-0 z-20 shadow-md outline outline-1 outline-[#FF9501]">
               <tr>
                 <th className="w-[28%] px-6 py-3.5 text-left text-xs font-semibold uppercase tracking-wider">Document Name</th>
                 <th className="w-[16%] px-6 py-3.5 text-left text-xs font-semibold uppercase tracking-wider">Category</th>
@@ -447,7 +445,7 @@ export function KnowledgeRepository() {
                     <td className="px-6 py-4 text-sm text-[#4B5563] truncate" title={doc.category}>{doc.category}</td>
                     <td className="px-6 py-4 text-sm text-[#4B5563] truncate" title={doc.office}>{doc.office}</td>
                     <td className="px-6 py-4">
-                      <span className={`text-sm font-bold ${doc.status === "Archived" ? "text-gray-400" : "text-[#1D6FA3]"}`}>
+                      <span className={`text-sm font-bold ${doc.status === "Archived" ? "text-gray-400" : "text-[#D97E00]"}`}>
                         v{doc.version}
                       </span>
                     </td>
@@ -458,25 +456,25 @@ export function KnowledgeRepository() {
                       <span className={`px-2.5 py-1 inline-flex text-xs leading-5 font-semibold rounded-full border ${
                         doc.status === "Archived" 
                           ? "bg-gray-100 text-gray-600 border-gray-200" 
-                          : "bg-green-50 text-green-700 border-green-100"
+                          : "bg-orange-50 text-[#D97E00] border-[#FF9501]/20"
                       }`}>
                         {doc.status || "Active"}
                       </span>
                     </td>
                     <td className="px-6 py-4 text-center">
                       <div className="flex items-center justify-center gap-3">
-                        <button onClick={() => handleView(doc)} className="text-[#6B7280] hover:text-[#1D6FA3] transition-colors cursor-pointer" title="View Document">
+                        <button onClick={() => handleView(doc)} className="text-[#6B7280] hover:text-[#FF9501] transition-colors cursor-pointer" title="View Document">
                           <Eye className="h-4 w-4" />
                         </button>
-                        <button onClick={() => handleDownload(doc)} className="text-[#6B7280] hover:text-[#1D6FA3] transition-colors cursor-pointer" title="Download">
+                        <button onClick={() => handleDownload(doc)} className="text-[#6B7280] hover:text-[#FF9501] transition-colors cursor-pointer" title="Download">
                           <Download className="h-4 w-4" />
                         </button>
                         {canEdit && doc.status !== "Archived" && (
                           <>
-                            <button onClick={() => handleUpdateVersionClick(doc)} className="text-[#6B7280] hover:text-[#10B981] transition-colors cursor-pointer" title="Upload New Version">
+                            <button onClick={() => handleUpdateVersionClick(doc)} className="text-[#6B7280] hover:text-[#FF9501] transition-colors cursor-pointer" title="Upload New Version">
                               <UploadCloud className="h-4 w-4" />
                             </button>
-                            <button onClick={() => handleEditClick(doc)} className="text-[#6B7280] hover:text-[#1D6FA3] transition-colors cursor-pointer" title="Edit Metadata">
+                            <button onClick={() => handleEditClick(doc)} className="text-[#6B7280] hover:text-[#FF9501] transition-colors cursor-pointer" title="Edit Metadata">
                               <Edit className="h-4 w-4" />
                             </button>
                             <button onClick={() => handleArchiveClick(doc)} className="text-[#6B7280] hover:text-[#EF4444] transition-colors cursor-pointer" title="Archive Document">
@@ -494,7 +492,7 @@ export function KnowledgeRepository() {
         </div>
       </div>
 
-      {/* --- NEW VERSION MODAL --- */}
+      {/* NEW VERSION MODAL */}
       {showUpdateModal && docToUpdate && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl max-w-xl w-full shadow-2xl overflow-hidden">
@@ -509,9 +507,9 @@ export function KnowledgeRepository() {
             </div>
             
             <form onSubmit={handleUpdateVersionSubmit} className="p-6 space-y-5">
-              <div className="p-4 bg-blue-50/50 rounded-lg border border-blue-100">
+              <div className="p-4 bg-[#FFF4E5] rounded-lg border border-[#FF9501]/10">
                 <label className="block text-xs font-semibold text-[#6B7280] uppercase tracking-wider mb-1">Target Document (Locked)</label>
-                <div className="text-sm font-semibold text-[#1D6FA3]">{docToUpdate.name}</div>
+                <div className="text-sm font-semibold text-[#D97E00]">{docToUpdate.name}</div>
                 <div className="flex items-center gap-4 mt-2 text-xs text-[#6B7280]">
                   <span>Category: {docToUpdate.category}</span>
                   <span>Office: {docToUpdate.office}</span>
@@ -527,7 +525,7 @@ export function KnowledgeRepository() {
                     required
                     value={updateFormData.version}
                     onChange={(e) => setUpdateFormData({...updateFormData, version: e.target.value})}
-                    className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1D6FA3]"
+                    className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#FF9501]"
                     placeholder={`e.g., ${(parseFloat(docToUpdate.version) + 1.0).toFixed(1)}`}
                   />
                 </div>
@@ -538,7 +536,7 @@ export function KnowledgeRepository() {
                     required
                     value={updateFormData.effectivityDate}
                     onChange={(e) => setUpdateFormData({...updateFormData, effectivityDate: e.target.value})}
-                    className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1D6FA3] cursor-pointer"
+                    className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#FF9501] cursor-pointer"
                   />
                 </div>
               </div>
@@ -551,12 +549,12 @@ export function KnowledgeRepository() {
                   onDrop={(e) => handleDrop(e, true)}
                   onClick={() => updateFileInputRef.current?.click()}
                   className={`border-2 border-dashed rounded-lg p-6 text-center transition-all cursor-pointer ${
-                    isDragging ? "border-[#1D6FA3] bg-[#E3F2FD]" : "border-[#E5E7EB] hover:border-[#1D6FA3] bg-[#F9FAFB]"
+                    isDragging ? "border-[#FF9501] bg-[#FFF4E5]" : "border-[#E5E7EB] hover:border-[#FF9501] bg-[#F9FAFB]"
                   }`}
                 >
                   {updateFile ? (
                     <div className="flex flex-col items-center">
-                      <FileText className="h-10 w-10 text-[#1D6FA3] mb-2" />
+                      <FileText className="h-10 w-10 text-[#FF9501] mb-2" />
                       <p className="text-sm font-semibold text-[#1F2937]">{updateFile.name}</p>
                     </div>
                   ) : (
@@ -586,7 +584,7 @@ export function KnowledgeRepository() {
                 <button
                   type="submit"
                   disabled={!updateFile || isUpdatingVersion}
-                  className="flex-1 px-5 py-2.5 text-sm font-semibold bg-[#1D6FA3] text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-[#0B3C5D] transition-colors flex justify-center items-center gap-2 cursor-pointer"
+                  className="flex-1 px-5 py-2.5 text-sm font-semibold bg-[#FF9501] text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-[#D97E00] transition-colors flex justify-center items-center gap-2 cursor-pointer"
                 >
                   {isUpdatingVersion ? <><Loader2 className="h-4 w-4 animate-spin"/> Processing...</> : "Update Version"}
                 </button>
@@ -616,7 +614,7 @@ export function KnowledgeRepository() {
                     name="name"
                     value={formData.name}
                     onChange={handleInputChange}
-                    className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1D6FA3]"
+                    className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#FF9501]"
                     placeholder="Enter document name"
                   />
                 </div>
@@ -624,7 +622,7 @@ export function KnowledgeRepository() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-[#1F2937] mb-2">Category</label>
-                    <select name="category" value={formData.category} onChange={handleInputChange} className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1D6FA3] cursor-pointer">
+                    <select name="category" value={formData.category} onChange={handleInputChange} className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#FF9501] cursor-pointer">
                       <option>Policy</option>
                       <option>Procedure / Guideline</option>
                       <option>Memorandum</option>
@@ -637,7 +635,7 @@ export function KnowledgeRepository() {
 
                   <div>
                     <label className="block text-sm font-medium text-[#1F2937] mb-2">Office</label>
-                    <select name="office" value={formData.office} onChange={handleInputChange} className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1D6FA3] cursor-pointer">
+                    <select name="office" value={formData.office} onChange={handleInputChange} className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#FF9501] cursor-pointer">
                       <option>Academic Affairs</option>
                       <option>Student Affairs</option>
                       <option>Research Office</option>
@@ -654,7 +652,7 @@ export function KnowledgeRepository() {
                       name="version"
                       value={formData.version}
                       onChange={handleInputChange}
-                      className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1D6FA3]"
+                      className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#FF9501]"
                       placeholder="e.g., v1.0, v2.5"
                     />
                   </div>
@@ -666,7 +664,7 @@ export function KnowledgeRepository() {
                       name="effectivityDate"
                       value={formData.effectivityDate}
                       onChange={handleInputChange}
-                      className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1D6FA3] cursor-pointer"
+                      className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#FF9501] cursor-pointer"
                     />
                   </div>
                 </div>
@@ -679,12 +677,12 @@ export function KnowledgeRepository() {
                     onDrop={(e) => handleDrop(e, false)}
                     onClick={() => fileInputRef.current?.click()}
                     className={`border-2 border-dashed rounded-lg p-8 text-center transition-all cursor-pointer ${
-                      isDragging ? "border-[#1D6FA3] bg-[#E3F2FD]" : "border-[#E5E7EB] hover:border-[#1D6FA3] hover:bg-[#F9FAFB]"
+                      isDragging ? "border-[#FF9501] bg-[#FFF4E5]" : "border-[#E5E7EB] hover:border-[#FF9501] hover:bg-[#F9FAFB]"
                     }`}
                   >
                     {selectedFile ? (
                       <div className="flex flex-col items-center">
-                        <FileText className="h-12 w-12 text-[#1D6FA3] mb-3" />
+                        <FileText className="h-12 w-12 text-[#FF9501] mb-3" />
                         <p className="text-sm font-semibold text-[#1F2937]">{selectedFile.name}</p>
                         <p className="text-xs text-[#6B7280] mt-1">{(selectedFile.size / 1024 / 1024).toFixed(2)} MB</p>
                       </div>
@@ -720,7 +718,7 @@ export function KnowledgeRepository() {
               <button
                 onClick={handleUploadSubmit}
                 disabled={!selectedFile || isUploading}
-                className="px-5 py-2.5 text-sm font-semibold bg-[#1D6FA3] text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-[#0B3C5D] transition-colors flex items-center gap-2 cursor-pointer"
+                className="px-5 py-2.5 text-sm font-semibold bg-[#FF9501] text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-[#D97E00] transition-colors flex items-center gap-2 cursor-pointer"
               >
                 {isUploading ? <><Loader2 className="h-4 w-4 animate-spin"/> Uploading...</> : "Upload Document"}
               </button>
@@ -748,14 +746,14 @@ export function KnowledgeRepository() {
                   name="name"
                   value={formData.name}
                   onChange={handleInputChange}
-                  className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1D6FA3]"
+                  className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#FF9501]"
                 />
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-[#1F2937] mb-2">Category</label>
-                  <select name="category" value={formData.category} onChange={handleInputChange} className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1D6FA3] cursor-pointer">
+                  <select name="category" value={formData.category} onChange={handleInputChange} className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#FF9501] cursor-pointer">
                     <option>Policy</option>
                     <option>Procedure / Guideline</option>
                     <option>Memorandum</option>
@@ -767,7 +765,7 @@ export function KnowledgeRepository() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-[#1F2937] mb-2">Office</label>
-                  <select name="office" value={formData.office} onChange={handleInputChange} className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1D6FA3] cursor-pointer">
+                  <select name="office" value={formData.office} onChange={handleInputChange} className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#FF9501] cursor-pointer">
                     <option>Academic Affairs</option>
                     <option>Student Affairs</option>
                     <option>Research Office</option>
@@ -784,7 +782,7 @@ export function KnowledgeRepository() {
                     name="version"
                     value={formData.version}
                     onChange={handleInputChange}
-                    className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1D6FA3]"
+                    className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#FF9501]"
                   />
                 </div>
                 <div>
@@ -794,7 +792,7 @@ export function KnowledgeRepository() {
                     name="effectivityDate"
                     value={formData.effectivityDate}
                     onChange={handleInputChange}
-                    className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1D6FA3] cursor-pointer"
+                    className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#FF9501] cursor-pointer"
                   />
                 </div>
               </div>
@@ -810,7 +808,7 @@ export function KnowledgeRepository() {
               <button
                 onClick={handleEditSubmit}
                 disabled={isEditing}
-                className="px-5 py-2.5 text-sm font-semibold bg-[#1D6FA3] text-white rounded-lg hover:bg-[#0B3C5D] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 cursor-pointer"
+                className="px-5 py-2.5 text-sm font-semibold bg-[#FF9501] text-white rounded-lg hover:bg-[#D97E00] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 cursor-pointer"
               >
                 {isEditing ? <><Loader2 className="h-4 w-4 animate-spin"/> Saving...</> : "Save Changes"}
               </button>
@@ -819,7 +817,7 @@ export function KnowledgeRepository() {
         </div>
       )}
       
-      {/* Type-to-Confirm Delete Modal */}
+      {/* Type-to-Confirm Archive Modal */}
       {showDeleteModal && docToDelete && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl max-w-md w-full shadow-2xl overflow-hidden">
