@@ -89,7 +89,7 @@ export function playNotificationSound() {
 // Hook — call ONCE in DashboardLayout, pass return value as props
 // ------------------------------------------------------------------
 export function useNotifications(): UseNotificationsReturn {
-  const userEmail = localStorage.getItem("userEmail") ?? "";
+  const userEmail = sessionStorage.getItem("userEmail") ?? "";
 
   // allNotifications always holds the FULL list regardless of filter
   const [allNotifications, setAllNotifications] = useState<Notification[]>([]);
@@ -118,7 +118,7 @@ export function useNotifications(): UseNotificationsReturn {
     try {
       const res = await fetch(
         `${API_BASE}/notifications?email=${encodeURIComponent(userEmail)}&filter=all`,
-        { headers: { Authorization: `Bearer ${localStorage.getItem("token") ?? ""}` } }
+        { headers: { Authorization: `Bearer ${sessionStorage.getItem("token") ?? ""}` } }
       );
       if (!res.ok) throw new Error(`Server error ${res.status}`);
       const data: Notification[] = await res.json();
@@ -161,7 +161,7 @@ export function useNotifications(): UseNotificationsReturn {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token") ?? ""}`,
+          Authorization: `Bearer ${sessionStorage.getItem("token") ?? ""}`,
         },
         body: JSON.stringify({ email: userEmail }),
       });
@@ -178,7 +178,7 @@ export function useNotifications(): UseNotificationsReturn {
     try {
       await fetch(`${API_BASE}/notifications/${id}/read`, {
         method: "PATCH",
-        headers: { Authorization: `Bearer ${localStorage.getItem("token") ?? ""}` },
+        headers: { Authorization: `Bearer ${sessionStorage.getItem("token") ?? ""}` },
       });
     } catch {
       refresh();
@@ -196,7 +196,7 @@ export function useNotifications(): UseNotificationsReturn {
         method: "DELETE",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token") ?? ""}`,
+          Authorization: `Bearer ${sessionStorage.getItem("token") ?? ""}`,
         },
         body: JSON.stringify({ email: userEmail }),
       });

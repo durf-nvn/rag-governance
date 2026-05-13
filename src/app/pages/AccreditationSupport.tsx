@@ -4,9 +4,9 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "../components/ui/tabs"
 import axios from "axios";
 
 export function AccreditationSupport() {
-  const userRole = localStorage.getItem('userRole') || 'STUDENT';
-  const userDept = localStorage.getItem('userDepartment') || 'BSIT';
-  const userName = localStorage.getItem('userName') || 'Faculty User';
+  const userRole = sessionStorage.getItem('userRole') || 'STUDENT';
+  const userDept = sessionStorage.getItem('userDepartment') || 'BSIT';
+  const userName = sessionStorage.getItem('userName') || 'Faculty User';
 
   const [selectedProgram, setSelectedProgram] = useState(userRole === 'FACULTY' ? userDept : "BSIT");
   const [searchQuery, setSearchQuery] = useState("");
@@ -178,7 +178,7 @@ export function AccreditationSupport() {
 
   const handleViewDocument = (fileUrl: string, fileName: string) => {
     axios.post("http://localhost:8000/audit/access", {
-      document_name: fileName, action_type: "View", user_email: localStorage.getItem('userEmail'), user_role: userRole
+      document_name: fileName, action_type: "View", user_email: sessionStorage.getItem('userEmail'), user_role: userRole
     }).catch(() => {});
     window.open(fileUrl, "_blank");
   };

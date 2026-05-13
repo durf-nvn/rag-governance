@@ -39,13 +39,13 @@ export function ProfileSettings() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<"profile" | "security">("profile");
   
-  const userRole = localStorage.getItem("userRole") || "STUDENT";
+  const userRole = sessionStorage.getItem("userRole") || "STUDENT";
   
   // Added email to the profile state
   const [profileData, setProfileData] = useState({
-    fullName: localStorage.getItem("userName") || "",
-    program: localStorage.getItem("userDepartment") || "",
-    email: localStorage.getItem("userEmail") || ""
+    fullName: sessionStorage.getItem("userName") || "",
+    program: sessionStorage.getItem("userDepartment") || "",
+    email: sessionStorage.getItem("userEmail") || ""
   });
   const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
   const [profileStatus, setProfileStatus] = useState<{ type: "success" | "error", msg: string } | null>(null);
@@ -74,7 +74,7 @@ export function ProfileSettings() {
   }, [logoutCountdown]);
 
   const handleForceLogout = () => {
-    localStorage.clear();
+    sessionStorage.clear();
     navigate("/login");
   };
 
@@ -83,7 +83,7 @@ export function ProfileSettings() {
     setProfileStatus(null);
     setIsUpdatingProfile(true);
 
-    const originalEmail = localStorage.getItem("userEmail") || "";
+    const originalEmail = sessionStorage.getItem("userEmail") || "";
 
     try {
       const response = await axios.put("http://localhost:8000/users/profile", {
@@ -93,12 +93,12 @@ export function ProfileSettings() {
         program: userRole === "ADMIN" ? "ADMIN" : profileData.program 
       });
       
-      localStorage.setItem("userName", response.data.full_name);
-      localStorage.setItem("userDepartment", response.data.program);
+      sessionStorage.setItem("userName", response.data.full_name);
+      sessionStorage.setItem("userDepartment", response.data.program);
       
       // If the email was changed, update storage and trigger the logout modal
       if (response.data.email !== originalEmail) {
-        localStorage.setItem("userEmail", response.data.email);
+        sessionStorage.setItem("userEmail", response.data.email);
         setModalContent({
           title: "Email Address Updated!",
           message: "You have successfully changed your email. For your security, please sign in again using your new email address."
@@ -144,7 +144,7 @@ export function ProfileSettings() {
     setIsUpdatingPassword(true);
     try {
       await axios.post("http://localhost:8000/users/change-password", {
-        email: localStorage.getItem("userEmail"),
+        email: sessionStorage.getItem("userEmail"),
         current_password: passwords.current,
         new_password: passwords.new
       });

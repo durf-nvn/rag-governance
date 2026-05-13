@@ -26,8 +26,8 @@ export function FacultyDashboard() {
     const fetchDashboardData = async () => {
       setIsLoading(true);
       try {
-        const userEmail = localStorage.getItem('userEmail') || '';
-        const userDept = localStorage.getItem('userDepartment') || 'BSIT'; 
+        const userEmail = sessionStorage.getItem('userEmail') || '';
+        const userDept = sessionStorage.getItem('userDepartment') || 'BSIT'; 
         
         setUserDepartment(userDept); // Save to state so we can show it in the HTML
 

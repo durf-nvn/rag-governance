@@ -23,7 +23,7 @@ export function StudentDashboard() {
     const fetchDashboardData = async () => {
       setIsLoading(true);
       try {
-        const userEmail = localStorage.getItem('userEmail') || '';
+        const userEmail = sessionStorage.getItem('userEmail') || '';
 
         // Fetch all the data we need in parallel (Added /announcements)
         const [statsRes, historyRes, accessRes, queriesRes, announcementsRes] = await Promise.all([

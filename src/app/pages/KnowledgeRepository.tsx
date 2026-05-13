@@ -105,9 +105,9 @@ export function KnowledgeRepository() {
 
   const handleView = (doc: any) => {
     if (doc.file_url) {
-      // Get the current user info from localStorage
-      const userEmail = localStorage.getItem('userEmail') || 'Unknown';
-      const userRole = localStorage.getItem('userRole') || 'STUDENT';
+      // Get the current user info from sessionStorage
+      const userEmail = sessionStorage.getItem('userEmail') || 'Unknown';
+      const userRole = sessionStorage.getItem('userRole') || 'STUDENT';
 
       // Send the log silently in the background
       axios.post("http://localhost:8000/audit/access", {
@@ -128,9 +128,9 @@ export function KnowledgeRepository() {
       return;
     }
     try {
-      // Get the current user info from localStorage
-      const userEmail = localStorage.getItem('userEmail') || 'Unknown';
-      const userRole = localStorage.getItem('userRole') || 'STUDENT';
+      // Get the current user info from sessionStorage
+      const userEmail = sessionStorage.getItem('userEmail') || 'Unknown';
+      const userRole = sessionStorage.getItem('userRole') || 'STUDENT';
 
       // Send the log silently in the background
       axios.post("http://localhost:8000/audit/access", {

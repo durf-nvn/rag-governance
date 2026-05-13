@@ -42,7 +42,7 @@ export function BroadcastAnnouncement() {
   const [viewingAnnouncement, setViewingAnnouncement] = useState<Announcement | null>(null);
   const [isModalLoading, setIsModalLoading] = useState(false);
 
-  const userEmail = localStorage.getItem("userEmail") || "admin@ctu.edu.ph";
+  const userEmail = sessionStorage.getItem("userEmail") || "admin@ctu.edu.ph";
 
   const recipientOptions = [
     { value: "All Users", label: "All Users", count: userCounts.all },

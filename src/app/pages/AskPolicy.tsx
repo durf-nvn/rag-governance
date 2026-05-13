@@ -62,7 +62,7 @@ export function AskPolicy() {
     fetchAnalytics();
   }, []);
 
-  const userEmail = localStorage.getItem('userEmail') || 'guest@ctu.edu.ph';
+  const userEmail = sessionStorage.getItem('userEmail') || 'guest@ctu.edu.ph';
 
   useEffect(() => {
     const fetchHistory = async () => {

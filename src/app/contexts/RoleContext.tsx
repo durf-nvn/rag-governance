@@ -10,15 +10,15 @@ interface RoleContextType {
 const RoleContext = createContext<RoleContextType | undefined>(undefined);
 
 export function RoleProvider({ children }: { children: ReactNode }) {
-  // Initialize state by checking localStorage first
+  // Initialize state by checking sessionStorage first
   const [userRole, setUserRole] = useState<UserRole | null>(() => {
-    const savedRole = localStorage.getItem('userRole');
+    const savedRole = sessionStorage.getItem('userRole');
     return (savedRole as UserRole) || null;
   });
 
-  // Keep localStorage in sync if the role changes
+  // Keep sessionStorage in sync if the role changes
   const handleSetRole = (role: UserRole) => {
-    localStorage.setItem('userRole', role);
+    sessionStorage.setItem('userRole', role);
     setUserRole(role);
   };
 

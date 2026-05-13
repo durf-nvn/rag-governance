@@ -41,8 +41,8 @@ export function DashboardLayout() {
   const currentRole = userRole || "STUDENT";
   const userProfile = {
     role:  currentRole,
-    name:  localStorage.getItem("userName")  || "CTU User",
-    email: localStorage.getItem("userEmail") || "user@ctu.edu.ph",
+    name:  sessionStorage.getItem("userName")  || "CTU User",
+    email: sessionStorage.getItem("userEmail") || "user@ctu.edu.ph",
   };
 
   // Close dropdown when clicking outside
@@ -90,7 +90,7 @@ export function DashboardLayout() {
   const badge = getRoleBadge();
 
   const handleLogout = () => {
-    localStorage.removeItem("token");
+    sessionStorage.removeItem("token");
     navigate("/login");
   };
 

@@ -36,7 +36,7 @@ export function LoginPage() {
 
   // --- NEW: Load saved email on component mount ---
   useEffect(() => {
-    const savedEmail = localStorage.getItem("rememberedEmail");
+    const savedEmail = sessionStorage.getItem("rememberedEmail");
     if (savedEmail) {
       setFormData(prev => ({ ...prev, email: savedEmail }));
       setRememberMe(true);
@@ -74,17 +74,17 @@ export function LoginPage() {
 
       // --- NEW: Save or Clear the remembered email based on checkbox ---
       if (rememberMe) {
-        localStorage.setItem("rememberedEmail", formData.email);
+        sessionStorage.setItem("rememberedEmail", formData.email);
       } else {
-        localStorage.removeItem("rememberedEmail");
+        sessionStorage.removeItem("rememberedEmail");
       }
       // -----------------------------------------------------------------
 
-      localStorage.setItem('token', response.data.access_token);
-      localStorage.setItem('userName', response.data.full_name);
-      localStorage.setItem('userEmail', response.data.email);
-      localStorage.setItem('userRole', response.data.role);
-      localStorage.setItem('userDepartment', response.data.department);
+      sessionStorage.setItem('token', response.data.access_token);
+      sessionStorage.setItem('userName', response.data.full_name);
+      sessionStorage.setItem('userEmail', response.data.email);
+      sessionStorage.setItem('userRole', response.data.role);
+      sessionStorage.setItem('userDepartment', response.data.department);
       
       setUserRole(response.data.role);
       navigate("/app");
