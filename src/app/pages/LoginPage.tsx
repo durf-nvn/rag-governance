@@ -140,7 +140,7 @@ export function LoginPage() {
                 />
               </div>
             </div>
-            <h1 className="text-2xl font-bold text-[#1F2937]">CTU Knowledge System</h1>
+            <h1 className="text-2xl font-bold text-[#1F2937]">CTU Argao Knowledge System</h1>
           </div>
 
           <div className="bg-white rounded-2xl shadow-lg border border-[#E5E7EB] p-10 sm:p-12">
