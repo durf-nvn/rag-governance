@@ -4,6 +4,9 @@ import { GraduationCap, Database, MessageSquare, Award, FileSearch, Shield, User
 import axios from "axios";
 
 export function LandingPage() {
+  // --- NEW: State for sticky navbar ---
+  const [isScrolled, setIsScrolled] = useState(false);
+
   // --- NEW: State for real-time statistics ---
   const [stats, setStats] = useState({
     documents: 0,
@@ -11,6 +14,15 @@ export function LandingPage() {
     users: 0,
     isLoading: true
   });
+
+  // Track scrolling to update the navbar style
+  useEffect(() => {
+    const handleScroll = () => {
+      setIsScrolled(window.scrollY > 20);
+    };
+    window.addEventListener("scroll", handleScroll);
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
 
   useEffect(() => {
     const fetchStats = async () => {
@@ -79,17 +91,27 @@ export function LandingPage() {
 
   return (
     <div className="min-h-screen bg-white">
-      {/* Navigation */}
-      <nav className="absolute top-0 left-0 right-0 z-50">
-        <div className="container mx-auto px-8 py-6 flex items-center justify-between">
+      {/* Navigation - Now Sticky with dynamic styling */}
+      <nav 
+        className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
+          isScrolled 
+            ? "bg-white/90 backdrop-blur-md shadow-sm border-b border-[#E5E7EB]" 
+            : "bg-transparent"
+        }`}
+      >
+        <div 
+          className={`container mx-auto px-8 flex items-center justify-between transition-all duration-300 ${
+            isScrolled ? "py-4" : "py-6"
+          }`}
+        >
           <div className="flex items-center gap-3">
             <div className="w-11 h-11 flex items-center justify-center">
-                <img 
-                  src="/ctu-logo.png" 
-                  alt="CTU Logo" 
-                  className="h-8 w-8 object-contain" 
-                />
-              </div>
+              <img 
+                src="/ctu-logo.png" 
+                alt="CTU Logo" 
+                className="h-8 w-8 object-contain" 
+              />
+            </div>
             <div>
               <div className="text-base font-semibold text-[#1F2937] tracking-tight">CTU Argao</div>
               <div className="text-xs text-[#6B7280] tracking-wide">Knowledge System</div>
@@ -310,10 +332,10 @@ export function LandingPage() {
             <div className="pt-4">
               <Link 
                 to="/signup" 
-                className="inline-flex items-center gap-2 px-10 py-5 bg-[#F05A22] text-white rounded-2xl hover:bg-[#C23E0F] transition-all font-medium text-lg shadow-xl hover:shadow-2xl"
+                className="group inline-flex items-center justify-center gap-2 px-10 py-5 bg-[#F05A22] text-white rounded-2xl hover:bg-[#C23E0F] transition-all font-medium text-lg shadow-xl hover:shadow-2xl"
               >
                 Get Started Today
-                <ArrowRight className="h-5 w-5" />
+                <ArrowRight className="h-5 w-5 group-hover:translate-x-1 transition-transform" />
               </Link>
             </div>
           </div>
