@@ -81,9 +81,9 @@ export function DashboardLayout() {
 
   const getRoleBadge = () => {
     switch (userProfile.role) {
-      case "ADMIN":   return { icon: Shield,        color: "bg-[#1D6FA3]", label: "Administrator" };
-      case "FACULTY": return { icon: BookOpen,      color: "bg-[#1D6FA3]", label: "Faculty"       };
-      default:        return { icon: GraduationCap, color: "bg-[#1D6FA3]", label: "Student"       };
+      case "ADMIN":   return { icon: Shield,        color: "bg-[#FF9501]", label: "Administrator" };
+      case "FACULTY": return { icon: BookOpen,      color: "bg-[#FF9501]", label: "Faculty"       };
+      default:        return { icon: GraduationCap, color: "bg-[#FF9501]", label: "Student"       };
     }
   };
 
@@ -103,26 +103,20 @@ export function DashboardLayout() {
 
           {/* Logo */}
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-[#1D6FA3] rounded-lg flex items-center justify-center">
-              <GraduationCap className="h-6 w-6 text-white" />
+            <div className="w-11 h-11 flex items-center justify-center">
+              <img 
+                src="/ctu-logo.png" 
+                alt="CTU Logo" 
+                className="h-8 w-8 object-contain" 
+              />
             </div>
             <div>
               <div className="text-sm font-semibold text-[#1F2937]">CTU Argao Campus</div>
-              <div className="text-xs text-[#6B7280]">Knowledge Management System</div>
+              <div className="text-xs text-[#6B7280]">Institutional Knowledge System</div>
             </div>
           </div>
 
-          {/* Search */}
-          <div className="flex items-center gap-3 flex-1 max-w-xl mx-8">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#6B7280]" />
-              <input
-                type="text"
-                placeholder="Search documents, policies..."
-                className="w-full pl-10 pr-4 py-2 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm text-[#1F2937] placeholder-[#6B7280] focus:outline-none focus:ring-2 focus:ring-[#1D6FA3] focus:border-transparent"
-              />
-            </div>
-          </div>
+          
 
           {/* Right controls */}
           <div className="flex items-center gap-3">
@@ -214,8 +208,8 @@ export function DashboardLayout() {
                     to={item.path}
                     className={`flex items-center gap-3 px-3 py-2.5 mb-1 rounded-lg transition-all cursor-pointer ${
                       isActive
-                        ? "bg-[#1D6FA3] text-white"
-                        : "text-[#6B7280] hover:bg-[#F5F7FA] hover:text-[#1F2937]"
+                        ? "bg-[#FF9501] text-white"
+                        : "text-[#6B7280] hover:bg-[#FFF4E5] hover:text-[#D97E00]"
                     }`}
                     title={sidebarCollapsed ? item.label : undefined}
                   >
