@@ -137,7 +137,9 @@ export function FacultyDashboard() {
     { name: "Compliant", value: accreditationScore },
     { name: "Missing", value: 100 - accreditationScore }
   ];
-  const PIE_COLORS = ["#006837", "#E5E7EB"]; // PRESERVED: Green colors for QA Readiness
+  
+  // UPDATED: Now using Base Amber and Gray instead of Green
+  const PIE_COLORS = ["#FF9501", "#E5E7EB"]; 
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-10">
@@ -203,11 +205,14 @@ export function FacultyDashboard() {
           )}
         </div>
 
-        {/* Accreditation Readiness Widget (COLORS PRESERVED) */}
+        {/* Accreditation Readiness Widget (UPDATED TO AMBER) */}
         <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm flex flex-col items-center justify-center relative overflow-hidden">
-          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-[#006837] to-[#10B981]"></div>
+          {/* Updated gradient border line */}
+          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-[#D97E00] to-[#FF9501]"></div>
+          
           <h2 className="text-lg font-bold text-gray-900 mb-2 w-full text-left flex items-center gap-2">
-            <ShieldCheck className="h-5 w-5 text-[#006837]" />
+            {/* Updated Shield icon color */}
+            <ShieldCheck className="h-5 w-5 text-[#D97E00]" />
             {userDepartment} QA Readiness
           </h2>
           <p className="text-xs text-gray-500 mb-4 w-full text-left">Real-time accreditation compliance</p>
@@ -236,7 +241,8 @@ export function FacultyDashboard() {
                 </PieChart>
               </ResponsiveContainer>
               <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                <span className="text-3xl font-bold text-[#006837]">{accreditationScore}%</span>
+                {/* Updated percentage text color */}
+                <span className="text-3xl font-bold text-[#D97E00]">{accreditationScore}%</span>
                 <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Compliant</span>
               </div>
             </div>
@@ -247,7 +253,7 @@ export function FacultyDashboard() {
       {/* Bottom Row: Recent Activity & Quick Actions */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         
-        {/* Recent Activity List - NOW WITH HEIGHT LIMIT */}
+        {/* Recent Activity List */}
         <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm flex flex-col h-full">
           <h2 className="text-lg font-bold text-gray-900 mb-6 flex items-center gap-2">
             <Clock className="h-5 w-5 text-[#FF9501]" />
