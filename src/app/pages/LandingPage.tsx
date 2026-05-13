@@ -83,13 +83,13 @@ export function LandingPage() {
       <nav className="absolute top-0 left-0 right-0 z-50">
         <div className="container mx-auto px-8 py-6 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-11 h-11 bg-[#EDB321] rounded-lg flex items-center justify-center shadow-sm">
-              <img 
-                src="/ctu-logo.png" 
-                alt="CTU Logo" 
-                className="h-8 w-8 object-contain" 
-              />
-            </div>
+            <div className="w-11 h-11 flex items-center justify-center">
+                <img 
+                  src="/ctu-logo.png" 
+                  alt="CTU Logo" 
+                  className="h-8 w-8 object-contain" 
+                />
+              </div>
             <div>
               <div className="text-base font-semibold text-[#1F2937] tracking-tight">CTU Argao</div>
               <div className="text-xs text-[#6B7280] tracking-wide">Knowledge System</div>
@@ -325,8 +325,12 @@ export function LandingPage() {
         <div className="container mx-auto px-8">
           <div className="flex flex-col md:flex-row items-center justify-between gap-6">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-[#EDB321] rounded-2xl flex items-center justify-center">
-                <GraduationCap className="h-6 w-6 text-white" />
+              <div className="w-11 h-11 flex items-center justify-center">
+                <img 
+                  src="/ctu-logo.png" 
+                  alt="CTU Logo" 
+                  className="h-8 w-8 object-contain" 
+                />
               </div>
               <div className="text-sm text-[#6B7280]">
                 © 2026 Cebu Technological University - Argao Campus
