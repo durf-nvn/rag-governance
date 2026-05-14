@@ -12,7 +12,7 @@ export function FacultyDashboard() {
   const [totalDocs, setTotalDocs] = useState(0);
   const [myQueriesCount, setMyQueriesCount] = useState(0);
   const [myAccessCount, setMyAccessCount] = useState(0);
-  const [userDepartment, setUserDepartment] = useState("Program"); // NEW: State to hold the name for the UI
+  const [userDepartment, setUserDepartment] = useState("Program"); 
   
   // Charts & Lists
   const [chartData, setChartData] = useState<any[]>([]);
@@ -29,9 +29,8 @@ export function FacultyDashboard() {
         const userEmail = sessionStorage.getItem('userEmail') || '';
         const userDept = sessionStorage.getItem('userDepartment') || 'BSIT'; 
         
-        setUserDepartment(userDept); // Save to state so we can show it in the HTML
+        setUserDepartment(userDept); 
 
-        // FIXED: Only 4 API calls now, perfectly matching the 4 variables!
         const [statsRes, historyRes, accessRes, accredRes] = await Promise.all([
           axios.get("http://localhost:8000/system-stats?role=FACULTY"),
           axios.get(`http://localhost:8000/chat-history?email=${userEmail}`),
@@ -108,29 +107,29 @@ export function FacultyDashboard() {
       label: "Institutional Documents",
       value: totalDocs,
       icon: BookOpen,
-      color: "#1D6FA3",
+      color: "#FF9501", // Base Amber
       subtitle: "Active in repository"
     },
     {
       label: "My AI Queries",
       value: myQueriesCount,
       icon: MessageSquare,
-      color: "#006837",
+      color: "#D97E00", // Medium Amber
       subtitle: "Last 7 days"
     },
     {
       label: "My Document Access",
       value: myAccessCount,
       icon: FileText,
-      color: "#FDB913",
+      color: "#995900", // Dark Amber
       subtitle: "Total views & downloads"
     },
     {
       label: "QA Pending Tasks",
       value: missingEvidence,
       icon: Clock,
-      color: "#CE0000",
-      subtitle: `Missing ${userDepartment} evidence` // FIXED: Now dynamic!
+      color: "#CE0000", // Standard Red for Pending alerts
+      subtitle: `Missing ${userDepartment} evidence`
     }
   ];
 
@@ -138,10 +137,12 @@ export function FacultyDashboard() {
     { name: "Compliant", value: accreditationScore },
     { name: "Missing", value: 100 - accreditationScore }
   ];
-  const PIE_COLORS = ["#006837", "#E5E7EB"];
+  
+  // UPDATED: Now using Base Amber and Gray instead of Green
+  const PIE_COLORS = ["#FF9501", "#E5E7EB"]; 
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500">
+    <div className="space-y-6 animate-in fade-in duration-500 pb-10">
       
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -149,7 +150,7 @@ export function FacultyDashboard() {
           <h1 className="text-2xl font-semibold text-[#1F2937]">Faculty Dashboard</h1>
           <p className="text-sm text-[#6B7280] mt-1">Manage institutional knowledge and accreditation compliance</p>
         </div>
-        <div className="flex items-center gap-2 bg-[#1D6FA3] text-white px-4 py-2 rounded-lg shadow-sm">
+        <div className="flex items-center gap-2 bg-[#FF9501] text-white px-4 py-2 rounded-lg shadow-sm">
           <Award className="h-4 w-4" />
           <span className="text-sm font-bold uppercase tracking-wider">Faculty Portal</span>
         </div>
@@ -185,7 +186,7 @@ export function FacultyDashboard() {
         {/* Engagement Activity Chart */}
         <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm lg:col-span-2">
           <h2 className="text-lg font-bold text-gray-900 mb-6 flex items-center gap-2">
-            <TrendingUp className="h-5 w-5 text-[#1D6FA3]" />
+            <TrendingUp className="h-5 w-5 text-[#FF9501]" />
             My System Engagement (6 Months)
           </h2>
           {isLoading ? (
@@ -197,19 +198,22 @@ export function FacultyDashboard() {
                 <XAxis dataKey="month" tick={{ fill: '#6B7280', fontSize: 12 }} axisLine={false} tickLine={false} />
                 <YAxis tick={{ fill: '#6B7280', fontSize: 12 }} axisLine={false} tickLine={false} allowDecimals={false} />
                 <Tooltip cursor={{ fill: '#F9FAFB' }} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
-                <Bar dataKey="Views" fill="#FDB913" radius={[4, 4, 0, 0]} maxBarSize={40} />
-                <Bar dataKey="Queries" fill="#006837" radius={[4, 4, 0, 0]} maxBarSize={40} />
+                <Bar dataKey="Views" fill="#FF9501" radius={[4, 4, 0, 0]} maxBarSize={40} />
+                <Bar dataKey="Queries" fill="#D97E00" radius={[4, 4, 0, 0]} maxBarSize={40} />
               </BarChart>
             </ResponsiveContainer>
           )}
         </div>
 
-        {/* Accreditation Readiness Widget */}
+        {/* Accreditation Readiness Widget (UPDATED TO AMBER) */}
         <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm flex flex-col items-center justify-center relative overflow-hidden">
-          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-[#006837] to-[#10B981]"></div>
+          {/* Updated gradient border line */}
+          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-[#D97E00] to-[#FF9501]"></div>
+          
           <h2 className="text-lg font-bold text-gray-900 mb-2 w-full text-left flex items-center gap-2">
-            <ShieldCheck className="h-5 w-5 text-[#006837]" />
-            {userDepartment} QA Readiness {/* FIXED: Now dynamic! */}
+            {/* Updated Shield icon color */}
+            <ShieldCheck className="h-5 w-5 text-[#D97E00]" />
+            {userDepartment} QA Readiness
           </h2>
           <p className="text-xs text-gray-500 mb-4 w-full text-left">Real-time accreditation compliance</p>
           
@@ -237,7 +241,8 @@ export function FacultyDashboard() {
                 </PieChart>
               </ResponsiveContainer>
               <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                <span className="text-3xl font-bold text-[#006837]">{accreditationScore}%</span>
+                {/* Updated percentage text color */}
+                <span className="text-3xl font-bold text-[#D97E00]">{accreditationScore}%</span>
                 <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Compliant</span>
               </div>
             </div>
@@ -249,23 +254,23 @@ export function FacultyDashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         
         {/* Recent Activity List */}
-        <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+        <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm flex flex-col h-full">
           <h2 className="text-lg font-bold text-gray-900 mb-6 flex items-center gap-2">
-            <Clock className="h-5 w-5 text-[#1D6FA3]" />
+            <Clock className="h-5 w-5 text-[#FF9501]" />
             My Recent Activity
           </h2>
           {isLoading ? (
-             <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-gray-300" /></div>
+             <div className="flex justify-center py-8 flex-1"><Loader2 className="h-6 w-6 animate-spin text-gray-300" /></div>
           ) : recentActivity.length === 0 ? (
-             <div className="text-center py-8 text-sm text-gray-500 italic border-2 border-dashed border-gray-100 rounded-xl">
+             <div className="text-center py-8 text-sm text-gray-500 italic border-2 border-dashed border-gray-100 rounded-xl flex-1">
                No recent activity found.
              </div>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-3 overflow-y-auto max-h-[160px] pr-2 flex-1">
               {recentActivity.map((log, index) => (
                 <div key={index} className="flex items-center justify-between p-4 bg-[#F9FAFB] rounded-xl hover:bg-[#F3F4F6] transition-colors border border-gray-100">
                   <div className="flex items-center gap-3 overflow-hidden">
-                    <div className={`p-2 rounded-lg flex-shrink-0 ${log.action === 'Download' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>
+                    <div className={`p-2 rounded-lg flex-shrink-0 ${log.action === 'Download' ? 'bg-[#FFF4E5] text-[#D97E00]' : 'bg-orange-50 text-[#FF9501]'}`}>
                       {log.action === 'Download' ? <UploadCloud className="h-4 w-4" /> : <FileText className="h-4 w-4" />}
                     </div>
                     <div className="truncate">
@@ -283,28 +288,28 @@ export function FacultyDashboard() {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <button 
             onClick={() => navigate('/app/accreditation-support')} 
-            className="bg-gradient-to-br from-[#006837] to-[#004d28] rounded-xl p-6 text-left hover:shadow-lg transition-all group flex flex-col justify-between relative overflow-hidden active:scale-95 cursor-pointer"
+            className="bg-gradient-to-br from-[#FF9501] to-[#D97E00] rounded-xl p-6 text-left hover:shadow-lg transition-all group flex flex-col justify-between relative overflow-hidden active:scale-95 cursor-pointer"
           >
-            <div className="w-12 h-12 bg-white/10 backdrop-blur-sm rounded-xl flex items-center justify-center mb-6 shadow-inner">
+            <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center mb-6 shadow-inner">
               <UploadCloud className="h-6 w-6 text-white" />
             </div>
             <div className="relative z-10">
               <h3 className="text-lg font-bold text-white mb-1">Submit Evidence</h3>
-              <p className="text-sm text-white/80 font-medium">Upload QA documents</p>
+              <p className="text-sm text-white/90 font-medium">Upload QA documents</p>
             </div>
             <ArrowRight className="absolute bottom-6 right-6 h-5 w-5 text-white/50 group-hover:text-white group-hover:translate-x-1 transition-all" />
           </button>
 
           <button 
             onClick={() => navigate('/app/knowledge-repository')} 
-            className="bg-gradient-to-br from-[#1D6FA3] to-[#0B3C5D] rounded-xl p-6 text-left hover:shadow-lg transition-all group flex flex-col justify-between relative overflow-hidden active:scale-95 cursor-pointer"
+            className="bg-gradient-to-br from-[#D97E00] to-[#995900] rounded-xl p-6 text-left hover:shadow-lg transition-all group flex flex-col justify-between relative overflow-hidden active:scale-95 cursor-pointer"
           >
-            <div className="w-12 h-12 bg-white/10 backdrop-blur-sm rounded-xl flex items-center justify-center mb-6 shadow-inner">
+            <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center mb-6 shadow-inner">
               <Search className="h-6 w-6 text-white" />
             </div>
             <div className="relative z-10">
               <h3 className="text-lg font-bold text-white mb-1">Browse Policies</h3>
-              <p className="text-sm text-white/80 font-medium">Access global repository</p>
+              <p className="text-sm text-white/90 font-medium">Access global repository</p>
             </div>
             <ArrowRight className="absolute bottom-6 right-6 h-5 w-5 text-white/50 group-hover:text-white group-hover:translate-x-1 transition-all" />
           </button>

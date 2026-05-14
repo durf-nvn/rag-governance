@@ -42,7 +42,6 @@ export function AskPolicy() {
 
   useEffect(() => {
     const fetchAnalytics = async () => {
-      // 1. Fetch Recent Questions safely
       try {
         const recentRes = await axios.get("http://localhost:8000/analytics/recent");
         setRecentQuestions(recentRes.data);
@@ -50,7 +49,6 @@ export function AskPolicy() {
         console.error("Failed to load recent questions", error);
       }
 
-      // 2. Fetch Popular Topics safely
       try {
         const topicsRes = await axios.get("http://localhost:8000/analytics/popular");
         setPopularTopics(topicsRes.data);
@@ -176,15 +174,17 @@ export function AskPolicy() {
     <div className="h-[calc(100vh-120px)] flex flex-col overflow-hidden">
 
       {/* Page Header */}
-      <div className="shrink-0 mb-4">
+      <div className="shrink-0 mb-4 px-2 lg:px-0">
         <h1 className="text-2xl font-semibold text-[#1F2937]">Ask Policy</h1>
         <p className="text-sm text-[#6B7280] mt-1">Get instant AI-powered answers to your policy and governance questions</p>
       </div>
 
       <div className="flex gap-4 flex-1 min-h-0">
 
-        {/* ── LEFT SIDEBAR ── */}
-        <div className="w-72 shrink-0 flex flex-col gap-4 overflow-y-auto">
+        {/* ── RESPONSIVE SIDEBAR ── 
+            Changed 'w-72' to 'hidden lg:flex lg:w-72' so the column disappears entirely on small screens.
+        */}
+        <div className="hidden lg:flex lg:w-72 shrink-0 flex-col gap-4 overflow-y-auto">
 
           {/* Recent Questions */}
           <div className="bg-white border border-[#E5E7EB] rounded-2xl p-5">
@@ -194,7 +194,7 @@ export function AskPolicy() {
                 <button
                   key={index}
                   onClick={() => handleSendMessage(question)}
-                  className="w-full text-left px-3 py-2.5 rounded-lg text-sm text-[#374151] hover:bg-[#F5F7FA] hover:text-[#1D6FA3] transition-colors border border-transparent hover:border-[#E5E7EB]"
+                  className="w-full text-left px-3 py-2.5 rounded-lg text-sm text-[#374151] hover:bg-[#FFF4E5] hover:text-[#D97E00] transition-colors border border-transparent hover:border-[#FF9501]/20 cursor-pointer"
                 >
                   {question}
                 </button>
@@ -209,17 +209,14 @@ export function AskPolicy() {
             <h4 className="text-sm font-medium mb-4 text-[#1F2937]">Popular Topics</h4>
             <div className="flex flex-wrap gap-2">
               {popularTopics.map((topic, index) => {
-                const colors = ['blue', 'emerald', 'purple'];
-                const color = topic.color || colors[index % colors.length];
+                const colorClass = topic.color === 'emerald' ? 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100' :
+                                 topic.color === 'purple' ? 'bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100' :
+                                 'bg-[#FFF4E5] text-[#D97E00] border-[#FF9501]/20 hover:bg-[#FF9501]/10';
                 return (
                   <button
                     key={index}
                     onClick={() => handleSendMessage(`What are the policies regarding ${topic.label}?`)}
-                    className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-colors cursor-pointer
-                      ${color === 'blue'    ? 'bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-200' : ''}
-                      ${color === 'emerald' ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200' : ''}
-                      ${color === 'purple'  ? 'bg-purple-50 hover:bg-purple-100 text-purple-700 border-purple-200' : ''}
-                    `}
+                    className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-colors cursor-pointer ${colorClass}`}
                   >
                     {topic.label}
                   </button>
@@ -231,17 +228,17 @@ export function AskPolicy() {
         </div>
 
         {/* ── MAIN CHAT PANEL ── */}
-        <div className="flex-1 flex flex-col min-h-0 bg-white border border-[#E5E7EB] rounded-2xl overflow-hidden">
+        <div className="flex-1 flex flex-col min-h-0 bg-white border border-[#E5E7EB] rounded-2xl overflow-hidden shadow-sm">
 
           {/* Messages */}
-          <div className="flex-1 overflow-y-auto p-6 space-y-6">
+          <div className="flex-1 overflow-y-auto p-4 lg:p-6 space-y-6">
             {messages.map((message) => (
               <div key={message.id} className={`flex ${message.type === "user" ? "justify-end" : "justify-start"}`}>
-                <div className={`max-w-[85%] lg:max-w-[75%] ${message.type === "user" ? "order-2" : "order-1"}`}>
+                <div className={`max-w-[90%] lg:max-w-[75%] ${message.type === "user" ? "order-2" : "order-1"}`}>
 
                   {message.type === "ai" && (
                     <div className="flex items-center gap-3 mb-3">
-                      <div className="w-8 h-8 bg-[#1D6FA3] rounded-lg flex items-center justify-center">
+                      <div className="w-8 h-8 bg-[#FF9501] rounded-lg flex items-center justify-center">
                         <Sparkles className="h-4 w-4 text-white" />
                       </div>
                       <span className="text-sm font-semibold text-[#1F2937]">AI Assistant</span>
@@ -249,28 +246,28 @@ export function AskPolicy() {
                   )}
 
                   <div
-                    className={`rounded-2xl px-5 py-4 ${
+                    className={`rounded-2xl px-4 py-3 lg:px-5 lg:py-4 ${
                       message.type === "user"
-                        ? "bg-[#1D6FA3] text-white rounded-tr-sm border border-[#1D6FA3]"
-                        : "bg-[#F9FAFB] text-[#1F2937] border border-[#E5E7EB] rounded-tl-sm"
+                        ? "bg-[#FF9501] text-white rounded-tr-sm shadow-sm"
+                        : "bg-[#F9FAFB] text-[#1F2937] border border-[#E5E7EB] rounded-tl-sm shadow-sm"
                     }`}
                   >
-                    <p className="whitespace-pre-wrap text-[15px] leading-relaxed">{message.content}</p>
+                    <p className="whitespace-pre-wrap text-sm lg:text-[15px] leading-relaxed">{message.content}</p>
                   </div>
 
                   {/* Sources */}
                   {message.sources && message.sources.length > 0 && (
                     <div className="mt-3 ml-2 space-y-2">
-                      <p className="text-xs font-semibold text-[#6B7280] uppercase tracking-wider">Sources</p>
+                      <p className="text-[10px] font-bold text-[#6B7280] uppercase tracking-widest">Sources</p>
                       {message.sources.map((source, index) => (
                         <details
                           key={index}
-                          className="group bg-white border border-[#E5E7EB] rounded-lg overflow-hidden mb-2 [&_summary::-webkit-details-marker]:hidden"
+                          className="group bg-white border border-[#E5E7EB] rounded-lg overflow-hidden mb-2 shadow-sm"
                         >
-                          <summary className="flex items-center justify-between p-3 cursor-pointer hover:bg-[#F5F7FA] transition-colors list-none">
+                          <summary className="flex items-center justify-between p-3 cursor-pointer hover:bg-[#FFF4E5] transition-colors list-none">
                             <div className="flex items-center gap-3">
-                              <FileText className="h-4 w-4 text-[#1D6FA3]" />
-                              <span className="text-sm font-medium text-[#374151]">{source.name}</span>
+                              <FileText className="h-4 w-4 text-[#FF9501]" />
+                              <span className="text-xs lg:text-sm font-medium text-[#374151] truncate max-w-[150px] sm:max-w-none">{source.name}</span>
                             </div>
                             <div className="flex items-center gap-4">
                               <div className="flex items-center gap-2 hidden sm:flex">
@@ -278,15 +275,15 @@ export function AskPolicy() {
                                   <div
                                     className={`h-1.5 rounded-full transition-all duration-500 ${
                                       source.relevance >= 80 ? 'bg-[#10B981]' :
-                                      source.relevance >= 60 ? 'bg-[#F59E0B]' :
+                                      source.relevance >= 60 ? 'bg-[#FF9501]' :
                                       'bg-[#EF4444]'
                                     }`}
                                     style={{ width: `${source.relevance}%` }}
                                   />
                                 </div>
-                                <span className={`text-xs font-bold min-w-[32px] ${
+                                <span className={`text-[10px] font-bold min-w-[32px] ${
                                   source.relevance >= 80 ? 'text-[#10B981]' :
-                                  source.relevance >= 60 ? 'text-[#F59E0B]' :
+                                  source.relevance >= 60 ? 'text-[#D97E00]' :
                                   'text-[#EF4444]'
                                 }`}>
                                   {source.relevance}%
@@ -312,7 +309,7 @@ export function AskPolicy() {
                           className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors border
                             ${message.feedback === 'helpful'
                               ? 'bg-green-100 text-[#10B981] border-green-200'
-                              : 'text-[#6B7280] border-transparent hover:text-[#10B981] hover:bg-green-50 hover:border-green-100 disabled:opacity-50'
+                              : 'text-[#6B7280] border-transparent hover:text-[#10B981] hover:bg-green-50 hover:border-green-100 disabled:opacity-50 cursor-pointer'
                             }`}
                         >
                           <ThumbsUp className={`h-3.5 w-3.5 ${message.feedback === 'helpful' ? 'fill-current' : ''}`} />
@@ -325,7 +322,7 @@ export function AskPolicy() {
                           className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors border
                             ${message.feedback === 'not-helpful'
                               ? 'bg-red-100 text-[#EF4444] border-red-200'
-                              : 'text-[#6B7280] border-transparent hover:text-[#EF4444] hover:bg-red-50 hover:border-red-100 disabled:opacity-50'
+                              : 'text-[#6B7280] border-transparent hover:text-[#EF4444] hover:bg-red-50 hover:border-red-100 disabled:opacity-50 cursor-pointer'
                             }`}
                         >
                           <ThumbsDown className={`h-3.5 w-3.5 ${message.feedback === 'not-helpful' ? 'fill-current' : ''}`} />
@@ -337,13 +334,13 @@ export function AskPolicy() {
 
                   {/* Follow-up chips */}
                   {message.followUps && message.followUps.length > 0 && (
-                    <div className="mt-4 ml-2 flex flex-col gap-2 items-start">
+                    <div className="mt-4 ml-2 flex flex-wrap gap-2 items-start">
                       {message.followUps.map((fq, idx) => (
                         <button
                           key={idx}
                           onClick={() => handleSendMessage(fq)}
                           disabled={isLoading}
-                          className="px-4 py-2 bg-white border border-[#E5E7EB] hover:border-[#1D6FA3] text-[#1D6FA3] hover:bg-[#F5F7FA] text-xs font-medium rounded-full transition-all disabled:opacity-50 text-left shadow-sm hover:shadow-md"
+                          className="px-3 py-1.5 bg-white border border-[#E5E7EB] hover:border-[#FF9501] text-[#D97E00] hover:bg-[#FFF4E5] text-[11px] font-semibold rounded-full transition-all disabled:opacity-50 text-left shadow-sm hover:shadow-md cursor-pointer"
                         >
                           {fq.endsWith('?') ? fq : `${fq}?`}
                         </button>
@@ -351,7 +348,7 @@ export function AskPolicy() {
                     </div>
                   )}
 
-                  <span className={`text-[11px] text-[#9CA3AF] mt-2 block ${message.type === "user" ? "text-right mr-1" : "ml-1"}`}>
+                  <span className={`text-[10px] text-[#9CA3AF] mt-2 block font-medium ${message.type === "user" ? "text-right mr-1" : "ml-1"}`}>
                     {message.timestamp}
                   </span>
 
@@ -361,17 +358,17 @@ export function AskPolicy() {
 
             {/* Loading indicator */}
             {isLoading && (
-              <div className="flex justify-start">
+              <div className="flex justify-start animate-in fade-in">
                 <div className="max-w-[75%] order-1">
                   <div className="flex items-center gap-3 mb-3">
-                    <div className="w-8 h-8 bg-[#1D6FA3] rounded-lg flex items-center justify-center">
-                      <Sparkles className="h-4 w-4 text-white" />
+                    <div className="w-8 h-8 bg-[#FF9501] rounded-lg flex items-center justify-center">
+                      <Sparkles className="h-4 w-4 text-white animate-pulse" />
                     </div>
                     <span className="text-sm font-semibold text-[#1F2937]">AI Assistant</span>
                   </div>
-                  <div className="rounded-2xl rounded-tl-sm px-5 py-4 bg-[#F9FAFB] border border-[#E5E7EB] flex items-center gap-3">
-                    <Loader2 className="h-5 w-5 animate-spin text-[#1D6FA3]" />
-                    <p className="text-[15px] text-[#6B7280]">Searching knowledge base...</p>
+                  <div className="rounded-2xl rounded-tl-sm px-5 py-4 bg-[#F9FAFB] border border-[#E5E7EB] flex items-center gap-3 shadow-sm">
+                    <Loader2 className="h-4 w-4 animate-spin text-[#FF9501]" />
+                    <p className="text-sm lg:text-[15px] text-[#6B7280] font-medium italic">Searching knowledge base...</p>
                   </div>
                 </div>
               </div>
@@ -380,9 +377,9 @@ export function AskPolicy() {
             <div ref={messagesEndRef} />
           </div>
 
-          {/* Input */}
-          <div className="shrink-0 border-t border-[#E5E7EB] p-4 sm:p-6 bg-white">
-            <div className="flex gap-3 items-center">
+          {/* Input Panel */}
+          <div className="shrink-0 border-t border-[#E5E7EB] p-3 lg:p-6 bg-white">
+            <div className="flex gap-2 lg:gap-3 items-center">
               <div className="flex-1 relative">
                 <textarea
                   value={query}
@@ -393,15 +390,15 @@ export function AskPolicy() {
                       handleSendMessage();
                     }
                   }}
-                  placeholder="Ask a question about policies, procedures, or guidelines..."
-                  className="w-full pl-5 pr-12 py-[17px] bg-[#F5F7FA] border border-[#E5E7EB] rounded-xl text-[15px] text-[#1F2937] placeholder-[#9CA3AF] focus:outline-none focus:ring-2 focus:ring-[#1D6FA3] resize-none h-[56px]"
+                  placeholder="Ask a policy question..."
+                  className="w-full pl-4 pr-10 py-3 lg:py-[17px] lg:pl-5 lg:pr-12 bg-[#F5F7FA] border border-[#E5E7EB] rounded-xl text-sm lg:text-[15px] text-[#1F2937] placeholder-[#9CA3AF] focus:outline-none focus:ring-2 focus:ring-[#FF9501] focus:bg-white transition-all resize-none h-[48px] lg:h-[56px] custom-scrollbar"
                   rows={1}
                 />
               </div>
               <button
                 onClick={() => handleSendMessage()}
                 disabled={isLoading || !query.trim()}
-                className="px-6 py-0 bg-[#1D6FA3] text-white rounded-xl hover:bg-[#0B3C5D] disabled:opacity-50 transition-all flex items-center justify-center gap-2 font-medium h-[56px] shrink-0 active:scale-[0.98]"
+                className="p-3 lg:px-6 lg:py-0 bg-[#FF9501] text-white rounded-xl hover:bg-[#D97E00] disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2 font-bold h-[48px] lg:h-[56px] shrink-0 active:scale-95 shadow-md hover:shadow-lg cursor-pointer"
               >
                 <Send className="h-5 w-5" />
                 <span className="hidden sm:inline">Send</span>
@@ -410,8 +407,6 @@ export function AskPolicy() {
           </div>
 
         </div>
-        {/* ── END MAIN CHAT PANEL ── */}
-
       </div>
     </div>
   );

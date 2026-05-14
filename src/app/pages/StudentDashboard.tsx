@@ -15,9 +15,9 @@ export function StudentDashboard() {
   const [chartData, setChartData] = useState<any[]>([]);
   const [recentDocs, setRecentDocs] = useState<any[]>([]);
   
-  // --- NEW: Live Announcements State ---
+  // Live Announcements State
   const [announcements, setAnnouncements] = useState<any[]>([]);
-  const [selectedAnnouncement, setSelectedAnnouncement] = useState<any>(null); // For the view modal
+  const [selectedAnnouncement, setSelectedAnnouncement] = useState<any>(null);
 
   useEffect(() => {
     const fetchDashboardData = async () => {
@@ -25,7 +25,6 @@ export function StudentDashboard() {
       try {
         const userEmail = sessionStorage.getItem('userEmail') || '';
 
-        // Fetch all the data we need in parallel (Added /announcements)
         const [statsRes, historyRes, accessRes, queriesRes, announcementsRes] = await Promise.all([
           axios.get("http://localhost:8000/system-stats"),
           axios.get(`http://localhost:8000/chat-history?email=${userEmail}`),
@@ -34,14 +33,14 @@ export function StudentDashboard() {
           axios.get("http://localhost:8000/announcements")
         ]);
 
-        // 1. Available Resources (Global)
+        // 1. Available Resources
         setTotalDocs(statsRes.data.documents || 0);
 
-        // 2. My Queries (This Week) 
+        // 2. My Queries
         const userQueries = historyRes.data.filter((msg: any) => msg.role === 'user');
         setWeeklyQueries(userQueries.length);
 
-        // 3. Process Access Logs for the current student
+        // 3. Process Access Logs
         const myAccessLogs = accessRes.data.filter((log: any) => log.user === userEmail);
         setRecentViewsCount(myAccessLogs.length);
 
@@ -83,7 +82,7 @@ export function StudentDashboard() {
         
         setChartData(finalChartData);
 
-        // --- NEW: Process Live Announcements ---
+        // Process Live Announcements
         const validAnnouncements = announcementsRes.data
           .filter((a: any) => 
             a.status === "Sent" && 
@@ -99,7 +98,7 @@ export function StudentDashboard() {
               date: d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
             };
           })
-          .slice(0, 4); // Only show the 4 most recent ones
+          .slice(0, 4);
 
         setAnnouncements(validAnnouncements);
 
@@ -118,21 +117,21 @@ export function StudentDashboard() {
       label: "Available Resources",
       value: totalDocs,
       icon: BookOpen,
-      color: "#1D6FA3",
+      color: "#FF9501", // Base Amber
       subtitle: "indexed documents"
     },
     {
       label: "My Queries",
       value: weeklyQueries,
       icon: MessageSquare,
-      color: "#10B981",
+      color: "#D97E00", // Medium Amber
       subtitle: "this week"
     },
     {
       label: "Recent Access",
       value: recentViewsCount,
       icon: Clock,
-      color: "#FDB913",
+      color: "#995900", // Dark Amber
       subtitle: "tracked events"
     }
   ];
@@ -145,7 +144,7 @@ export function StudentDashboard() {
           <h1 className="text-2xl font-semibold text-[#1F2937]">Student Dashboard</h1>
           <p className="text-sm text-[#6B7280] mt-1">Access your learning resources and university information</p>
         </div>
-        <div className="flex items-center gap-2 bg-[#10B981] text-white px-4 py-2 rounded-lg shadow-sm">
+        <div className="flex items-center gap-2 bg-[#FF9501] text-white px-4 py-2 rounded-lg shadow-sm">
           <GraduationCap className="h-4 w-4" />
           <span className="text-sm font-medium">Student</span>
         </div>
@@ -188,7 +187,7 @@ export function StudentDashboard() {
         {/* Query Activity Chart */}
         <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm lg:col-span-2">
           <h2 className="text-lg font-bold text-gray-900 mb-6 flex items-center gap-2">
-            <TrendingUp className="h-5 w-5 text-[#1D6FA3]" />
+            <TrendingUp className="h-5 w-5 text-[#FF9501]" />
             My Query Activity (6 Months)
           </h2>
           
@@ -212,9 +211,9 @@ export function StudentDashboard() {
                     fontWeight: 'bold',
                     fontSize: '12px'
                   }}
-                  itemStyle={{ color: '#10B981' }}
+                  itemStyle={{ color: '#FF9501' }}
                 />
-                <Bar dataKey="queries" fill="#1D6FA3" radius={[4, 4, 0, 0]} barSize={40} />
+                <Bar dataKey="queries" fill="#FF9501" radius={[4, 4, 0, 0]} barSize={40} />
               </BarChart>
             </ResponsiveContainer>
           )}
@@ -247,9 +246,9 @@ export function StudentDashboard() {
                   onClick={() => setSelectedAnnouncement(announcement)}
                   className="flex items-start gap-3 p-3.5 bg-[#F9FAFB] rounded-xl hover:bg-white hover:shadow-md transition-all border border-gray-100 cursor-pointer group"
                 >
-                  <div className="mt-1.5 w-2 h-2 rounded-full bg-[#FDB913] flex-shrink-0 group-hover:scale-125 transition-transform"></div>
+                  <div className="mt-1.5 w-2 h-2 rounded-full bg-[#FF9501] flex-shrink-0 group-hover:scale-125 transition-transform"></div>
                   <div>
-                    <p className="text-sm text-gray-900 font-bold leading-snug line-clamp-2 group-hover:text-[#1D6FA3] transition-colors">{announcement.title}</p>
+                    <p className="text-sm text-gray-900 font-bold leading-snug line-clamp-2 group-hover:text-[#D97E00] transition-colors">{announcement.title}</p>
                     <p className="text-xs text-gray-500 font-medium mt-1.5">{announcement.date}</p>
                   </div>
                 </div>
@@ -262,20 +261,22 @@ export function StudentDashboard() {
       {/* Bottom Row: Recently Viewed Docs & Quick Actions */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         
-        <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+        {/* ADDED flex col and full height to properly contain the scrolling list inside */}
+        <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm flex flex-col h-full">
           <h2 className="text-lg font-bold text-gray-900 mb-6 flex items-center gap-2">
-            <History className="h-5 w-5 text-[#006837]" />
+            <History className="h-5 w-5 text-[#FF9501]" />
             Recently Accessed Documents
           </h2>
           
           {isLoading ? (
-             <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-gray-300" /></div>
+             <div className="flex justify-center py-8 flex-1"><Loader2 className="h-6 w-6 animate-spin text-gray-300" /></div>
           ) : recentDocs.length === 0 ? (
-             <div className="text-center py-8 text-sm text-gray-500 italic border-2 border-dashed border-gray-100 rounded-xl">
+             <div className="text-center py-8 text-sm text-gray-500 italic border-2 border-dashed border-gray-100 rounded-xl flex-1">
                No documents accessed yet.
              </div>
           ) : (
-            <div className="space-y-3">
+            // FIXED HEIGHT LIMIT: max-h-[160px] with overflow-y-auto prevents stretching
+            <div className="space-y-3 overflow-y-auto max-h-[160px] pr-2 flex-1">
               {recentDocs.map((doc, index) => (
                 <div
                   key={index}
@@ -298,35 +299,35 @@ export function StudentDashboard() {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <button 
             onClick={() => navigate('/app/knowledge-repository')} 
-            className="bg-gradient-to-br from-[#1D6FA3] to-[#0B3C5D] rounded-xl p-6 text-left hover:shadow-lg transition-all group flex flex-col justify-between relative overflow-hidden active:scale-95 cursor-pointer"
+            className="bg-gradient-to-br from-[#FF9501] to-[#D97E00] rounded-xl p-6 text-left hover:shadow-lg transition-all group flex flex-col justify-between relative overflow-hidden active:scale-95 cursor-pointer"
           >
-            <div className="w-12 h-12 bg-white/10 backdrop-blur-sm rounded-xl flex items-center justify-center mb-6 shadow-inner">
+            <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center mb-6 shadow-inner">
               <Search className="h-6 w-6 text-white" />
             </div>
             <div className="relative z-10">
               <h3 className="text-lg font-bold text-white mb-1">Browse Repository</h3>
-              <p className="text-sm text-white/80 font-medium">Search policies & manuals</p>
+              <p className="text-sm text-white/90 font-medium">Search policies & manuals</p>
             </div>
             <ArrowRight className="absolute bottom-6 right-6 h-5 w-5 text-white/50 group-hover:text-white group-hover:translate-x-1 transition-all" />
           </button>
 
           <button 
             onClick={() => navigate('/app/ask-policy')} 
-            className="bg-gradient-to-br from-[#006837] to-[#004d28] rounded-xl p-6 text-left hover:shadow-lg transition-all group flex flex-col justify-between relative overflow-hidden active:scale-95 cursor-pointer"
+            className="bg-gradient-to-br from-[#D97E00] to-[#995900] rounded-xl p-6 text-left hover:shadow-lg transition-all group flex flex-col justify-between relative overflow-hidden active:scale-95 cursor-pointer"
           >
-            <div className="w-12 h-12 bg-white/10 backdrop-blur-sm rounded-xl flex items-center justify-center mb-6 shadow-inner">
+            <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center mb-6 shadow-inner">
               <MessageSquare className="h-6 w-6 text-white" />
             </div>
             <div className="relative z-10">
               <h3 className="text-lg font-bold text-white mb-1">Ask AskPolicy AI</h3>
-              <p className="text-sm text-white/80 font-medium">Get instant policy answers</p>
+              <p className="text-sm text-white/90 font-medium">Get instant policy answers</p>
             </div>
             <ArrowRight className="absolute bottom-6 right-6 h-5 w-5 text-white/50 group-hover:text-white group-hover:translate-x-1 transition-all" />
           </button>
         </div>
       </div>
 
-      {/* --- NEW: ANNOUNCEMENT VIEW MODAL --- */}
+      {/* ANNOUNCEMENT VIEW MODAL */}
       {selectedAnnouncement && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-gray-900/60 backdrop-blur-sm animate-in fade-in">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200">

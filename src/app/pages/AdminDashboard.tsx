@@ -18,7 +18,6 @@ export function AdminDashboard() {
     const fetchDashboardData = async () => {
       setIsLoading(true);
       try {
-        // Fetch all necessary data in parallel
         const [statsRes, userCountsRes, docsRes, queriesRes, versionsRes, systemEventsRes, pendingRes] = await Promise.all([
           axios.get("http://localhost:8000/system-stats"),
           axios.get("http://localhost:8000/users/counts"),
@@ -29,36 +28,32 @@ export function AdminDashboard() {
           axios.get("http://localhost:8000/admin/accreditation-pending")
         ]);
 
-        // 1. Set Global Stats
         setGlobalStats({
           documents: statsRes.data.documents || 0,
           queries: statsRes.data.queries || 0,
           users: userCountsRes.data.all || 0
         });
 
-        // 2. Set User Distribution Chart
         setUserDistribution([
           { role: "Admin", count: userCountsRes.data.all - userCountsRes.data.students - userCountsRes.data.faculty },
           { role: "Faculty", count: userCountsRes.data.faculty },
           { role: "Student", count: userCountsRes.data.students }
         ]);
 
-        // 3. Set Document Categories Pie Chart
         const catCounts: Record<string, number> = {};
         docsRes.data.forEach((doc: any) => {
           const cat = doc.category || "Uncategorized";
           catCounts[cat] = (catCounts[cat] || 0) + 1;
         });
         
-        const pieColors = ["#1D6FA3", "#3B82F6", "#60A5FA", "#93C5FD", "#006837", "#FDB913"];
+        const amberPalette = ["#FF9501", "#D97E00", "#995900", "#FFB84D", "#B36B00", "#FFD280"];
         const formattedPieData = Object.keys(catCounts).map((key, index) => ({
           name: key,
           value: catCounts[key],
-          color: pieColors[index % pieColors.length]
+          color: amberPalette[index % amberPalette.length]
         }));
         setDocumentDistribution(formattedPieData);
 
-        // 4. Calculate 6-Month Trend Data
         const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
         const displayMonths: string[] = [];
         const currentMonthIdx = new Date().getMonth();
@@ -72,14 +67,13 @@ export function AdminDashboard() {
         const trendMap: Record<string, { month: string, documents: number, queries: number }> = {};
         displayMonths.forEach(m => trendMap[m] = { month: m, documents: 0, queries: 0 });
 
-        // Helper to parse dynamic dates safely
         const extractMonth = (dateStr: string) => {
           if (!dateStr) return "";
           try {
             if (dateStr.includes("-") && !dateStr.includes(",")) {
               return monthNames[new Date(dateStr.split('T')[0]).getMonth()];
             }
-            return dateStr.substring(0, 3); // Extracts "Apr" from "April 29..."
+            return dateStr.substring(0, 3);
           } catch (e) { return ""; }
         };
 
@@ -94,11 +88,8 @@ export function AdminDashboard() {
         });
 
         setActivityTrend(displayMonths.map(m => trendMap[m]));
-
-        // 5. System Alerts (Pending Docs)
         setPendingReviewCount(pendingRes.data.length);
 
-        // 6. Recent Activity List
         const recent = systemEventsRes.data.slice(0, 4).map((event: any) => ({
           action: event.type,
           document: event.description.length > 40 ? event.description.substring(0, 40) + "..." : event.description,
@@ -122,28 +113,28 @@ export function AdminDashboard() {
       label: "Total Documents",
       value: globalStats.documents,
       icon: FileText,
-      color: "#1D6FA3",
+      color: "#FF9501", // Base Amber
       subtitle: "active in repository"
     },
     {
       label: "AI Queries",
       value: globalStats.queries,
       icon: MessageSquare,
-      color: "#10B981",
+      color: "#D97E00", // Medium Amber
       subtitle: "all-time interactions"
     },
     {
       label: "Accreditation",
-      value: "85%", // Placeholder until global calculation is built
+      value: "85%",
       icon: CheckCircle,
-      color: "#FDB913",
+      color: "#995900", // Dark Amber
       subtitle: "avg. campus compliance"
     },
     {
       label: "Active Users",
       value: globalStats.users,
       icon: Users,
-      color: "#006837",
+      color: "#D97E00",
       subtitle: "registered accounts"
     }
   ];
@@ -161,8 +152,8 @@ export function AdminDashboard() {
   if (isLoading) {
     return (
       <div className="min-h-[70vh] flex flex-col items-center justify-center space-y-4">
-        <Loader2 className="h-10 w-10 animate-spin text-[#1D6FA3]" />
-        <p className="text-gray-500 font-medium">Compiling Institutional Telemetry...</p>
+        <Loader2 className="h-10 w-10 animate-spin text-[#FF9501]" />
+        <p className="text-gray-500 font-medium italic">Compiling Institutional Telemetry...</p>
       </div>
     );
   }
@@ -175,9 +166,9 @@ export function AdminDashboard() {
           <h1 className="text-2xl font-semibold text-[#1F2937]">Admin Dashboard</h1>
           <p className="text-sm text-[#6B7280] mt-1">Complete system overview and management controls</p>
         </div>
-        <div className="flex items-center gap-2 bg-[#1D6FA3] text-white px-4 py-2 rounded-lg shadow-sm">
+        <div className="flex items-center gap-2 bg-[#FF9501] text-white px-4 py-2 rounded-lg shadow-sm">
           <Shield className="h-4 w-4" />
-          <span className="text-sm font-medium">Administrator</span>
+          <span className="text-sm font-bold tracking-wider uppercase">System Administrator</span>
         </div>
       </div>
 
@@ -214,7 +205,7 @@ export function AdminDashboard() {
       {/* System Alerts */}
       <div className="bg-white rounded-xl border border-[#E5E7EB] p-6 shadow-sm">
         <div className="flex items-center gap-2 mb-4">
-          <AlertCircle className="h-5 w-5 text-[#1D6FA3]" />
+          <AlertCircle className="h-5 w-5 text-[#FF9501]" />
           <h2 className="text-lg font-bold text-[#1F2937]">System Health & Alerts</h2>
         </div>
         <div className="space-y-3">
@@ -234,10 +225,10 @@ export function AdminDashboard() {
                 <Icon
                   className={`h-5 w-5 ${
                     alert.severity === "warning"
-                      ? "text-[#FFC107]"
+                      ? "text-[#FF9501]"
                       : alert.severity === "info"
-                      ? "text-[#1D6FA3]"
-                      : "text-[#006837]"
+                      ? "text-blue-500"
+                      : "text-emerald-600"
                   }`}
                 />
                 <span className="text-sm font-semibold">{alert.message}</span>
@@ -253,7 +244,7 @@ export function AdminDashboard() {
         {/* Activity Trend Chart */}
         <div className="bg-white rounded-xl border border-[#E5E7EB] p-6 shadow-sm h-[400px] flex flex-col">
           <h2 className="text-lg font-bold text-[#1F2937] mb-6 flex items-center gap-2 flex-shrink-0">
-            <TrendingUp className="h-5 w-5 text-[#1D6FA3]" /> Activity Trends (6 Months)
+            <TrendingUp className="h-5 w-5 text-[#FF9501]" /> Activity Trends (6 Months)
           </h2>
           <div className="flex-1 min-h-0">
             <ResponsiveContainer width="100%" height="100%">
@@ -263,17 +254,17 @@ export function AdminDashboard() {
                 <YAxis tick={{ fill: '#6B7280', fontSize: 12, fontWeight: 500 }} axisLine={false} tickLine={false} allowDecimals={false} />
                 <Tooltip contentStyle={{ backgroundColor: '#1F2937', border: 'none', borderRadius: '8px', color: '#fff' }} />
                 <Legend wrapperStyle={{ paddingTop: '10px', fontSize: '12px', fontWeight: 500 }} />
-                <Line type="monotone" dataKey="documents" stroke="#1D6FA3" strokeWidth={3} dot={{ r: 4 }} name="Documents Uploaded" activeDot={{ r: 6 }} />
-                <Line type="monotone" dataKey="queries" stroke="#10B981" strokeWidth={3} dot={{ r: 4 }} name="AI Queries" activeDot={{ r: 6 }} />
+                <Line type="monotone" dataKey="documents" stroke="#FF9501" strokeWidth={3} dot={{ r: 4 }} name="Documents Uploaded" activeDot={{ r: 6 }} />
+                <Line type="monotone" dataKey="queries" stroke="#D97E00" strokeWidth={3} dot={{ r: 4 }} name="AI Queries" activeDot={{ r: 6 }} />
               </LineChart>
             </ResponsiveContainer>
           </div>
         </div>
 
-        {/* Document Categories Chart */}
+        {/* Document Taxonomy Chart */}
         <div className="bg-white rounded-xl border border-[#E5E7EB] p-6 shadow-sm h-[400px] flex flex-col">
           <h2 className="text-lg font-bold text-[#1F2937] mb-6 flex items-center gap-2 flex-shrink-0">
-            <FileText className="h-5 w-5 text-[#FDB913]" /> Document Taxonomy
+            <FileText className="h-5 w-5 text-[#FF9501]" /> Document Taxonomy
           </h2>
           <div className="flex-1 min-h-0">
             {documentDistribution.length === 0 ? (
@@ -306,7 +297,7 @@ export function AdminDashboard() {
         {/* User Distribution */}
         <div className="bg-white rounded-xl border border-[#E5E7EB] p-6 shadow-sm h-[400px] flex flex-col">
           <h2 className="text-lg font-bold text-[#1F2937] mb-6 flex items-center gap-2 flex-shrink-0">
-            <Users className="h-5 w-5 text-[#006837]" /> Active Demographics
+            <Users className="h-5 w-5 text-[#FF9501]" /> Active Demographics
           </h2>
           <div className="flex-1 min-h-0">
             <ResponsiveContainer width="100%" height="100%">
@@ -315,13 +306,13 @@ export function AdminDashboard() {
                 <XAxis dataKey="role" tick={{ fill: '#6B7280', fontSize: 12, fontWeight: 500 }} axisLine={false} tickLine={false} />
                 <YAxis tick={{ fill: '#6B7280', fontSize: 12, fontWeight: 500 }} axisLine={false} tickLine={false} allowDecimals={false} />
                 <Tooltip cursor={{ fill: '#F9FAFB' }} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
-                <Bar dataKey="count" fill="#1D6FA3" radius={[6, 6, 0, 0]} barSize={50} name="Total Users" />
+                <Bar dataKey="count" fill="#FF9501" radius={[6, 6, 0, 0]} barSize={50} name="Total Users" />
               </BarChart>
             </ResponsiveContainer>
           </div>
         </div>
 
-        {/* Recent Activity */}
+        {/* Recent Activity Trail */}
         <div className="bg-white rounded-xl border border-[#E5E7EB] p-6 shadow-sm h-[400px] flex flex-col">
           <h2 className="text-lg font-bold text-[#1F2937] mb-6 flex items-center gap-2 flex-shrink-0">
             <Clock className="h-5 w-5 text-[#CE0000]" /> Recent Audit Trail
@@ -337,7 +328,7 @@ export function AdminDashboard() {
                 >
                   <div className="flex-1 overflow-hidden pr-4">
                     <div className="flex items-center gap-2 mb-1">
-                      <span className="px-2.5 py-1 bg-[#1D6FA3]/10 text-[#1D6FA3] text-[10px] uppercase tracking-wider rounded-md font-bold whitespace-nowrap">
+                      <span className="px-2.5 py-1 bg-[#FF9501]/10 text-[#FF9501] text-[10px] uppercase tracking-wider rounded-md font-bold whitespace-nowrap">
                         {activity.action}
                       </span>
                       <span className="text-sm text-gray-500 font-medium whitespace-nowrap">{activity.time}</span>
