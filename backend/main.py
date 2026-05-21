@@ -1041,6 +1041,13 @@ def ask_policy(request: QuestionRequest, db: Session = Depends(get_db)):
     # ==========================================
     relevant_chunks = vector_store.search_knowledge(question)
 
+    if not relevant_chunks:
+        return {
+            "answer": "I am sorry, but the specific document or policy regarding this matter is currently not available in our institutional knowledge repository.",
+            "sources": [],
+            "follow_ups": []
+        }
+
     safe_chunks = []
     for chunk in relevant_chunks:
         chunk_meta = chunk.get('metadata', {})
@@ -1058,14 +1065,17 @@ def ask_policy(request: QuestionRequest, db: Session = Depends(get_db)):
     # ==========================================
     system_prompt = f"""{base_prompt}
     
+    You are the official CTU Argao Campus AI Policy Assistant. Your task is to answer user queries strictly and exclusively using the provided text snippets from the verified institutional knowledge repository.
+
     YOUR PERSONALITY:
     - You are warm, welcoming, and helpful.
     - You represent the CTU Argao brand.
     
-    INSTRUCTIONS:
-    1. POLICY QUESTIONS: If the question is about university rules, grades, research, or handbooks, use the CONTEXT provided below to answer.
-    2. NO CONTEXT: If a question is asked that is NOT in the context, say: "I'm sorry, I don't have the specific details for that in our current records. You might want to visit the relevant campus office for more info!"
-    3. FOLLOW-UPS: At the very end of your response, you MUST generate exactly 3 logical follow-up questions the user might want to ask next based on the topic.
+    CRITICAL DIRECTIVES FOR SYSTEM VALIDITY:
+    1. GROUNDING MANDATE: You must rely entirely on the provided facts within the context block. Do not extrapolate, assume, or combine outside world knowledge.
+    2. ABSOLUTE REFUSAL RULE: If the provided context does not contain the exact factual answer to the user's question, or if the relevant document has not been uploaded to the database, you must state exactly this word-for-word: "I am sorry, but the specific document or policy regarding this matter is currently not available in our institutional knowledge repository."
+    3. NO HALLUCINATIONS: Never make up dates, names, room numbers, or requirements under any circumstances. If the context is ambiguous, execute the Absolute Refusal Rule.
+    4. CITATION REQUIREMENT: When answering from the context, always ground your sentences clearly based on the provided document names.
     
     FORMATTING RULE:
     You must separate your main answer from the follow-up questions using exactly this string: |FOLLOWUPS|

@@ -154,10 +154,10 @@ export function AskPolicy() {
       <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0 custom-scrollbar">
         {messages.map((message) => (
           <div key={message.id} className={`flex ${message.type === "user" ? "justify-end" : "justify-start"}`}>
-            <div className="max-w-[90%]">
+            <div className="max-w-[90%] w-full flex flex-col items-start">
 
               {message.type === "ai" && (
-                <div className="flex items-center gap-2 mb-1.5">
+                <div className="flex items-center gap-2 mb-1.5 flex-shrink-0">
                   <div className="w-6 h-6 bg-[#FF9501] rounded-md flex items-center justify-center">
                     <Sparkles className="h-3 w-3 text-white" />
                   </div>
@@ -166,47 +166,68 @@ export function AskPolicy() {
               )}
 
               <div
-                className={`rounded-2xl px-4 py-2.5 text-sm ${
+                className={`rounded-2xl px-4 py-2.5 text-sm w-full ${
                   message.type === "user"
-                    ? "bg-[#FF9501] text-white rounded-tr-sm shadow-sm"
+                    ? "bg-[#FF9501] text-white rounded-tr-sm shadow-sm self-end"
                     : "bg-[#F9FAFB] text-[#1F2937] border border-[#E5E7EB] rounded-tl-sm shadow-sm"
                 }`}
               >
                 <p className="whitespace-pre-wrap leading-relaxed">{message.content}</p>
               </div>
 
-              {/* Sources Integration */}
-              {message.sources && message.sources.length > 0 && (
-                <div className="mt-2 space-y-1.5">
+              {/* RESTORED: Full Reference Citation & Source Evaluation Mapping */}
+              {message.type === "ai" && message.sources && message.sources.length > 0 && (
+                <div className="mt-3 w-full space-y-2 pl-1">
+                  <p className="text-[10px] font-bold text-[#6B7280] uppercase tracking-widest">Sources & Citations</p>
                   {message.sources.map((source, index) => (
                     <details
                       key={index}
-                      className="group bg-white border border-[#E5E7EB] rounded-lg overflow-hidden shadow-sm"
+                      className="group bg-white border border-[#E5E7EB] rounded-xl overflow-hidden shadow-sm"
                     >
-                      <summary className="flex items-center justify-between p-2 cursor-pointer hover:bg-[#FFF4E5] transition-colors list-none">
-                        <div className="flex items-center gap-2 overflow-hidden">
-                          <FileText className="h-3.5 w-3.5 text-[#FF9501] flex-shrink-0" />
-                          <span className="text-xs font-semibold text-[#374151] truncate max-w-[200px]">{source.name}</span>
+                      <summary className="flex items-center justify-between p-3 cursor-pointer hover:bg-[#FFF4E5] transition-colors list-none">
+                        <div className="flex items-center gap-2.5 overflow-hidden pr-2">
+                          <FileText className="h-4 w-4 text-[#FF9501] flex-shrink-0" />
+                          <span className="text-xs font-semibold text-[#374151] truncate max-w-[180px] sm:max-w-[240px]" title={source.name}>
+                            {source.name}
+                          </span>
                         </div>
-                        <div className="flex items-center gap-2 flex-shrink-0">
-                          <span className="text-[10px] font-bold text-[#D97E00]">{source.relevance}%</span>
-                          <ChevronDown className="h-3 w-3 text-[#6B7280] group-open:rotate-180 transition-transform" />
+                        <div className="flex items-center gap-3 flex-shrink-0">
+                          <div className="flex items-center gap-1.5">
+                            <div className="w-12 bg-gray-200 rounded-full h-1 overflow-hidden hidden xs:block">
+                              <div
+                                className={`h-full rounded-full transition-all duration-500 ${
+                                  source.relevance >= 80 ? 'bg-[#10B981]' :
+                                  source.relevance >= 60 ? 'bg-[#FF9501]' :
+                                  'bg-[#EF4444]'
+                                }`}
+                                style={{ width: `${source.relevance}%` }}
+                              />
+                            </div>
+                            <span className={`text-[10px] font-bold min-w-[28px] text-right ${
+                              source.relevance >= 80 ? 'text-[#10B981]' :
+                              source.relevance >= 60 ? 'text-[#D97E00]' :
+                              'text-[#EF4444]'
+                            }`}>
+                              {source.relevance}%
+                            </span>
+                          </div>
+                          <ChevronDown className="h-3.5 w-3.5 text-[#6B7280] group-open:rotate-180 transition-transform duration-200 flex-shrink-0" />
                         </div>
                       </summary>
                       {source.snippet && (
-                        <div className="p-2.5 bg-[#F9FAFB] border-t border-[#E5E7EB] text-[11px] text-[#4B5563] leading-relaxed italic">
+                        <div className="p-3 bg-[#F9FAFB] border-t border-[#E5E7EB] text-xs text-[#4B5563] leading-relaxed italic">
                           "{source.snippet}"
                         </div>
                       )}
                     </details>
                   ))}
 
-                  {/* Feedback Interaction */}
+                  {/* RESTORED: Feedback Loop Actions */}
                   <div className="flex items-center gap-2 mt-1">
                     <button
                       onClick={() => handleFeedback(message.id, true)}
                       disabled={message.feedback !== undefined}
-                      className={`flex items-center gap-1 px-2 py-1 text-[10px] font-bold rounded-md border transition-colors cursor-pointer
+                      className={`flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-bold rounded-md border transition-colors cursor-pointer
                         ${message.feedback === 'helpful'
                           ? 'bg-green-100 text-[#10B981] border-green-200'
                           : 'text-[#6B7280] border-transparent hover:text-[#10B981] hover:bg-green-50'
@@ -217,27 +238,27 @@ export function AskPolicy() {
                     <button
                       onClick={() => handleFeedback(message.id, false)}
                       disabled={message.feedback !== undefined}
-                      className={`flex items-center gap-1 px-2 py-1 text-[10px] font-bold rounded-md border transition-colors cursor-pointer
+                      className={`flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-bold rounded-md border transition-colors cursor-pointer
                         ${message.feedback === 'not-helpful'
                           ? 'bg-red-100 text-[#EF4444] border-red-200'
                           : 'text-[#6B7280] border-transparent hover:text-[#EF4444] hover:bg-red-50'
                         }`}
                     >
-                      <ThumbsDown className="h-3 w-3" /> Revision
+                      <ThumbsDown className="h-3 w-3" /> Not helpful
                     </button>
                   </div>
                 </div>
               )}
 
               {/* Dynamic Follow-up Options */}
-              {message.followUps && message.followUps.length > 0 && (
-                <div className="mt-3 flex flex-wrap gap-1.5 items-start">
+              {message.type === "ai" && message.followUps && message.followUps.length > 0 && (
+                <div className="mt-3 flex flex-wrap gap-1.5 items-start w-full">
                   {message.followUps.map((fq, idx) => (
                     <button
                       key={idx}
                       onClick={() => handleSendMessage(fq)}
                       disabled={isLoading}
-                      className="px-2.5 py-1 bg-white border border-[#E5E7EB] hover:border-[#FF9501] text-[#D97E00] hover:bg-[#FFF4E5] text-[11px] font-bold rounded-full transition-all shadow-sm cursor-pointer text-left"
+                      className="px-2.5 py-1 bg-white border border-[#E5E7EB] hover:border-[#FF9501] text-[#D97E00] hover:bg-[#FFF4E5] text-[11px] font-base rounded-full transition-all shadow-sm cursor-pointer text-left"
                     >
                       {fq.endsWith('?') ? fq : `${fq}?`}
                     </button>
@@ -245,7 +266,7 @@ export function AskPolicy() {
                 </div>
               )}
 
-              <span className={`text-[10px] text-[#9CA3AF] mt-1 block font-medium ${message.type === "user" ? "text-right mr-1" : "ml-1"}`}>
+              <span className={`text-[10px] text-[#9CA3AF] mt-1 block font-medium ${message.type === "user" ? "self-end mr-1" : "ml-1"}`}>
                 {message.timestamp}
               </span>
 
