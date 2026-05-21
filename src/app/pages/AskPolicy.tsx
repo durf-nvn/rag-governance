@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Send, Sparkles, FileText, ThumbsUp, ThumbsDown, Loader2, ChevronDown } from "lucide-react";
+import { Send, Sparkles, FileText, ThumbsUp, ThumbsDown, ChevronDown, Loader2 } from "lucide-react";
 import axios from "axios";
 import { useRole } from "../contexts/RoleContext";
 

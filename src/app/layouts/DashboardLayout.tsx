@@ -52,7 +52,6 @@ export function DashboardLayout() {
     { path: "/app",                        label: "Dashboard",              icon: LayoutDashboard,  permission: "canAccessDashboard"             },
     { path: "/app/knowledge-repository",   label: "Knowledge Repository",   icon: Database,         permission: "canAccessKnowledgeRepository"    },
     { path: "/app/accreditation-support",  label: "Accreditation Support",  icon: Award,            permission: "canAccessAccreditationSupport"   },
-    { path: "/app/governance-reference",   label: "Governance Reference",   icon: FileText,         permission: "canAccessGovernanceReference"    },
     { path: "/app/audit-trail",            label: "Audit Trail",            icon: Clock,            permission: "canAccessAuditTrail"             },
     { path: "/app/users-roles",            label: "Users & Roles",          icon: Users,            permission: "canAccessUsersRoles"             },
     { path: "/app/broadcast-announcement", label: "Broadcast Announcement", icon: Radio,            permission: "canAccessBroadcastAnnouncement"  },
@@ -97,14 +96,7 @@ export function DashboardLayout() {
           </div>
 
           <div className="flex items-center gap-3 flex-1 max-w-xl mx-8">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#6B7280]" />
-              <input
-                type="text"
-                placeholder="Search documents, policies..."
-                className="w-full pl-10 pr-4 py-2 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm text-[#1F2937] placeholder-[#6B7280] focus:outline-none focus:ring-2 focus:ring-[#FF9501] focus:border-transparent"
-              />
-            </div>
+            
           </div>
 
           <div className="flex items-center gap-3">
