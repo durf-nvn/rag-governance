@@ -37,29 +37,6 @@ export function AskPolicy() {
     scrollToBottom();
   }, [messages]);
 
-  const [recentQuestions, setRecentQuestions] = useState<string[]>([]);
-  const [popularTopics, setPopularTopics] = useState<{label: string, color: string}[]>([]);
-
-  useEffect(() => {
-    const fetchAnalytics = async () => {
-      try {
-        const recentRes = await axios.get("http://localhost:8000/analytics/recent");
-        setRecentQuestions(recentRes.data);
-      } catch (error) {
-        console.error("Failed to load recent questions", error);
-      }
-
-      try {
-        const topicsRes = await axios.get("http://localhost:8000/analytics/popular");
-        setPopularTopics(topicsRes.data);
-      } catch (error) {
-        console.error("Failed to load popular topics", error);
-      }
-    };
-    
-    fetchAnalytics();
-  }, []);
-
   const userEmail = sessionStorage.getItem('userEmail') || 'guest@ctu.edu.ph';
 
   useEffect(() => {
@@ -171,243 +148,160 @@ export function AskPolicy() {
   };
 
   return (
-    <div className="h-[calc(100vh-120px)] flex flex-col overflow-hidden">
+    <div className="h-full flex flex-col min-h-0 bg-white overflow-hidden">
+      
+      {/* Messages Feed Container */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0 custom-scrollbar">
+        {messages.map((message) => (
+          <div key={message.id} className={`flex ${message.type === "user" ? "justify-end" : "justify-start"}`}>
+            <div className="max-w-[90%]">
 
-      {/* Page Header */}
-      <div className="shrink-0 mb-4 px-2 lg:px-0">
-        <h1 className="text-2xl font-semibold text-[#1F2937]">Ask Policy</h1>
-        <p className="text-sm text-[#6B7280] mt-1">Get instant AI-powered answers to your policy and governance questions</p>
-      </div>
-
-      <div className="flex gap-4 flex-1 min-h-0">
-
-        {/* ── RESPONSIVE SIDEBAR ── 
-            Changed 'w-72' to 'hidden lg:flex lg:w-72' so the column disappears entirely on small screens.
-        */}
-        <div className="hidden lg:flex lg:w-72 shrink-0 flex-col gap-4 overflow-y-auto">
-
-          {/* Recent Questions */}
-          <div className="bg-white border border-[#E5E7EB] rounded-2xl p-5">
-            <h3 className="text-base font-semibold text-[#1F2937] mb-4">Recent Questions</h3>
-            <div className="space-y-2">
-              {recentQuestions.length > 0 ? recentQuestions.map((question, index) => (
-                <button
-                  key={index}
-                  onClick={() => handleSendMessage(question)}
-                  className="w-full text-left px-3 py-2.5 rounded-lg text-sm text-[#374151] hover:bg-[#FFF4E5] hover:text-[#D97E00] transition-colors border border-transparent hover:border-[#FF9501]/20 cursor-pointer"
-                >
-                  {question}
-                </button>
-              )) : (
-                <p className="text-sm text-[#9CA3AF] italic">No recent questions yet.</p>
+              {message.type === "ai" && (
+                <div className="flex items-center gap-2 mb-1.5">
+                  <div className="w-6 h-6 bg-[#FF9501] rounded-md flex items-center justify-center">
+                    <Sparkles className="h-3 w-3 text-white" />
+                  </div>
+                  <span className="text-xs font-bold text-[#1F2937]">AI Assistant</span>
+                </div>
               )}
-            </div>
-          </div>
 
-          {/* Popular Topics */}
-          <div className="bg-white border border-[#E5E7EB] rounded-2xl p-5">
-            <h4 className="text-sm font-medium mb-4 text-[#1F2937]">Popular Topics</h4>
-            <div className="flex flex-wrap gap-2">
-              {popularTopics.map((topic, index) => {
-                const colorClass = topic.color === 'emerald' ? 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100' :
-                                 topic.color === 'purple' ? 'bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100' :
-                                 'bg-[#FFF4E5] text-[#D97E00] border-[#FF9501]/20 hover:bg-[#FF9501]/10';
-                return (
-                  <button
-                    key={index}
-                    onClick={() => handleSendMessage(`What are the policies regarding ${topic.label}?`)}
-                    className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-colors cursor-pointer ${colorClass}`}
-                  >
-                    {topic.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-        </div>
-
-        {/* ── MAIN CHAT PANEL ── */}
-        <div className="flex-1 flex flex-col min-h-0 bg-white border border-[#E5E7EB] rounded-2xl overflow-hidden shadow-sm">
-
-          {/* Messages */}
-          <div className="flex-1 overflow-y-auto p-4 lg:p-6 space-y-6">
-            {messages.map((message) => (
-              <div key={message.id} className={`flex ${message.type === "user" ? "justify-end" : "justify-start"}`}>
-                <div className={`max-w-[90%] lg:max-w-[75%] ${message.type === "user" ? "order-2" : "order-1"}`}>
-
-                  {message.type === "ai" && (
-                    <div className="flex items-center gap-3 mb-3">
-                      <div className="w-8 h-8 bg-[#FF9501] rounded-lg flex items-center justify-center">
-                        <Sparkles className="h-4 w-4 text-white" />
-                      </div>
-                      <span className="text-sm font-semibold text-[#1F2937]">AI Assistant</span>
-                    </div>
-                  )}
-
-                  <div
-                    className={`rounded-2xl px-4 py-3 lg:px-5 lg:py-4 ${
-                      message.type === "user"
-                        ? "bg-[#FF9501] text-white rounded-tr-sm shadow-sm"
-                        : "bg-[#F9FAFB] text-[#1F2937] border border-[#E5E7EB] rounded-tl-sm shadow-sm"
-                    }`}
-                  >
-                    <p className="whitespace-pre-wrap text-sm lg:text-[15px] leading-relaxed">{message.content}</p>
-                  </div>
-
-                  {/* Sources */}
-                  {message.sources && message.sources.length > 0 && (
-                    <div className="mt-3 ml-2 space-y-2">
-                      <p className="text-[10px] font-bold text-[#6B7280] uppercase tracking-widest">Sources</p>
-                      {message.sources.map((source, index) => (
-                        <details
-                          key={index}
-                          className="group bg-white border border-[#E5E7EB] rounded-lg overflow-hidden mb-2 shadow-sm"
-                        >
-                          <summary className="flex items-center justify-between p-3 cursor-pointer hover:bg-[#FFF4E5] transition-colors list-none">
-                            <div className="flex items-center gap-3">
-                              <FileText className="h-4 w-4 text-[#FF9501]" />
-                              <span className="text-xs lg:text-sm font-medium text-[#374151] truncate max-w-[150px] sm:max-w-none">{source.name}</span>
-                            </div>
-                            <div className="flex items-center gap-4">
-                              <div className="flex items-center gap-2 hidden sm:flex">
-                                <div className="w-16 bg-gray-200 rounded-full h-1.5 overflow-hidden">
-                                  <div
-                                    className={`h-1.5 rounded-full transition-all duration-500 ${
-                                      source.relevance >= 80 ? 'bg-[#10B981]' :
-                                      source.relevance >= 60 ? 'bg-[#FF9501]' :
-                                      'bg-[#EF4444]'
-                                    }`}
-                                    style={{ width: `${source.relevance}%` }}
-                                  />
-                                </div>
-                                <span className={`text-[10px] font-bold min-w-[32px] ${
-                                  source.relevance >= 80 ? 'text-[#10B981]' :
-                                  source.relevance >= 60 ? 'text-[#D97E00]' :
-                                  'text-[#EF4444]'
-                                }`}>
-                                  {source.relevance}%
-                                </span>
-                              </div>
-                              <ChevronDown className="h-4 w-4 text-[#6B7280] group-open:rotate-180 transition-transform duration-200" />
-                            </div>
-                          </summary>
-
-                          {source.snippet && (
-                            <div className="p-3 bg-[#F9FAFB] border-t border-[#E5E7EB] text-xs text-[#4B5563] leading-relaxed italic">
-                              "{source.snippet}"
-                            </div>
-                          )}
-                        </details>
-                      ))}
-
-                      {/* Helpful / Not Helpful */}
-                      <div className="flex items-center gap-2 mt-2">
-                        <button
-                          onClick={() => handleFeedback(message.id, true)}
-                          disabled={message.feedback !== undefined}
-                          className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors border
-                            ${message.feedback === 'helpful'
-                              ? 'bg-green-100 text-[#10B981] border-green-200'
-                              : 'text-[#6B7280] border-transparent hover:text-[#10B981] hover:bg-green-50 hover:border-green-100 disabled:opacity-50 cursor-pointer'
-                            }`}
-                        >
-                          <ThumbsUp className={`h-3.5 w-3.5 ${message.feedback === 'helpful' ? 'fill-current' : ''}`} />
-                          Helpful
-                        </button>
-
-                        <button
-                          onClick={() => handleFeedback(message.id, false)}
-                          disabled={message.feedback !== undefined}
-                          className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors border
-                            ${message.feedback === 'not-helpful'
-                              ? 'bg-red-100 text-[#EF4444] border-red-200'
-                              : 'text-[#6B7280] border-transparent hover:text-[#EF4444] hover:bg-red-50 hover:border-red-100 disabled:opacity-50 cursor-pointer'
-                            }`}
-                        >
-                          <ThumbsDown className={`h-3.5 w-3.5 ${message.feedback === 'not-helpful' ? 'fill-current' : ''}`} />
-                          Not Helpful
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Follow-up chips */}
-                  {message.followUps && message.followUps.length > 0 && (
-                    <div className="mt-4 ml-2 flex flex-wrap gap-2 items-start">
-                      {message.followUps.map((fq, idx) => (
-                        <button
-                          key={idx}
-                          onClick={() => handleSendMessage(fq)}
-                          disabled={isLoading}
-                          className="px-3 py-1.5 bg-white border border-[#E5E7EB] hover:border-[#FF9501] text-[#D97E00] hover:bg-[#FFF4E5] text-[11px] font-semibold rounded-full transition-all disabled:opacity-50 text-left shadow-sm hover:shadow-md cursor-pointer"
-                        >
-                          {fq.endsWith('?') ? fq : `${fq}?`}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-
-                  <span className={`text-[10px] text-[#9CA3AF] mt-2 block font-medium ${message.type === "user" ? "text-right mr-1" : "ml-1"}`}>
-                    {message.timestamp}
-                  </span>
-
-                </div>
-              </div>
-            ))}
-
-            {/* Loading indicator */}
-            {isLoading && (
-              <div className="flex justify-start animate-in fade-in">
-                <div className="max-w-[75%] order-1">
-                  <div className="flex items-center gap-3 mb-3">
-                    <div className="w-8 h-8 bg-[#FF9501] rounded-lg flex items-center justify-center">
-                      <Sparkles className="h-4 w-4 text-white animate-pulse" />
-                    </div>
-                    <span className="text-sm font-semibold text-[#1F2937]">AI Assistant</span>
-                  </div>
-                  <div className="rounded-2xl rounded-tl-sm px-5 py-4 bg-[#F9FAFB] border border-[#E5E7EB] flex items-center gap-3 shadow-sm">
-                    <Loader2 className="h-4 w-4 animate-spin text-[#FF9501]" />
-                    <p className="text-sm lg:text-[15px] text-[#6B7280] font-medium italic">Searching knowledge base...</p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            <div ref={messagesEndRef} />
-          </div>
-
-          {/* Input Panel */}
-          <div className="shrink-0 border-t border-[#E5E7EB] p-3 lg:p-6 bg-white">
-            <div className="flex gap-2 lg:gap-3 items-center">
-              <div className="flex-1 relative">
-                <textarea
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  onKeyPress={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
-                      e.preventDefault();
-                      handleSendMessage();
-                    }
-                  }}
-                  placeholder="Ask a policy question..."
-                  className="w-full pl-4 pr-10 py-3 lg:py-[17px] lg:pl-5 lg:pr-12 bg-[#F5F7FA] border border-[#E5E7EB] rounded-xl text-sm lg:text-[15px] text-[#1F2937] placeholder-[#9CA3AF] focus:outline-none focus:ring-2 focus:ring-[#FF9501] focus:bg-white transition-all resize-none h-[48px] lg:h-[56px] custom-scrollbar"
-                  rows={1}
-                />
-              </div>
-              <button
-                onClick={() => handleSendMessage()}
-                disabled={isLoading || !query.trim()}
-                className="p-3 lg:px-6 lg:py-0 bg-[#FF9501] text-white rounded-xl hover:bg-[#D97E00] disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2 font-bold h-[48px] lg:h-[56px] shrink-0 active:scale-95 shadow-md hover:shadow-lg cursor-pointer"
+              <div
+                className={`rounded-2xl px-4 py-2.5 text-sm ${
+                  message.type === "user"
+                    ? "bg-[#FF9501] text-white rounded-tr-sm shadow-sm"
+                    : "bg-[#F9FAFB] text-[#1F2937] border border-[#E5E7EB] rounded-tl-sm shadow-sm"
+                }`}
               >
-                <Send className="h-5 w-5" />
-                <span className="hidden sm:inline">Send</span>
-              </button>
+                <p className="whitespace-pre-wrap leading-relaxed">{message.content}</p>
+              </div>
+
+              {/* Sources Integration */}
+              {message.sources && message.sources.length > 0 && (
+                <div className="mt-2 space-y-1.5">
+                  {message.sources.map((source, index) => (
+                    <details
+                      key={index}
+                      className="group bg-white border border-[#E5E7EB] rounded-lg overflow-hidden shadow-sm"
+                    >
+                      <summary className="flex items-center justify-between p-2 cursor-pointer hover:bg-[#FFF4E5] transition-colors list-none">
+                        <div className="flex items-center gap-2 overflow-hidden">
+                          <FileText className="h-3.5 w-3.5 text-[#FF9501] flex-shrink-0" />
+                          <span className="text-xs font-semibold text-[#374151] truncate max-w-[200px]">{source.name}</span>
+                        </div>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          <span className="text-[10px] font-bold text-[#D97E00]">{source.relevance}%</span>
+                          <ChevronDown className="h-3 w-3 text-[#6B7280] group-open:rotate-180 transition-transform" />
+                        </div>
+                      </summary>
+                      {source.snippet && (
+                        <div className="p-2.5 bg-[#F9FAFB] border-t border-[#E5E7EB] text-[11px] text-[#4B5563] leading-relaxed italic">
+                          "{source.snippet}"
+                        </div>
+                      )}
+                    </details>
+                  ))}
+
+                  {/* Feedback Interaction */}
+                  <div className="flex items-center gap-2 mt-1">
+                    <button
+                      onClick={() => handleFeedback(message.id, true)}
+                      disabled={message.feedback !== undefined}
+                      className={`flex items-center gap-1 px-2 py-1 text-[10px] font-bold rounded-md border transition-colors cursor-pointer
+                        ${message.feedback === 'helpful'
+                          ? 'bg-green-100 text-[#10B981] border-green-200'
+                          : 'text-[#6B7280] border-transparent hover:text-[#10B981] hover:bg-green-50'
+                        }`}
+                    >
+                      <ThumbsUp className="h-3 w-3" /> Helpful
+                    </button>
+                    <button
+                      onClick={() => handleFeedback(message.id, false)}
+                      disabled={message.feedback !== undefined}
+                      className={`flex items-center gap-1 px-2 py-1 text-[10px] font-bold rounded-md border transition-colors cursor-pointer
+                        ${message.feedback === 'not-helpful'
+                          ? 'bg-red-100 text-[#EF4444] border-red-200'
+                          : 'text-[#6B7280] border-transparent hover:text-[#EF4444] hover:bg-red-50'
+                        }`}
+                    >
+                      <ThumbsDown className="h-3 w-3" /> Revision
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Dynamic Follow-up Options */}
+              {message.followUps && message.followUps.length > 0 && (
+                <div className="mt-3 flex flex-wrap gap-1.5 items-start">
+                  {message.followUps.map((fq, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => handleSendMessage(fq)}
+                      disabled={isLoading}
+                      className="px-2.5 py-1 bg-white border border-[#E5E7EB] hover:border-[#FF9501] text-[#D97E00] hover:bg-[#FFF4E5] text-[11px] font-bold rounded-full transition-all shadow-sm cursor-pointer text-left"
+                    >
+                      {fq.endsWith('?') ? fq : `${fq}?`}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              <span className={`text-[10px] text-[#9CA3AF] mt-1 block font-medium ${message.type === "user" ? "text-right mr-1" : "ml-1"}`}>
+                {message.timestamp}
+              </span>
+
             </div>
           </div>
+        ))}
 
+        {/* Dynamic Loading State Indicator */}
+        {isLoading && (
+          <div className="flex justify-start animate-in fade-in">
+            <div>
+              <div className="flex items-center gap-2 mb-1.5">
+                <div className="w-6 h-6 bg-[#FF9501] rounded-md flex items-center justify-center">
+                  <Sparkles className="h-3 w-3 text-white animate-pulse" />
+                </div>
+                <span className="text-xs font-bold text-[#1F2937]">AI Assistant</span>
+              </div>
+              <div className="rounded-2xl rounded-tl-sm px-4 py-2.5 bg-[#F9FAFB] border border-[#E5E7EB] flex items-center gap-2 shadow-sm">
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-[#FF9501]" />
+                <p className="text-xs text-[#6B7280] font-medium italic">Searching knowledge base...</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div ref={messagesEndRef} />
+      </div>
+
+      {/* Input Handling Action Panel */}
+      <div className="shrink-0 border-t border-[#E5E7EB] p-3 bg-white">
+        <div className="flex gap-2 items-center">
+          <div className="flex-1">
+            <textarea
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyPress={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSendMessage();
+                }
+              }}
+              placeholder="Ask a policy question..."
+              className="w-full px-3 py-2 bg-[#F5F7FA] border border-[#E5E7EB] rounded-xl text-sm text-[#1F2937] placeholder-[#9CA3AF] focus:outline-none focus:ring-2 focus:ring-[#FF9501] focus:bg-white transition-all resize-none h-[38px] max-h-[38px]"
+              rows={1}
+            />
+          </div>
+          <button
+            onClick={() => handleSendMessage()}
+            disabled={isLoading || !query.trim()}
+            className="p-2 bg-[#FF9501] text-white rounded-xl hover:bg-[#D97E00] disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center h-[38px] w-[38px] shrink-0 active:scale-95 shadow-md cursor-pointer"
+          >
+            <Send className="h-4 w-4" />
+          </button>
         </div>
       </div>
+
     </div>
   );
 }
