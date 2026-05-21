@@ -48,7 +48,7 @@ export function DocumentGenerator() {
             <Save className="h-4 w-4" />
             <span className="text-sm font-medium">Save Draft</span>
           </button>
-          <button className="flex items-center gap-2 px-4 py-2 bg-[#1D6FA3] text-white rounded-lg hover:bg-[#0B3C5D] transition-colors cursor-pointer shadow-sm">
+          <button className="flex items-center gap-2 px-4 py-2 bg-[#FF9501] text-white rounded-lg hover:bg-[#D97E00] transition-colors cursor-pointer shadow-sm">
             <Download className="h-4 w-4" />
             <span className="text-sm font-medium">Export</span>
           </button>
@@ -59,8 +59,8 @@ export function DocumentGenerator() {
       <div className="bg-white rounded-lg border border-[#E5E7EB] p-6 shadow-sm">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center">
-              <Sparkles className="h-5 w-5 text-[#1D6FA3]" />
+            <div className="w-10 h-10 rounded-lg bg-[#FFF4E5] flex items-center justify-center">
+              <Sparkles className="h-5 w-5 text-[#FF9501]" />
             </div>
             <div>
               <h2 className="text-base font-bold text-[#1F2937]">AI-Powered Generation</h2>
@@ -70,7 +70,7 @@ export function DocumentGenerator() {
           <button
             onClick={() => setUseAI(!useAI)}
             className={`relative w-14 h-7 rounded-full transition-colors cursor-pointer ${
-              useAI ? "bg-[#1D6FA3]" : "bg-[#E5E7EB]"
+              useAI ? "bg-[#FF9501]" : "bg-[#E5E7EB]"
             }`}
           >
             <div
@@ -89,7 +89,7 @@ export function DocumentGenerator() {
             <textarea
               value={aiPrompt}
               onChange={(e) => setAiPrompt(e.target.value)}
-              className="w-full px-4 py-3 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1D6FA3] focus:border-transparent transition-all resize-none"
+              className="w-full px-4 py-3 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#FF9501] focus:border-transparent transition-all resize-none"
               rows={4}
               placeholder="Example: Draft a memorandum regarding the suspension of classes due to upcoming regional weather disturbances, targeted to all faculty and students..."
             />
@@ -109,17 +109,17 @@ export function DocumentGenerator() {
                   onClick={() => setSelectedTemplate(template.id)}
                   className={`p-5 rounded-xl border-2 transition-all text-left cursor-pointer active:scale-[0.98] ${
                     selectedTemplate === template.id
-                      ? "border-[#1D6FA3] bg-blue-50/50"
-                      : "border-[#E5E7EB] hover:border-[#1D6FA3]/50 hover:bg-gray-50"
+                      ? "border-[#FF9501] bg-[#FFF4E5]/50"
+                      : "border-[#E5E7EB] hover:border-[#FF9501]/50 hover:bg-gray-50"
                   }`}
                 >
                   <div className="flex items-center gap-3 mb-2">
                     <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                      selectedTemplate === template.id ? "bg-[#1D6FA3] text-white" : "bg-gray-100 text-[#1D6FA3]"
+                      selectedTemplate === template.id ? "bg-[#FF9501] text-white" : "bg-gray-100 text-[#FF9501]"
                     }`}>
                       {getIcon(template.icon)}
                     </div>
-                    <h3 className={`text-sm font-bold ${selectedTemplate === template.id ? "text-[#1D6FA3]" : "text-[#1F2937]"}`}>
+                    <h3 className={`text-sm font-bold ${selectedTemplate === template.id ? "text-[#FF9501]" : "text-[#1F2937]"}`}>
                       {template.name}
                     </h3>
                   </div>
@@ -133,7 +133,7 @@ export function DocumentGenerator() {
           {selectedTemplate && (
             <div className="bg-white rounded-lg border border-[#E5E7EB] p-6 shadow-sm animate-in slide-in-from-bottom-4 duration-300">
               <h2 className="text-lg font-bold text-[#1F2937] mb-4 flex items-center gap-2">
-                <FileText className="h-5 w-5 text-[#1D6FA3]" />
+                <FileText className="h-5 w-5 text-[#FF9501]" />
                 Document Meta-Information
               </h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -141,7 +141,7 @@ export function DocumentGenerator() {
                   <label className="block text-sm font-medium text-[#1F2937] mb-2">Document Subject / Title</label>
                   <input
                     type="text"
-                    className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1D6FA3] focus:border-transparent transition-all"
+                    className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#FF9501] focus:border-transparent transition-all"
                     placeholder="e.g., Mandatory Faculty Assembly"
                   />
                 </div>
@@ -149,7 +149,7 @@ export function DocumentGenerator() {
                   <label className="block text-sm font-medium text-[#1F2937] mb-2">Reference / Memo Number</label>
                   <input
                     type="text"
-                    className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1D6FA3] focus:border-transparent transition-all"
+                    className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#FF9501] focus:border-transparent transition-all"
                     placeholder="e.g., Memo No. 045, s. 2026"
                   />
                 </div>
@@ -157,13 +157,13 @@ export function DocumentGenerator() {
                   <label className="block text-sm font-medium text-[#1F2937] mb-2">Target Audience / Recipient</label>
                   <input
                     type="text"
-                    className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1D6FA3] focus:border-transparent transition-all"
+                    className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#FF9501] focus:border-transparent transition-all"
                     placeholder="e.g., All College Deans"
                   />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-[#1F2937] mb-2">Signatory Office</label>
-                  <select className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1D6FA3] focus:border-transparent transition-all cursor-pointer">
+                  <select className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#FF9501] focus:border-transparent transition-all cursor-pointer">
                     <option>Office of the Campus Director</option>
                     <option>Supreme Student Government</option>
                     <option>Quality Assurance Office</option>
@@ -182,7 +182,7 @@ export function DocumentGenerator() {
           <button
             onClick={handleGenerate}
             disabled={isGenerating}
-            className="flex items-center gap-2 px-8 py-3.5 bg-[#1D6FA3] text-white rounded-xl hover:bg-[#0B3C5D] transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-md font-bold active:scale-95"
+            className="flex items-center gap-2 px-8 py-3.5 bg-[#FF9501] text-white rounded-xl hover:bg-[#D97E00] transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-md font-bold active:scale-95"
           >
             {useAI ? <Wand2 className="h-5 w-5" /> : <FileText className="h-5 w-5" />}
             <span>

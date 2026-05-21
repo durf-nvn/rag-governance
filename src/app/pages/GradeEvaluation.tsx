@@ -149,7 +149,7 @@ export function GradeEvaluation() {
           <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
             <div className="p-4 bg-gray-50/80 border-b border-gray-100">
               <h3 className="font-bold text-gray-800 text-sm flex items-center gap-2">
-                <Upload className="h-4 w-4 text-[#1D6FA3]" /> Document Upload
+                <Upload className="h-4 w-4 text-[#FF9501]" /> Document Upload
               </h3>
             </div>
             
@@ -161,12 +161,12 @@ export function GradeEvaluation() {
                 onClick={() => !selectedFile && fileInputRef.current?.click()}
                 className={`border-2 border-dashed rounded-xl p-8 text-center transition-all ${
                   selectedFile ? "border-transparent bg-transparent p-0" : 
-                  isDragging ? "border-[#1D6FA3] bg-[#E3F2FD] cursor-pointer" : "border-gray-200 hover:border-[#1D6FA3] bg-gray-50 hover:bg-gray-50/50 cursor-pointer"
+                  isDragging ? "border-[#FF9501] bg-[#FFF4E5] cursor-pointer" : "border-gray-200 hover:border-[#FF9501] bg-gray-50 hover:bg-gray-50/50 cursor-pointer"
                 }`}
               >
                 {/* IMPROVED FILE DISPLAY WITH CLOSE ICON */}
                 {selectedFile ? (
-                  <div className="relative flex flex-col items-center p-6 border border-[#1D6FA3]/20 bg-blue-50/50 rounded-xl group transition-all hover:border-[#1D6FA3]/40">
+                  <div className="relative flex flex-col items-center p-6 border border-[#FF9501]/20 bg-[#FFF4E5]/50 rounded-xl group transition-all hover:border-[#FF9501]/40">
                     <button 
                       onClick={handleRemoveFile}
                       className="absolute top-3 right-3 p-1.5 bg-white text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-full shadow-sm transition-all opacity-80 group-hover:opacity-100"
@@ -175,7 +175,7 @@ export function GradeEvaluation() {
                       <X className="h-4 w-4" />
                     </button>
                     <div className="p-3 bg-white rounded-full shadow-sm mb-3">
-                      <FileText className="h-8 w-8 text-[#1D6FA3]" />
+                      <FileText className="h-8 w-8 text-[#FF9501]" />
                     </div>
                     <p className="text-sm font-bold text-[#1F2937] text-center px-4 truncate w-full">{selectedFile.name}</p>
                     <p className="text-xs font-medium text-[#6B7280] mt-1">{(selectedFile.size / 1024 / 1024).toFixed(2)} MB</p>
@@ -195,13 +195,13 @@ export function GradeEvaluation() {
               <button
                 onClick={submitForEvaluation}
                 disabled={!selectedFile || isEvaluating}
-                className="w-full mt-6 py-3.5 bg-[#006837] text-white rounded-xl hover:bg-[#00542c] transition-all disabled:opacity-50 disabled:hover:bg-[#006837] flex justify-center items-center gap-2 font-bold shadow-md active:scale-[0.98]"
+                className="w-full mt-6 py-3.5 bg-[#FF9501] text-white rounded-xl hover:bg-[#D97E00] transition-all disabled:opacity-50 disabled:hover:bg-[#FF9501] flex justify-center items-center gap-2 font-bold shadow-md active:scale-[0.98]"
               >
                 {isEvaluating ? <><Loader2 className="h-5 w-5 animate-spin" /> Analyzing Grades...</> : "Evaluate Performance"}
               </button>
 
               <div className="mt-6 p-4 bg-gray-50 border border-gray-100 rounded-xl flex gap-3">
-                <AlertCircle className="h-5 w-5 text-[#1D6FA3] flex-shrink-0" />
+                <AlertCircle className="h-5 w-5 text-[#FF9501] flex-shrink-0" />
                 <p className="text-xs text-gray-500 leading-relaxed">
                   <span className="font-semibold text-gray-700 block mb-0.5">Privacy Guarantee</span>
                   Uploaded grades are processed ephemerally in RAM and are never saved to the database.
@@ -216,8 +216,8 @@ export function GradeEvaluation() {
           {isEvaluating ? (
             <div className="bg-white rounded-2xl shadow-sm border border-gray-200 h-full min-h-[600px] flex flex-col items-center justify-center p-8 text-center animate-pulse">
               <div className="relative">
-                <div className="absolute inset-0 bg-[#1D6FA3] rounded-full blur-xl opacity-20 animate-pulse"></div>
-                <Loader2 className="h-16 w-16 text-[#1D6FA3] animate-spin mb-6 relative z-10 mx-auto" />
+                <div className="absolute inset-0 bg-[#FF9501] rounded-full blur-xl opacity-20 animate-pulse"></div>
+                <Loader2 className="h-16 w-16 text-[#FF9501] animate-spin mb-6 relative z-10 mx-auto" />
               </div>
               <h3 className="text-xl font-bold text-gray-900">Extracting Academic Data...</h3>
               <p className="text-gray-500 max-w-sm mt-3 leading-relaxed">The AI is currently scanning your transcript to accurately extract subjects and perform deterministic math.</p>
@@ -230,7 +230,7 @@ export function GradeEvaluation() {
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
                   <div>
                     <h3 className="font-extrabold text-gray-900 text-2xl flex items-center gap-2 mb-1">
-                      <TrendingUp className="h-6 w-6 text-[#1D6FA3]" /> Academic Evaluation
+                      <TrendingUp className="h-6 w-6 text-[#FF9501]" /> Academic Evaluation
                     </h3>
                     <p className="text-sm text-gray-500 font-medium">Official CTU Ruleset Applied</p>
                   </div>
@@ -244,7 +244,7 @@ export function GradeEvaluation() {
                 <div className="flex flex-col md:flex-row items-center justify-between p-8 bg-gray-50/80 border border-gray-100 rounded-2xl mb-8">
                   <div className="text-center md:text-left mb-4 md:mb-0">
                     <h4 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Total Cumulative GWA</h4>
-                    <p className="text-6xl font-black text-[#1D6FA3] tracking-tight">{cumulativeData.gwa}</p>
+                    <p className="text-6xl font-black text-[#FF9501] tracking-tight">{cumulativeData.gwa}</p>
                   </div>
                   <div className="hidden md:block w-px h-16 bg-gray-200 mx-8"></div>
                   <div className="text-center md:text-left max-w-[280px]">
@@ -266,8 +266,8 @@ export function GradeEvaluation() {
                           <div className="flex flex-col sm:flex-row sm:items-center justify-between p-5 relative z-10">
                             
                             <div className="flex items-center gap-4 mb-4 sm:mb-0">
-                              <div className="bg-blue-50/50 p-2.5 rounded-xl border border-blue-100/50">
-                                <BookOpen className="h-5 w-5 text-[#1D6FA3]" />
+                              <div className="bg-[#FFF4E5]/50 p-2.5 rounded-xl border border-[#FF9501]/20">
+                                <BookOpen className="h-5 w-5 text-[#FF9501]" />
                               </div>
                               <div>
                                 <span className="block font-bold text-gray-900 text-base">{sem.semester_name || "Unknown Semester"}</span>
@@ -283,7 +283,7 @@ export function GradeEvaluation() {
                               {Array.isArray(sem.subjects_scratchpad) && (
                                 <button 
                                   onClick={() => toggleSemester(idx)} 
-                                  className={`p-2.5 rounded-xl transition-all ${expandedSemesters.includes(idx) ? 'bg-[#1D6FA3] text-white shadow-md' : 'bg-gray-50 text-gray-500 hover:bg-gray-100 hover:text-gray-900'}`}
+                                  className={`p-2.5 rounded-xl transition-all ${expandedSemesters.includes(idx) ? 'bg-[#FF9501] text-white shadow-md' : 'bg-gray-50 text-gray-500 hover:bg-gray-100 hover:text-gray-900'}`}
                                 >
                                   {expandedSemesters.includes(idx) ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
                                 </button>
@@ -345,7 +345,7 @@ export function GradeEvaluation() {
                 {/* Advisor Summary */}
                 <div className="mb-8">
                   <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">Advisor Summary</h3>
-                  <div className="p-6 bg-blue-50/40 rounded-2xl border border-blue-100/50">
+                  <div className="p-6 bg-[#FFF4E5]/40 rounded-2xl border border-[#FF9501]/20">
                     <p className="text-gray-700 font-medium leading-relaxed">{result.summary || "Summary generation skipped by AI."}</p>
                   </div>
                 </div>

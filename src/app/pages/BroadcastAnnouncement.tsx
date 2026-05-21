@@ -274,8 +274,8 @@ export function BroadcastAnnouncement() {
           className="w-full flex items-center justify-between p-5 bg-white hover:bg-gray-50 transition-colors cursor-pointer"
         >
           <div className="flex items-center gap-3">
-            <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${isCreateOpen ? "bg-[#1D6FA3]" : "bg-blue-50"}`}>
-              <Radio className={`h-5 w-5 ${isCreateOpen ? "text-white" : "text-[#1D6FA3]"}`} />
+            <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${isCreateOpen ? "bg-[#FF9501]" : "bg-[#FFF4E5]"}`}>
+              <Radio className={`h-5 w-5 ${isCreateOpen ? "text-white" : "text-[#FF9501]"}`} />
             </div>
             <div className="text-left">
               <h2 className="text-lg font-bold text-[#1F2937]">Create New Broadcast</h2>
@@ -294,7 +294,7 @@ export function BroadcastAnnouncement() {
                 <label className="block text-sm font-medium mb-2 text-[#1F2937]">Announcement Title *</label>
                 <input
                   type="text" value={title} onChange={(e) => setTitle(e.target.value)}
-                  className="w-full px-4 py-3 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1D6FA3] transition-all"
+                  className="w-full px-4 py-3 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#FF9501] transition-all"
                   placeholder="Enter announcement title"
                 />
               </div>
@@ -302,7 +302,7 @@ export function BroadcastAnnouncement() {
                 <label className="block text-sm font-medium mb-2 text-[#1F2937]">Message Content *</label>
                 <textarea
                   value={content} onChange={(e) => setContent(e.target.value)} rows={5}
-                  className="w-full px-4 py-3 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1D6FA3] transition-all resize-none"
+                  className="w-full px-4 py-3 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#FF9501] transition-all resize-none"
                   placeholder="Type your announcement message here..."
                 />
               </div>
@@ -314,12 +314,12 @@ export function BroadcastAnnouncement() {
                       key={option.value}
                       onClick={() => handleRecipientToggle(option.value, selectedRecipients, setSelectedRecipients)}
                       className={`p-5 rounded-lg border-2 transition-all text-left cursor-pointer ${
-                        selectedRecipients.includes(option.value) ? "border-[#1D6FA3] bg-blue-50/50" : "border-[#E5E7EB] hover:border-[#1D6FA3]/50"
+                        selectedRecipients.includes(option.value) ? "border-[#FF9501] bg-[#FFF4E5]/50" : "border-[#E5E7EB] hover:border-[#FF9501]/50"
                       }`}
                     >
                       <div className="flex items-center gap-3 mb-2">
-                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${selectedRecipients.includes(option.value) ? "bg-[#1D6FA3]" : "bg-[#F5F7FA]"}`}>
-                          <Users className={`h-5 w-5 ${selectedRecipients.includes(option.value) ? "text-white" : "text-[#1D6FA3]"}`} />
+                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${selectedRecipients.includes(option.value) ? "bg-[#FF9501]" : "bg-[#F5F7FA]"}`}>
+                          <Users className={`h-5 w-5 ${selectedRecipients.includes(option.value) ? "text-white" : "text-[#FF9501]"}`} />
                         </div>
                         <h3 className="text-sm font-semibold text-[#1F2937]">{option.label}</h3>
                       </div>
@@ -334,7 +334,7 @@ export function BroadcastAnnouncement() {
                   <Calendar className="h-5 w-5 text-[#6B7280]" />
                   <input
                     type="datetime-local" value={scheduleDate} onChange={(e) => setScheduleDate(e.target.value)}
-                    className="flex-1 px-4 py-3 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1D6FA3] transition-all cursor-pointer"
+                    className="flex-1 px-4 py-3 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#FF9501] transition-all cursor-pointer"
                   />
                 </div>
                 <p className="text-xs text-[#6B7280] mt-2">Leave empty to send immediately</p>
@@ -342,7 +342,7 @@ export function BroadcastAnnouncement() {
               <div className="flex gap-3 pt-4 border-t border-[#E5E7EB]">
                 <button
                   onClick={() => handleSendAnnouncement("Sent")} disabled={isLoading}
-                  className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-[#1D6FA3] text-white rounded-lg hover:bg-[#0B3C5D] transition-colors font-medium disabled:opacity-50 cursor-pointer shadow-sm active:scale-95"
+                  className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-[#FF9501] text-white rounded-lg hover:bg-[#D97E00] transition-colors font-medium disabled:opacity-50 cursor-pointer shadow-sm active:scale-95"
                 >
                   {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
                   {scheduleDate ? "Schedule Announcement" : "Send Broadcast Now"}
@@ -385,11 +385,11 @@ export function BroadcastAnnouncement() {
         </div>
         <div className="bg-white rounded-lg border border-[#E5E7EB] p-6 shadow-sm">
           <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-blue-50 rounded-lg flex items-center justify-center">
-              <Eye className="h-6 w-6 text-[#1D6FA3]" />
+            <div className="w-12 h-12 bg-[#FFF4E5] rounded-lg flex items-center justify-center">
+              <Eye className="h-6 w-6 text-[#FF9501]" />
             </div>
             <div>
-              <h3 className="text-3xl font-bold text-[#1D6FA3]">{avgReadRate}%</h3>
+              <h3 className="text-3xl font-bold text-[#FF9501]">{avgReadRate}%</h3>
               <p className="text-sm text-[#6B7280] font-medium">Avg. Read Rate</p>
             </div>
           </div>
@@ -406,14 +406,14 @@ export function BroadcastAnnouncement() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
               <input
                 type="text" placeholder="Search broadcasts..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-4 py-2 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-[#1D6FA3]"
+                className="w-full pl-9 pr-4 py-2 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-[#FF9501]"
               />
             </div>
             <div className="relative w-full sm:w-auto">
               <Filter className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
               <select
                 value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as any)}
-                className="w-full sm:w-auto pl-9 pr-8 py-2 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-[#1D6FA3] cursor-pointer appearance-none"
+                className="w-full sm:w-auto pl-9 pr-8 py-2 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-[#FF9501] cursor-pointer appearance-none"
               >
                 <option value="All">All Statuses</option>
                 <option value="Sent">Sent</option>
@@ -425,7 +425,7 @@ export function BroadcastAnnouncement() {
         </div>
         
         {isFetching ? (
-          <div className="flex justify-center py-10"><Loader2 className="h-8 w-8 animate-spin text-[#1D6FA3]" /></div>
+          <div className="flex justify-center py-10"><Loader2 className="h-8 w-8 animate-spin text-[#FF9501]" /></div>
         ) : filteredAnnouncements.length === 0 ? (
           <div className="text-center py-10 text-gray-500 bg-gray-50 rounded-xl border border-dashed border-gray-200">
             <Radio className="h-10 w-10 mx-auto text-gray-400 mb-2" />
@@ -440,12 +440,12 @@ export function BroadcastAnnouncement() {
                   if (announcement.status === "Sent") setViewingAnnouncement(announcement);
                   else setEditingAnnouncement(announcement);
                 }}
-                className="border border-[#E5E7EB] rounded-lg p-5 hover:shadow-md hover:border-[#1D6FA3]/30 transition-all bg-white cursor-pointer group"
+                className="border border-[#E5E7EB] rounded-lg p-5 hover:shadow-md hover:border-[#FF9501]/30 transition-all bg-white cursor-pointer group"
               >
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
                     <div className="flex items-center gap-3 mb-1.5">
-                      <h3 className="text-[#1F2937] font-bold text-base group-hover:text-[#1D6FA3] transition-colors">{announcement.title}</h3>
+                      <h3 className="text-[#1F2937] font-bold text-base group-hover:text-[#FF9501] transition-colors">{announcement.title}</h3>
                       <span className={`px-2.5 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider ${
                         announcement.status === "Sent" ? "bg-green-100 text-green-700"
                         : announcement.status === "Scheduled" ? "bg-yellow-100 text-yellow-700"
@@ -473,7 +473,7 @@ export function BroadcastAnnouncement() {
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl overflow-hidden animate-in zoom-in-95 duration-200">
             <div className="flex items-center justify-between p-5 border-b border-[#E5E7EB] bg-gray-50">
               <div className="flex items-center gap-2">
-                {editingAnnouncement.status === "Draft" ? <Save className="h-5 w-5 text-[#1D6FA3]" /> : <Clock className="h-5 w-5 text-yellow-500" />}
+                {editingAnnouncement.status === "Draft" ? <Save className="h-5 w-5 text-[#FF9501]" /> : <Clock className="h-5 w-5 text-yellow-500" />}
                 <h3 className="font-bold text-gray-900">Edit {editingAnnouncement.status}</h3>
               </div>
               <button onClick={() => setEditingAnnouncement(null)} className="text-gray-400 hover:text-gray-900 p-1 cursor-pointer"><X className="h-5 w-5" /></button>
@@ -484,14 +484,14 @@ export function BroadcastAnnouncement() {
                 <label className="block text-sm font-medium mb-1">Title</label>
                 <input
                   type="text" value={editingAnnouncement.title} onChange={(e) => setEditingAnnouncement({...editingAnnouncement, title: e.target.value})}
-                  className="w-full px-3 py-2 bg-white border border-[#E5E7EB] rounded-lg text-sm focus:ring-1 focus:ring-[#1D6FA3] outline-none"
+                  className="w-full px-3 py-2 bg-white border border-[#E5E7EB] rounded-lg text-sm focus:ring-1 focus:ring-[#FF9501] outline-none"
                 />
               </div>
               <div>
                 <label className="block text-sm font-medium mb-1">Content</label>
                 <textarea
                   value={editingAnnouncement.content} onChange={(e) => setEditingAnnouncement({...editingAnnouncement, content: e.target.value})} rows={5}
-                  className="w-full px-3 py-2 bg-white border border-[#E5E7EB] rounded-lg text-sm focus:ring-1 focus:ring-[#1D6FA3] outline-none resize-none"
+                  className="w-full px-3 py-2 bg-white border border-[#E5E7EB] rounded-lg text-sm focus:ring-1 focus:ring-[#FF9501] outline-none resize-none"
                 />
               </div>
               <div>
@@ -507,7 +507,7 @@ export function BroadcastAnnouncement() {
                           handleRecipientToggle(opt.value, current, (newVals) => setEditingAnnouncement({...editingAnnouncement, recipients: newVals.join(", ")}))
                         }}
                         className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors border cursor-pointer ${
-                          isSelected ? "bg-[#1D6FA3] text-white border-[#1D6FA3]" : "bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100"
+                          isSelected ? "bg-[#FF9501] text-white border-[#FF9501]" : "bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100"
                         }`}
                       >
                         {opt.label}
@@ -523,7 +523,7 @@ export function BroadcastAnnouncement() {
                     type="datetime-local" 
                     value={editingAnnouncement.schedule_date ? new Date(editingAnnouncement.schedule_date).toISOString().slice(0, 16) : ""} 
                     onChange={(e) => setEditingAnnouncement({...editingAnnouncement, schedule_date: e.target.value})}
-                    className="w-full px-3 py-2 bg-white border border-[#E5E7EB] rounded-lg text-sm focus:ring-1 focus:ring-[#1D6FA3] outline-none cursor-pointer"
+                    className="w-full px-3 py-2 bg-white border border-[#E5E7EB] rounded-lg text-sm focus:ring-1 focus:ring-[#FF9501] outline-none cursor-pointer"
                   />
                 </div>
               )}
@@ -545,7 +545,7 @@ export function BroadcastAnnouncement() {
                 </button>
                 <button 
                   onClick={() => handleUpdateAnnouncement(editingAnnouncement.id, "Send Now")} disabled={isModalLoading}
-                  className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-[#1D6FA3] text-white rounded-lg hover:bg-[#0B3C5D] transition-colors cursor-pointer"
+                  className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-[#FF9501] text-white rounded-lg hover:bg-[#D97E00] transition-colors cursor-pointer"
                 >
                   {isModalLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} Send Now
                 </button>

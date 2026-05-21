@@ -159,7 +159,7 @@ export function UsersRoles() {
   });
 
   const roleStats = [
-    { role: "Administrator", userCount: users.filter(u => u.role === "ADMIN").length, color: "#1D6FA3" },
+    { role: "Administrator", userCount: users.filter(u => u.role === "ADMIN").length, color: "#FF9501" },
     { role: "Faculty", userCount: users.filter(u => u.role === "FACULTY").length, color: "#FDB913" },
     { role: "Student", userCount: users.filter(u => u.role === "STUDENT").length, color: "#006837" }
   ];
@@ -167,7 +167,7 @@ export function UsersRoles() {
   if (isLoading) {
     return (
       <div className="flex justify-center items-center h-64">
-        <Loader2 className="h-8 w-8 animate-spin text-[#1D6FA3]" />
+        <Loader2 className="h-8 w-8 animate-spin text-[#FF9501]" />
       </div>
     );
   }
@@ -193,7 +193,7 @@ export function UsersRoles() {
         </div>
         <button
           onClick={() => setShowAddUserModal(true)}
-          className="flex items-center gap-2 px-6 py-3 bg-[#1D6FA3] text-white rounded-lg hover:bg-[#0B3C5D] transition-colors shadow-sm cursor-pointer active:scale-95"
+          className="flex items-center gap-2 px-6 py-3 bg-[#FF9501] text-white rounded-lg hover:bg-[#D97E00] transition-colors shadow-sm cursor-pointer active:scale-95"
         >
           <UserPlus className="h-5 w-5" />
           Add User
@@ -265,7 +265,7 @@ export function UsersRoles() {
                 placeholder="Search by name or email..." 
                 value={searchQuery} 
                 onChange={(e) => setSearchQuery(e.target.value)} 
-                className="w-full pl-11 pr-4 py-3 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1D6FA3]" 
+                className="w-full pl-11 pr-4 py-3 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF9501]" 
               />
             </div>
             
@@ -273,7 +273,7 @@ export function UsersRoles() {
               <select 
                 value={selectedRole} 
                 onChange={(e) => setSelectedRole(e.target.value)} 
-                className="sm:w-40 px-4 py-3 bg-white border border-gray-200 rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#1D6FA3] cursor-pointer hover:bg-gray-50"
+                className="sm:w-40 px-4 py-3 bg-white border border-gray-200 rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#FF9501] cursor-pointer hover:bg-gray-50"
               >
                 <option value="all">All Roles</option>
                 <option value="ADMIN">Admin</option>
@@ -284,7 +284,7 @@ export function UsersRoles() {
               <select 
                 value={selectedStatus} 
                 onChange={(e) => setSelectedStatus(e.target.value)} 
-                className="sm:w-40 px-4 py-3 bg-white border border-gray-200 rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#1D6FA3] cursor-pointer hover:bg-gray-50"
+                className="sm:w-40 px-4 py-3 bg-white border border-gray-200 rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#FF9501] cursor-pointer hover:bg-gray-50"
               >
                 <option value="all">All Status</option>
                 <option value="Active">Active</option>
@@ -315,7 +315,7 @@ export function UsersRoles() {
                     <td className="px-6 py-4 text-gray-600 font-medium">{user.email}</td>
                     <td className="px-6 py-4">
                       <span className={`px-3 py-1 text-xs font-bold rounded-full border ${
-                        user.role === 'ADMIN' ? 'bg-blue-50 text-[#1D6FA3] border-blue-200' : 
+                        user.role === 'ADMIN' ? 'bg-[#FFF4E5] text-[#FF9501] border-[#FF9501]/30' : 
                         user.role === 'FACULTY' ? 'bg-yellow-50 text-yellow-700 border-yellow-200' : 
                         'bg-green-50 text-[#006837] border-green-200'
                       }`}>
@@ -374,17 +374,17 @@ export function UsersRoles() {
             <form onSubmit={handleAddUserSubmit} className="p-6 space-y-5">
               <div>
                 <label className="block text-sm font-bold text-gray-700 mb-2">Full Name</label>
-                <input type="text" name="name" value={addUserData.name} onChange={handleAddUserChange} className="w-full px-4 py-3 bg-[#F5F7FA] border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1D6FA3]" placeholder="e.g., Jane Doe" />
+                <input type="text" name="name" value={addUserData.name} onChange={handleAddUserChange} className="w-full px-4 py-3 bg-[#F5F7FA] border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#FF9501]" placeholder="e.g., Jane Doe" />
               </div>
 
               <div>
                 <label className="block text-sm font-bold text-gray-700 mb-2">Email Address</label>
-                <input type="email" name="email" value={addUserData.email} onChange={handleAddUserChange} className="w-full px-4 py-3 bg-[#F5F7FA] border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1D6FA3]" placeholder="jane.doe@ctu.edu.ph" />
+                <input type="email" name="email" value={addUserData.email} onChange={handleAddUserChange} className="w-full px-4 py-3 bg-[#F5F7FA] border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#FF9501]" placeholder="jane.doe@ctu.edu.ph" />
               </div>
 
               <div>
                 <label className="block text-sm font-bold text-gray-700 mb-2">System Role</label>
-                <select name="role" value={addUserData.role} onChange={handleAddUserChange} className="w-full px-4 py-3 bg-[#F5F7FA] border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1D6FA3] cursor-pointer">
+                <select name="role" value={addUserData.role} onChange={handleAddUserChange} className="w-full px-4 py-3 bg-[#F5F7FA] border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#FF9501] cursor-pointer">
                   <option value="" disabled>Select User Role</option>
                   <option value="ADMIN">Administrator</option>
                   <option value="FACULTY">Faculty</option>
@@ -394,14 +394,14 @@ export function UsersRoles() {
 
               <div>
                 <label className="block text-sm font-bold text-gray-700 mb-2">Temporary Password</label>
-                <input type="password" name="password" value={addUserData.password} onChange={handleAddUserChange} className="w-full px-4 py-3 bg-[#F5F7FA] border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1D6FA3]" placeholder="Enter secure password" />
+                <input type="password" name="password" value={addUserData.password} onChange={handleAddUserChange} className="w-full px-4 py-3 bg-[#F5F7FA] border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#FF9501]" placeholder="Enter secure password" />
               </div>
             
               <div className="pt-4 flex gap-3">
                 <button type="button" onClick={() => setShowAddUserModal(false)} className="flex-1 px-5 py-3 text-sm font-bold text-gray-600 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors cursor-pointer">
                   Cancel
                 </button>
-                <button type="submit" disabled={isCreating} className="flex-1 px-5 py-3 text-sm font-bold bg-[#1D6FA3] text-white rounded-xl hover:bg-[#0B3C5D] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer">
+                <button type="submit" disabled={isCreating} className="flex-1 px-5 py-3 text-sm font-bold bg-[#FF9501] text-white rounded-xl hover:bg-[#D97E00] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer">
                    {isCreating ? <><Loader2 className="h-4 w-4 animate-spin"/> Creating...</> : "Create Account"}
                 </button>
               </div>
