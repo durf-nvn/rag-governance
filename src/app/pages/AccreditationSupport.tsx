@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Search, CheckCircle, AlertCircle, FileText, Award, Target, Upload, ChevronDown, ChevronUp, X, Loader2, ArrowLeft, Archive, Eye, ShieldAlert, Lock, Check, FileCheck, MessageSquareWarning, Clock, Download, BarChart2, Calendar } from "lucide-react";
+import { Search, CheckCircle, AlertCircle, FileText, Award, Target, Upload, ChevronDown, ChevronUp, X, Loader2, ArrowLeft, Archive, Eye, ShieldAlert, Lock, Check, FileCheck, MessageSquareWarning, Clock, BarChart2, Calendar, Plus, Edit, Trash2 } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "../components/ui/tabs";
 import axios from "axios";
 
@@ -35,12 +35,10 @@ export function AccreditationSupport() {
   const [areaDetails, setAreaDetails] = useState({ requirements: [], uploadedFiles: [] });
   const [isLoadingDetails, setIsLoadingDetails] = useState(false);
 
-  // --- ADMIN REVIEW STATE ---
   const [isAdminQueueOpen, setIsAdminQueueOpen] = useState(true);
-  const [pendingDocs, setPendingDocs] = useState<any[]>([]);
+  const [pendingDocs, setPendingDocs] = useState<any[]>([]); // Handles AACCUP
   const [isReviewing, setIsReviewing] = useState(false);
   
-  // Feedback Modal State
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
   const [feedbackDoc, setFeedbackDoc] = useState<any>(null);
   const [feedbackText, setFeedbackText] = useState("");
@@ -48,6 +46,27 @@ export function AccreditationSupport() {
   const [currentData, setCurrentData] = useState<any>({
     level: "Loading...", overall: 0, gaps: 0, evidence: 0, areas: []
   });
+
+  const [chedRequirements, setChedRequirements] = useState<any[]>([]);
+  const [isLoadingChed, setIsLoadingChed] = useState(false);
+  const [showChedUploadModal, setShowChedUploadModal] = useState(false);
+  const [selectedChedReq, setSelectedChedReq] = useState<any>(null);
+  
+  // Admin specific CHED states
+  const [showAddChedReqModal, setShowAddChedReqModal] = useState(false);
+  const [newChedReq, setNewChedReq] = useState({ cmo_name: "", description: "" });
+  const [isAddingReq, setIsAddingReq] = useState(false);
+  
+  // Edit CHED states
+  const [showEditChedModal, setShowEditChedModal] = useState(false);
+  const [editingChedReq, setEditingChedReq] = useState<any>(null);
+  const [isEditingReq, setIsEditingReq] = useState(false);
+
+  // Custom Delete Modals for CHED
+  const [showDeleteChedReqModal, setShowDeleteChedReqModal] = useState(false);
+  const [chedReqToDelete, setChedReqToDelete] = useState<string | null>(null);
+  const [showDeleteChedEvidenceModal, setShowDeleteChedEvidenceModal] = useState(false);
+  const [chedEvidenceToDelete, setChedEvidenceToDelete] = useState<any>(null);
 
   const refreshData = async () => {
     try {
@@ -62,6 +81,7 @@ export function AccreditationSupport() {
       }
       
       if (userRole === "ADMIN") fetchPendingQueue();
+      fetchChedData(); 
       
     } catch (error) {
       console.error("Failed to refresh data", error);
@@ -74,6 +94,18 @@ export function AccreditationSupport() {
       setPendingDocs(res.data);
     } catch (error) {
       console.error("Failed to fetch pending queue");
+    }
+  };
+
+  const fetchChedData = async () => {
+    setIsLoadingChed(true);
+    try {
+      const res = await axios.get(`http://localhost:8000/ched/requirements/${selectedProgram}`);
+      setChedRequirements(res.data);
+    } catch (error) {
+      console.error("Failed to fetch CHED requirements");
+    } finally {
+      setIsLoadingChed(false);
     }
   };
 
@@ -199,6 +231,147 @@ export function AccreditationSupport() {
     }
   };
 
+  const handleChedUploadSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!uploadForm.fileName || !selectedFile || !selectedChedReq) {
+      showToast("Please provide all required fields.", "error"); return;
+    }
+    
+    setIsUploading(true);
+    const submitData = new FormData();
+    submitData.append("file", selectedFile);
+    submitData.append("requirement_id", selectedChedReq.id);
+    submitData.append("document_name", uploadForm.fileName);
+    submitData.append("uploaded_by", userName);
+    submitData.append("program", selectedProgram);
+
+    try {
+      await axios.post("http://localhost:8000/ched/upload-evidence", submitData, {
+        headers: { "Content-Type": "multipart/form-data" }
+      });
+      await fetchChedData();
+      setUploadForm({ fileName: "", requirementTarget: "" });
+      setSelectedFile(null); 
+      setShowChedUploadModal(false);
+      showToast("CHED Evidence uploaded! Pending Admin Review.", "success");
+    } catch (error) {
+      showToast("Failed to upload CHED evidence.", "error");
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleAddChedRequirement = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsAddingReq(true);
+    try {
+      await axios.post("http://localhost:8000/ched/requirements", {
+        program: selectedProgram,
+        cmo_name: newChedReq.cmo_name,
+        description: newChedReq.description
+      });
+      showToast("New CHED requirement added to the checklist!", "success");
+      setNewChedReq({ cmo_name: "", description: "" });
+      setShowAddChedReqModal(false);
+      fetchChedData();
+    } catch (error) {
+      showToast("Failed to add requirement.", "error");
+    } finally {
+      setIsAddingReq(false);
+    }
+  };
+
+  const handleEditChedRequirement = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsEditingReq(true);
+    try {
+      await axios.put(`http://localhost:8000/ched/requirements/${editingChedReq.id}`, {
+        program: selectedProgram,
+        cmo_name: editingChedReq.cmo_name,
+        description: editingChedReq.description
+      });
+      showToast("Requirement updated!", "success");
+      setShowEditChedModal(false);
+      fetchChedData();
+    } catch (error) {
+      showToast("Failed to update requirement.", "error");
+    } finally {
+      setIsEditingReq(false);
+    }
+  };
+
+  const confirmDeleteChedRequirement = (reqId: string) => {
+    setChedReqToDelete(reqId);
+    setShowDeleteChedReqModal(true);
+  };
+
+  const executeDeleteChedRequirement = async () => {
+    if (!chedReqToDelete) return;
+    setIsDeleting(true);
+    try {
+      await axios.delete(`http://localhost:8000/ched/requirements/${chedReqToDelete}`);
+      showToast("Requirement deleted.", "success");
+      setShowDeleteChedReqModal(false);
+      setChedReqToDelete(null);
+      fetchChedData();
+    } catch (error) {
+      showToast("Failed to delete requirement.", "error");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const confirmDeleteChedEvidence = (evidence: any) => {
+    setChedEvidenceToDelete(evidence);
+    setShowDeleteChedEvidenceModal(true);
+  };
+
+  const executeDeleteChedEvidence = async () => {
+    if (!chedEvidenceToDelete) return;
+    setIsDeleting(true);
+    try {
+      await axios.delete(`http://localhost:8000/ched/evidence/${chedEvidenceToDelete.id}`);
+      showToast("Evidence removed.", "success");
+      setShowDeleteChedEvidenceModal(false);
+      setChedEvidenceToDelete(null);
+      fetchChedData();
+    } catch (error) {
+      showToast("Failed to remove evidence.", "error");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const handleChedAdminReview = async (reqId: string, status: string) => {
+    try {
+      await axios.put(`http://localhost:8000/ched/requirements/${reqId}/status`, { status });
+      showToast(`Requirement marked as ${status}!`, "success");
+      fetchChedData();
+    } catch (error) {
+      showToast("Failed to update status.", "error");
+    }
+  };
+
+  // Calculate CHED Compliance Math
+  const chedCompliantCount = chedRequirements.filter(r => r.status === 'Compliant').length;
+  const chedTotalCount = chedRequirements.length;
+  const chedCompliancePercentage = chedTotalCount === 0 ? 0 : Math.round((chedCompliantCount / chedTotalCount) * 100);
+  
+  // COMBINE AACCUP AND CHED PENDING DOCS FOR THE TOP QUEUE
+  const chedPendingDocs = chedRequirements.filter(r => r.status === 'Pending').map(r => ({
+    id: r.id,
+    type: 'CHED',
+    name: r.evidences && r.evidences.length > 0 ? r.evidences[0].document_name : 'Attached Evidence',
+    target: r.description,
+    program: r.program,
+    area_code: r.cmo_name,
+    uploaded_by: r.evidences && r.evidences.length > 0 ? r.evidences[0].uploaded_by : 'Unknown',
+    date: r.evidences && r.evidences.length > 0 ? r.evidences[0].upload_date.split('T')[0] : 'Recently',
+    url: r.evidences && r.evidences.length > 0 ? r.evidences[0].file_url : '#'
+  }));
+  
+  const allPendingReviews = [...pendingDocs.map(d => ({...d, type: 'AACCUP'})), ...chedPendingDocs];
+
   if (isLoading && currentData.areas.length === 0) {
     return <div className="flex justify-center items-center h-64 text-gray-500"><Loader2 className="h-8 w-8 animate-spin text-[#FF9501]" /></div>;
   }
@@ -220,7 +393,7 @@ export function AccreditationSupport() {
         <p className="text-sm text-[#6B7280] mt-1">Comprehensive quality assurance tracking across AACCUP, ISO, CHED monitoring, and accreditation results</p>
       </div>
 
-      {/* --- ADMIN REVIEW QUEUE --- */}
+      {/* --- GLOBAL ADMIN REVIEW QUEUE --- */}
       {userRole === "ADMIN" && (
         <div className="bg-white rounded-xl shadow-sm border border-[#E5E7EB] overflow-hidden mb-6 transition-all duration-300">
           <button
@@ -234,14 +407,14 @@ export function AccreditationSupport() {
               <div className="text-left">
                 <h2 className="text-lg font-bold text-[#1F2937]">Admin Review Queue</h2>
                 <p className="text-xs text-[#6B7280]">
-                  {pendingDocs.length} {pendingDocs.length === 1 ? 'document requires' : 'documents require'} your approval
+                  {allPendingReviews.length} {allPendingReviews.length === 1 ? 'document requires' : 'documents require'} your approval
                 </p>
               </div>
             </div>
             <div className="flex items-center gap-4">
-              {pendingDocs.length > 0 && (
+              {allPendingReviews.length > 0 && (
                 <span className="bg-red-500 text-white text-xs font-bold px-2.5 py-1 rounded-full animate-pulse">
-                  {pendingDocs.length} PENDING
+                  {allPendingReviews.length} PENDING
                 </span>
               )}
               <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center border border-gray-200 shadow-sm">
@@ -252,18 +425,20 @@ export function AccreditationSupport() {
 
           {isAdminQueueOpen && (
             <div className="p-6 border-t border-[#E5E7EB] bg-gray-50/50 animate-in slide-in-from-top-2 fade-in duration-300">
-              {pendingDocs.length === 0 ? (
+              {allPendingReviews.length === 0 ? (
                 <div className="text-center py-8">
                   <CheckCircle className="h-12 w-12 text-green-400 mx-auto mb-3 opacity-50" />
                   <p className="text-gray-500 font-medium">All caught up! No pending documents in the queue.</p>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {pendingDocs.map((doc, idx) => (
+                  {allPendingReviews.map((doc, idx) => (
                     <div key={idx} className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow flex flex-col">
                       <div className="flex items-start justify-between mb-3">
                         <div className="flex items-center gap-2">
-                          <span className="px-2 py-1 bg-orange-100 text-[#D97E00] text-[10px] font-bold uppercase rounded tracking-wider">Pending</span>
+                          <span className="px-2 py-1 bg-orange-100 text-[#D97E00] text-[10px] font-bold uppercase rounded tracking-wider">
+                            {doc.type} Pending
+                          </span>
                           <span className="text-xs text-gray-500">{doc.date}</span>
                         </div>
                         <button onClick={() => handleViewDocument(doc.url, doc.name)} className="text-[#D97E00] hover:text-[#995900] text-xs font-bold flex items-center gap-1 cursor-pointer bg-orange-50 px-2 py-1 rounded">
@@ -286,20 +461,39 @@ export function AccreditationSupport() {
                       </div>
 
                       <div className="flex gap-2 mt-auto">
-                        <button 
-                          onClick={() => { setFeedbackDoc(doc); setShowFeedbackModal(true); }}
-                          disabled={isReviewing}
-                          className="flex-1 py-2 bg-red-50 text-red-600 text-xs font-bold rounded-lg hover:bg-red-100 transition-colors cursor-pointer"
-                        >
-                          Request Revision
-                        </button>
-                        <button 
-                          onClick={() => handleAdminReview(doc.name, "Approved")}
-                          disabled={isReviewing}
-                          className="flex-1 py-2 bg-[#FF9501] text-white text-xs font-bold rounded-lg hover:bg-[#D97E00] transition-colors cursor-pointer shadow-sm"
-                        >
-                          Approve
-                        </button>
+                        {doc.type === 'AACCUP' ? (
+                          <>
+                            <button 
+                              onClick={() => { setFeedbackDoc(doc); setShowFeedbackModal(true); }}
+                              disabled={isReviewing}
+                              className="flex-1 py-2 bg-red-50 text-red-600 text-xs font-bold rounded-lg hover:bg-red-100 transition-colors cursor-pointer"
+                            >
+                              Request Revision
+                            </button>
+                            <button 
+                              onClick={() => handleAdminReview(doc.name, "Approved")}
+                              disabled={isReviewing}
+                              className="flex-1 py-2 bg-[#FF9501] text-white text-xs font-bold rounded-lg hover:bg-[#D97E00] transition-colors cursor-pointer shadow-sm"
+                            >
+                              Approve
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <button 
+                              onClick={() => handleChedAdminReview(doc.id, "Not Compliant")}
+                              className="flex-1 py-2 bg-red-50 text-red-600 text-xs font-bold rounded-lg hover:bg-red-100 transition-colors cursor-pointer"
+                            >
+                              Request Revision
+                            </button>
+                            <button 
+                              onClick={() => handleChedAdminReview(doc.id, "Compliant")}
+                              className="flex-1 py-2 bg-[#FF9501] text-white text-xs font-bold rounded-lg hover:bg-[#D97E00] transition-colors cursor-pointer shadow-sm"
+                            >
+                              Approve
+                            </button>
+                          </>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -310,6 +504,7 @@ export function AccreditationSupport() {
         </div>
       )}
 
+      {/* <Tabs defaultValue="aaccup" className="w-full"> */}
       <Tabs defaultValue="aaccup" className="w-full">
         <TabsList className="grid w-full grid-cols-4 bg-gray-100 p-1">
           <TabsTrigger value="aaccup" className="data-[state=active]:bg-[#FF9501] data-[state=active]:text-white cursor-pointer transition-all">AACCUP</TabsTrigger>
@@ -318,52 +513,48 @@ export function AccreditationSupport() {
           <TabsTrigger value="results" className="data-[state=active]:bg-[#FF9501] data-[state=active]:text-white cursor-pointer transition-all">Accreditation Results</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="aaccup" className="space-y-6 mt-6">
-          <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div>
-              <h2 className="text-lg font-semibold text-gray-900">Program Evaluation Context</h2>
-              <p className="text-sm text-gray-500">Tracking compliance templates per degree program.</p>
+        <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4 mt-6">
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900">Program Evaluation Context</h2>
+            <p className="text-sm text-gray-500">Tracking compliance templates per degree program.</p>
+          </div>
+          
+          <div className="flex flex-col sm:flex-row items-center gap-4">
+            <div className="relative w-full sm:w-72">
+              <select 
+                value={selectedProgram}
+                onChange={(e) => setSelectedProgram(e.target.value)}
+                disabled={userRole === 'FACULTY'}
+                className={`appearance-none w-full px-4 py-3 border border-gray-300 rounded-lg text-sm font-medium text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#FF9501] pr-10 ${
+                  userRole === 'FACULTY' ? 'bg-gray-100 opacity-80 cursor-not-allowed' : 'bg-[#F5F7FA] cursor-pointer'
+                }`}
+              >
+                <option value="BEED">Bachelor of Elementary Education</option>
+                <option value="BSED_MATH">BSEd major in Mathematics</option>
+                <option value="BSED_ENGLISH">BSEd major in English</option>
+                <option value="BTLED_HE">BTLEd major in Home Economics</option>
+                <option value="AB_ELS">BA in English Language Studies</option>
+                <option value="AB_LIT">BA in Literature</option>
+                <option value="AB_PSYCH">BA in Psychology</option>
+                <option value="BSIE">BS in Industrial Engineering</option>
+                <option value="BSIT">BS in Information Technology</option>
+              </select>
+              {userRole === 'FACULTY' ? (
+                <Lock className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-500 pointer-events-none" />
+              ) : (
+                <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-500 pointer-events-none" />
+              )}
             </div>
-            
-            <div className="flex flex-col sm:flex-row items-center gap-4">
-              <div className="relative w-full sm:w-72">
-                <select 
-                  value={selectedProgram}
-                  onChange={(e) => setSelectedProgram(e.target.value)}
-                  disabled={userRole === 'FACULTY'}
-                  className={`appearance-none w-full px-4 py-3 border border-gray-300 rounded-lg text-sm font-medium text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#FF9501] pr-10 ${
-                    userRole === 'FACULTY' ? 'bg-gray-100 opacity-80 cursor-not-allowed' : 'bg-[#F5F7FA] cursor-pointer'
-                  }`}
-                >
-                  <option value="BEED">Bachelor of Elementary Education</option>
-                  <option value="BSED_MATH">BSEd major in Mathematics</option>
-                  <option value="BSED_ENGLISH">BSEd major in English</option>
-                  <option value="BTLED_HE">BTLEd major in Home Economics</option>
-                  <option value="AB_ELS">BA in English Language Studies</option>
-                  <option value="AB_LIT">BA in Literature</option>
-                  <option value="AB_PSYCH">BA in Psychology</option>
-                  <option value="BSIE">BS in Industrial Engineering</option>
-                  <option value="BSIT">BS in Information Technology</option>
-                  <option value="BIT_AUTO">BIT major in Automotive Technology</option>
-                  <option value="BIT_COMP">BIT major in Computer Technology</option>
-                  <option value="BIT_DRAFT">BIT major in Drafting Technology</option>
-                  <option value="BIT_ELEC">BIT major in Electronics Technology</option>
-                  <option value="BIT_GARM">BIT major in Garments Technology</option>
-                </select>
-                {userRole === 'FACULTY' ? (
-                  <Lock className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-500 pointer-events-none" />
-                ) : (
-                  <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-500 pointer-events-none" />
-                )}
-              </div>
 
-              <div className="flex items-center gap-2 px-5 py-3 bg-gradient-to-r from-[#FF9501] to-[#D97E00] text-white rounded-lg shadow-md border border-[#FF9501]/50 w-full sm:w-auto justify-center">
-                <Award className="h-5 w-5 drop-shadow-sm" />
-                <span className="font-bold tracking-wide text-shadow-sm uppercase text-xs">{currentData.level}</span>
-              </div>
+            <div className="flex items-center gap-2 px-5 py-3 bg-gradient-to-r from-[#FF9501] to-[#D97E00] text-white rounded-lg shadow-md border border-[#FF9501]/50 w-full sm:w-auto justify-center">
+              <Award className="h-5 w-5 drop-shadow-sm" />
+              <span className="font-bold tracking-wide text-shadow-sm uppercase text-xs">{currentData.level || "Level II"}</span>
             </div>
           </div>
+        </div>
 
+        {}
+        <TabsContent value="aaccup" className="space-y-6 mt-6">
           {!expandedArea ? (
             <>
               <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
@@ -601,7 +792,179 @@ export function AccreditationSupport() {
           )}
         </TabsContent>
 
-        {/* Phase 2 Mock UI Tabs - Using Amber Locks */}
+        {}
+        <TabsContent value="ched" className="mt-6 space-y-6">
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+            <div className="border-b border-gray-100 p-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-gray-50/50">
+              <div>
+                <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                  <FileCheck className="w-5 h-5 text-[#FF9501]" />
+                  CHED Program Compliance
+                </h2>
+                <p className="text-sm text-gray-500 mt-1">Monitoring of CMO requirements and mandatory submissions for {selectedProgram}.</p>
+              </div>
+              <div className="flex items-center gap-4">
+                <div className="text-right hidden sm:block">
+                  <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Overall Compliance</p>
+                  <div className={`text-2xl font-bold ${chedCompliancePercentage === 100 ? "text-[#006837]" : "text-[#FF9501]"}`}>
+                    {chedCompliancePercentage}%
+                  </div>
+                </div>
+                {userRole === "ADMIN" && (
+                  <button 
+                    onClick={() => setShowAddChedReqModal(true)}
+                    className="flex items-center gap-2 px-4 py-2 bg-[#FF9501] text-white rounded-lg hover:bg-[#D97E00] transition-all text-xs font-bold cursor-pointer shadow-sm active:scale-95"
+                  >
+                    <Plus className="h-3.5 w-3.5" /> Add Requirement
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="w-full bg-gray-100 h-1 overflow-hidden">
+              <div className={`h-full transition-all duration-1000 ease-out ${chedCompliancePercentage >= 85 ? "bg-[#006837]" : "bg-[#FF9501]"}`} style={{ width: `${chedCompliancePercentage}%` }}></div>
+            </div>
+            
+            <div className="p-0">
+              {isLoadingChed ? (
+                <div className="py-12 flex justify-center"><Loader2 className="h-8 w-8 animate-spin text-[#FF9501]" /></div>
+              ) : chedRequirements.length === 0 ? (
+                <div className="text-center py-16 border-b border-gray-100 bg-white">
+                  <FileCheck className="h-12 w-12 text-gray-300 mx-auto mb-3 opacity-50" />
+                  <h3 className="text-lg font-bold text-gray-900">No Checklist Found</h3>
+                  <p className="text-sm text-gray-500 mt-1 mb-4">There are no CHED requirements configured for {selectedProgram}.</p>
+                  {userRole === "ADMIN" && (
+                    <button onClick={() => setShowAddChedReqModal(true)} className="px-5 py-2 bg-orange-50 text-[#FF9501] text-sm font-bold rounded-lg border border-[#FF9501]/30 hover:bg-orange-100 transition-colors">
+                      Configure First Requirement
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left whitespace-nowrap">
+                    <thead className="bg-gray-50 border-b border-gray-200 text-[10px] text-gray-500 uppercase font-bold tracking-widest">
+                      <tr>
+                        <th className="px-6 py-4 w-1/3">Requirement & CMO</th>
+                        <th className="px-6 py-4 text-center">Status</th>
+                        <th className="px-6 py-4 w-1/4">Attached Evidence</th>
+                        <th className="px-6 py-4 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100 bg-white">
+                      {chedRequirements.map((req: any, index: number) => (
+                        <tr key={index} className="hover:bg-orange-50/20 transition-colors group">
+                          <td className="px-6 py-4 whitespace-normal min-w-[250px]">
+                            <div className="flex items-start gap-3">
+                              <div className="mt-1">
+                                {req.status === "Compliant" ? <CheckCircle className="h-5 w-5 text-[#006837]" /> : <div className="h-5 w-5 rounded-full border-2 border-gray-300" />}
+                              </div>
+                              <div>
+                                <p className={`text-sm ${req.status === "Compliant" ? "text-gray-900 font-medium" : "text-gray-900 font-bold"}`}>
+                                  {req.description}
+                                </p>
+                                <p className="text-[11px] text-[#FF9501] font-bold mt-1 uppercase tracking-wider">
+                                  {req.cmo_name}
+                                </p>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="flex justify-center">
+                              {req.status === "Compliant" ? (
+                                <span className="flex items-center w-max gap-1.5 px-3 py-1.5 bg-green-100 text-[#006837] text-[10px] font-bold rounded-md uppercase tracking-wider shadow-sm border border-green-200">
+                                  <Check className="h-3 w-3" /> Compliant
+                                </span>
+                              ) : req.status === "Pending" ? (
+                                <span className="flex items-center w-max gap-1.5 px-3 py-1.5 bg-orange-100 text-[#D97E00] text-[10px] font-bold rounded-md uppercase tracking-wider shadow-sm border border-orange-200">
+                                  <Clock className="h-3 w-3" /> Pending Review
+                                </span>
+                              ) : (
+                                <span className="flex items-center w-max gap-1.5 px-3 py-1.5 bg-red-50 text-red-600 text-[10px] font-bold rounded-md uppercase tracking-wider shadow-sm border border-red-100">
+                                  <AlertCircle className="h-3 w-3" /> Not Compliant
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-normal">
+                            {req.evidences && req.evidences.length > 0 ? (
+                              <div className="space-y-2">
+                                {req.evidences.map((ev: any, idx: number) => (
+                                  <div key={idx} className="flex items-center gap-2 p-2 bg-gray-50 rounded border border-gray-100">
+                                    <FileText className="h-3.5 w-3.5 text-[#FF9501] shrink-0" />
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-xs font-bold text-gray-900 truncate" title={ev.document_name}>{ev.document_name}</p>
+                                      <p className="text-[9px] text-gray-500 uppercase mt-0.5">By {ev.uploaded_by}</p>
+                                    </div>
+                                    <div className="flex items-center gap-1 shrink-0">
+                                      <button onClick={() => window.open(ev.file_url, "_blank")} className="p-1.5 text-gray-400 hover:text-[#FF9501] bg-white rounded shadow-sm shrink-0">
+                                        <Eye className="h-3 w-3" />
+                                      </button>
+                                      {/* Allow user who uploaded it or ADMIN to delete it */}
+                                      {(userRole === 'ADMIN' || ev.uploaded_by === userName) && (
+                                        <button onClick={() => confirmDeleteChedEvidence(ev)} className="p-1.5 text-gray-400 hover:text-red-500 bg-white rounded shadow-sm shrink-0">
+                                          <Archive className="h-3 w-3" />
+                                        </button>
+                                      )}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <span className="text-xs text-gray-400 italic">No files attached</span>
+                            )}
+                          </td>
+                          <td className="px-6 py-4 text-right">
+                            <div className="flex items-center justify-end gap-2">
+                              {/* If Not Compliant, anyone can upload evidence */}
+                              {req.status === "Not Compliant" && (
+                                <button 
+                                  onClick={() => { setSelectedChedReq(req); setUploadForm({ fileName: "", requirementTarget: "" }); setSelectedFile(null); setShowChedUploadModal(true); }}
+                                  className="flex items-center gap-1.5 px-3 py-1.5 bg-[#FF9501] text-white text-[10px] font-bold uppercase tracking-wider rounded hover:bg-[#D97E00] transition-colors shadow-sm"
+                                >
+                                  <Upload className="h-3 w-3" /> Upload
+                                </button>
+                              )}
+
+                              {/* Admin Controls (Moved Approve/Reject to Top Queue, kept Edit/Delete/Revoke here) */}
+                              {userRole === "ADMIN" && (
+                                <>
+                                  {req.status === "Compliant" && (
+                                     <button onClick={() => handleChedAdminReview(req.id, "Not Compliant")} className="px-3 py-1.5 bg-gray-100 text-gray-600 hover:bg-gray-200 text-[10px] font-bold uppercase tracking-wider rounded transition-colors" title="Revoke Compliance">
+                                       Revoke
+                                     </button>
+                                  )}
+                                  
+                                  {/* Only show Edit/Delete if no evidence is attached or it's not compliant */}
+                                  {(req.status === "Not Compliant" || req.status === "Pending") && (
+                                    <>
+                                      <button 
+                                        onClick={() => { setEditingChedReq(req); setShowEditChedModal(true); }}
+                                        className="p-1.5 text-gray-400 hover:text-[#FF9501] transition-colors rounded" title="Edit Requirement"
+                                      >
+                                        <Edit className="h-4 w-4" />
+                                      </button>
+                                      <button 
+                                        onClick={() => confirmDeleteChedRequirement(req.id)}
+                                        className="p-1.5 text-gray-400 hover:text-red-500 transition-colors rounded" title="Delete Requirement"
+                                      >
+                                        <Archive className="h-4 w-4" />
+                                      </button>
+                                    </>
+                                  )}
+                                </>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        </TabsContent>
+
         <TabsContent value="iso" className="mt-6 space-y-6">
           <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
             <div className="border-b border-gray-100 p-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-gray-50/50">
@@ -654,30 +1017,6 @@ export function AccreditationSupport() {
           </div>
         </TabsContent>
 
-        {/* Other tabs follow the same Amber locking pattern */}
-        <TabsContent value="ched" className="mt-6 space-y-6">
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-            <div className="border-b border-gray-100 p-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-gray-50/50">
-              <div>
-                <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-                  <FileCheck className="w-5 h-5 text-[#FF9501]" />
-                  CHED Program Compliance
-                </h2>
-                <p className="text-sm text-gray-500 mt-1">Monitoring of CMO requirements and mandatory submissions.</p>
-              </div>
-              <span className="px-3 py-1 bg-[#FFF4E5] text-[#D97E00] text-[10px] font-bold rounded-full uppercase tracking-widest flex items-center gap-1.5 border border-[#FF9501]/20 shadow-sm">
-                <Lock className="w-3 h-3" />
-                Phase 2 Preview
-              </span>
-            </div>
-            <div className="p-6">
-              <div className="space-y-3 italic text-gray-400 text-sm text-center py-8">
-                Content mapping for CHED Memorandum Orders is coming in the next update.
-              </div>
-            </div>
-          </div>
-        </TabsContent>
-
         <TabsContent value="results" className="mt-6 space-y-6">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="col-span-1 lg:col-span-2 bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
@@ -712,7 +1051,7 @@ export function AccreditationSupport() {
         </TabsContent>
       </Tabs>
 
-      {/* --- UPLOAD MODAL --- */}
+      {/* --- AACCUP UPLOAD MODAL --- */}
       {showUploadModal && uploadTargetArea && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in">
           <div className="bg-white rounded-2xl max-w-xl w-full shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 border border-gray-200">
@@ -798,7 +1137,164 @@ export function AccreditationSupport() {
         </div>
       )}
 
-      {/* --- ADMIN FEEDBACK MODAL --- */}
+      {/* --- NEW CHED UPLOAD MODAL --- */}
+      {showChedUploadModal && selectedChedReq && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in">
+          <div className="bg-white rounded-2xl max-w-xl w-full shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 border border-gray-200">
+            <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-[#F5F7FA]">
+              <div>
+                <h2 className="text-xl font-bold text-[#1F2937]">Upload CHED Evidence</h2>
+                <p className="text-xs font-semibold text-[#D97E00] mt-1 uppercase tracking-wider">Tagging for {selectedProgram}</p>
+              </div>
+              <button onClick={() => setShowChedUploadModal(false)} className="p-2 hover:bg-gray-200 rounded-full transition-colors cursor-pointer">
+                <X className="h-5 w-5 text-gray-500" />
+              </button>
+            </div>
+            
+            <form onSubmit={handleChedUploadSubmit} className="p-6 space-y-5">
+              <div className="p-4 bg-orange-50/50 rounded-xl border border-[#FF9501]/10">
+                <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Target Requirement (Locked)</label>
+                <div className="text-sm font-bold text-gray-900">{selectedChedReq.description}</div>
+                <div className="text-[10px] font-bold text-[#D97E00] uppercase tracking-wider mt-1">{selectedChedReq.cmo_name}</div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-2 uppercase tracking-wider">Document Name</label>
+                <input
+                  type="text" required value={uploadForm.fileName} onChange={(e) => setUploadForm({...uploadForm, fileName: e.target.value})}
+                  className="w-full px-4 py-3 bg-[#F5F7FA] border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#FF9501] transition-all font-medium text-sm"
+                  placeholder="e.g., Dean's Transcript of Records 2026.pdf"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-2 uppercase tracking-wider">File Upload</label>
+                <div 
+                  onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop} onClick={() => fileInputRef.current?.click()}
+                  className={`border-2 border-dashed rounded-xl p-8 text-center transition-all cursor-pointer ${
+                    isDragging ? "border-[#FF9501] bg-[#FFF4E5]" : "border-gray-200 hover:border-[#FF9501] bg-gray-50 hover:bg-gray-100"
+                  }`}
+                >
+                  {selectedFile ? (
+                    <div className="flex flex-col items-center">
+                      <FileText className="h-10 w-10 text-[#FF9501] mb-3" />
+                      <p className="text-sm font-bold text-gray-900">{selectedFile.name}</p>
+                      <p className="text-[10px] text-gray-500 font-bold uppercase mt-1">{(selectedFile.size / 1024 / 1024).toFixed(2)} MB</p>
+                    </div>
+                  ) : (
+                    <div>
+                      <Upload className="h-8 w-8 text-gray-300 mx-auto mb-3" />
+                      <p className="text-sm font-bold text-gray-700">Drag or click to upload PDF/DOCX</p>
+                    </div>
+                  )}
+                  <input type="file" accept=".pdf,.docx,.txt" className="hidden" ref={fileInputRef} onChange={handleFileSelect} />
+                </div>
+              </div>
+
+              <div className="pt-4 flex gap-3">
+                <button type="button" onClick={() => setShowChedUploadModal(false)} className="flex-1 px-5 py-3 text-sm font-bold text-gray-500 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors cursor-pointer uppercase tracking-wider">
+                  Cancel
+                </button>
+                <button type="submit" disabled={!uploadForm.fileName || !selectedFile || isUploading} className="flex-1 px-5 py-3 text-sm font-bold bg-[#FF9501] text-white rounded-xl hover:bg-[#D97E00] disabled:opacity-50 transition-all flex justify-center items-center gap-2 cursor-pointer active:scale-95 shadow-md uppercase tracking-wider">
+                  {isUploading ? <><Loader2 className="h-4 w-4 animate-spin"/> Processing...</> : "Submit Evidence"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* --- ADMIN ONLY: ADD CHED REQUIREMENT MODAL --- */}
+      {showAddChedReqModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in">
+          <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 border border-gray-200">
+            <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-[#F5F7FA]">
+              <div>
+                <h2 className="text-xl font-bold text-[#1F2937]">Add Requirement</h2>
+                <p className="text-xs font-semibold text-[#D97E00] mt-1 uppercase tracking-wider">Program: {selectedProgram}</p>
+              </div>
+              <button onClick={() => setShowAddChedReqModal(false)} className="p-2 hover:bg-gray-200 rounded-full transition-colors cursor-pointer">
+                <X className="h-5 w-5 text-gray-500" />
+              </button>
+            </div>
+            
+            <form onSubmit={handleAddChedRequirement} className="p-6 space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-2 uppercase tracking-wider">CMO Reference</label>
+                <input
+                  type="text" required value={newChedReq.cmo_name} onChange={(e) => setNewChedReq({...newChedReq, cmo_name: e.target.value})}
+                  className="w-full px-4 py-3 bg-[#F5F7FA] border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#FF9501] transition-all font-medium text-sm"
+                  placeholder="e.g., CMO 25 series of 2015"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-2 uppercase tracking-wider">Requirement Description</label>
+                <textarea
+                  required value={newChedReq.description} onChange={(e) => setNewChedReq({...newChedReq, description: e.target.value})} rows={3}
+                  className="w-full px-4 py-3 bg-[#F5F7FA] border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#FF9501] transition-all font-medium text-sm resize-none"
+                  placeholder="e.g., The Dean must hold a Master's degree in Information Technology."
+                />
+              </div>
+
+              <div className="pt-4 flex gap-3 border-t border-gray-100">
+                <button type="button" onClick={() => setShowAddChedReqModal(false)} className="flex-1 px-5 py-3 text-sm font-bold text-gray-500 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors cursor-pointer uppercase tracking-wider">
+                  Cancel
+                </button>
+                <button type="submit" disabled={!newChedReq.cmo_name || !newChedReq.description || isAddingReq} className="flex-1 px-5 py-3 text-sm font-bold bg-[#FF9501] text-white rounded-xl hover:bg-[#D97E00] disabled:opacity-50 transition-all flex justify-center items-center gap-2 cursor-pointer active:scale-95 shadow-md uppercase tracking-wider">
+                  {isAddingReq ? <><Loader2 className="h-4 w-4 animate-spin"/> Saving...</> : "Add to Checklist"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* --- ADMIN ONLY: EDIT CHED REQUIREMENT MODAL --- */}
+      {showEditChedModal && editingChedReq && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in">
+          <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 border border-gray-200">
+            <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-[#F5F7FA]">
+              <div>
+                <h2 className="text-xl font-bold text-[#1F2937]">Edit Requirement</h2>
+                <p className="text-xs font-semibold text-[#D97E00] mt-1 uppercase tracking-wider">Program: {selectedProgram}</p>
+              </div>
+              <button onClick={() => setShowEditChedModal(false)} className="p-2 hover:bg-gray-200 rounded-full transition-colors cursor-pointer">
+                <X className="h-5 w-5 text-gray-500" />
+              </button>
+            </div>
+            
+            <form onSubmit={handleEditChedRequirement} className="p-6 space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-2 uppercase tracking-wider">CMO Reference</label>
+                <input
+                  type="text" required value={editingChedReq.cmo_name} onChange={(e) => setEditingChedReq({...editingChedReq, cmo_name: e.target.value})}
+                  className="w-full px-4 py-3 bg-[#F5F7FA] border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#FF9501] transition-all font-medium text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-2 uppercase tracking-wider">Requirement Description</label>
+                <textarea
+                  required value={editingChedReq.description} onChange={(e) => setEditingChedReq({...editingChedReq, description: e.target.value})} rows={3}
+                  className="w-full px-4 py-3 bg-[#F5F7FA] border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#FF9501] transition-all font-medium text-sm resize-none"
+                />
+              </div>
+
+              <div className="pt-4 flex gap-3 border-t border-gray-100">
+                <button type="button" onClick={() => setShowEditChedModal(false)} className="flex-1 px-5 py-3 text-sm font-bold text-gray-500 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors cursor-pointer uppercase tracking-wider">
+                  Cancel
+                </button>
+                <button type="submit" disabled={!editingChedReq.cmo_name || !editingChedReq.description || isEditingReq} className="flex-1 px-5 py-3 text-sm font-bold bg-[#FF9501] text-white rounded-xl hover:bg-[#D97E00] disabled:opacity-50 transition-all flex justify-center items-center gap-2 cursor-pointer active:scale-95 shadow-md uppercase tracking-wider">
+                  {isEditingReq ? <><Loader2 className="h-4 w-4 animate-spin"/> Saving...</> : "Save Changes"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* --- ADMIN AACCUP FEEDBACK MODAL --- */}
       {showFeedbackModal && feedbackDoc && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4 animate-in fade-in">
           <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 border border-red-100">
@@ -834,7 +1330,7 @@ export function AccreditationSupport() {
         </div>
       )}
 
-      {/* --- DELETE/ARCHIVE MODAL --- */}
+      {/* --- AACCUP DELETE/ARCHIVE MODAL --- */}
       {showDeleteModal && docToDelete && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in">
           <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 border border-red-100">
@@ -856,6 +1352,62 @@ export function AccreditationSupport() {
               </button>
               <button onClick={executeDelete} disabled={isDeleting} className="px-5 py-2.5 text-xs font-bold text-white rounded-xl bg-red-600 hover:bg-red-700 transition-all disabled:opacity-50 flex justify-center items-center gap-2 cursor-pointer uppercase tracking-widest shadow-md">
                 {isDeleting ? <><Loader2 className="h-3 w-3 animate-spin"/> Archiving...</> : "Yes, Archive File"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- CHED DELETE REQUIREMENT MODAL --- */}
+      {showDeleteChedReqModal && chedReqToDelete && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in">
+          <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 border border-red-100">
+            <div className="p-6 border-b border-red-50 bg-red-50 flex items-center gap-3">
+              <ShieldAlert className="h-6 w-6 text-red-600" />
+              <h2 className="text-xl font-bold text-red-700">Delete Requirement</h2>
+            </div>
+            <div className="p-6 space-y-4">
+              <p className="text-sm text-gray-600 leading-relaxed font-medium">
+                Are you sure you want to permanently delete this requirement?
+              </p>
+              <p className="text-xs text-red-500 leading-relaxed italic font-bold">
+                Warning: This will also permanently delete any evidence documents attached to this requirement.
+              </p>
+            </div>
+            <div className="p-6 border-t border-gray-100 bg-[#F9FAFB] flex justify-end gap-3">
+              <button onClick={() => setShowDeleteChedReqModal(false)} disabled={isDeleting} className="px-5 py-2.5 text-xs font-bold text-gray-500 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors cursor-pointer uppercase tracking-widest">
+                Cancel
+              </button>
+              <button onClick={executeDeleteChedRequirement} disabled={isDeleting} className="px-5 py-2.5 text-xs font-bold text-white rounded-xl bg-red-600 hover:bg-red-700 transition-all disabled:opacity-50 flex justify-center items-center gap-2 cursor-pointer uppercase tracking-widest shadow-md">
+                {isDeleting ? <><Loader2 className="h-3 w-3 animate-spin"/> Deleting...</> : "Yes, Delete Requirement"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- CHED DELETE EVIDENCE MODAL --- */}
+      {showDeleteChedEvidenceModal && chedEvidenceToDelete && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in">
+          <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 border border-red-100">
+            <div className="p-6 border-b border-red-50 bg-red-50 flex items-center gap-3">
+              <Archive className="h-6 w-6 text-red-600" />
+              <h2 className="text-xl font-bold text-red-700">Remove Attached Evidence</h2>
+            </div>
+            <div className="p-6 space-y-4">
+              <p className="text-sm text-gray-600 leading-relaxed font-medium">
+                Are you sure you want to remove <span className="font-bold text-gray-900">"{chedEvidenceToDelete.document_name}"</span>?
+              </p>
+              <p className="text-xs text-gray-500 leading-relaxed italic">
+                If this is the only evidence attached, the requirement status will automatically revert to "Not Compliant".
+              </p>
+            </div>
+            <div className="p-6 border-t border-gray-100 bg-[#F9FAFB] flex justify-end gap-3">
+              <button onClick={() => setShowDeleteChedEvidenceModal(false)} disabled={isDeleting} className="px-5 py-2.5 text-xs font-bold text-gray-500 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors cursor-pointer uppercase tracking-widest">
+                Cancel
+              </button>
+              <button onClick={executeDeleteChedEvidence} disabled={isDeleting} className="px-5 py-2.5 text-xs font-bold text-white rounded-xl bg-red-600 hover:bg-red-700 transition-all disabled:opacity-50 flex justify-center items-center gap-2 cursor-pointer uppercase tracking-widest shadow-md">
+                {isDeleting ? <><Loader2 className="h-3 w-3 animate-spin"/> Removing...</> : "Yes, Remove Evidence"}
               </button>
             </div>
           </div>

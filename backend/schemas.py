@@ -67,3 +67,30 @@ class AnnouncementUpdate(BaseModel):
     schedule_date: Optional[str] = None
     status: str
     total_recipients: int
+
+# --- NEW: CHED MONITORING SCHEMAS ---
+class ChedRequirementCreate(BaseModel):
+    program: str
+    cmo_name: str
+    description: str
+
+class ChedEvidenceResponse(BaseModel):
+    id: uuid.UUID
+    document_name: str
+    file_url: str
+    uploaded_by: str
+    upload_date: datetime
+
+    class Config:
+        from_attributes = True
+
+class ChedRequirementResponse(BaseModel):
+    id: uuid.UUID
+    program: str
+    cmo_name: str
+    description: str
+    status: str
+    evidences: list[ChedEvidenceResponse] = [] # Automatically nests attached files!
+
+    class Config:
+        from_attributes = True

@@ -179,7 +179,7 @@ export function LandingPage() {
                   to="/login" 
                   className="inline-flex items-center justify-center px-8 py-4 bg-white border-2 border-[#E5E7EB] text-[#1F2937] rounded-2xl hover:border-[#FF9501] hover:text-[#FF9501] transition-all font-medium"
                 >
-                  Login to System
+                  Sign in to System
                 </Link>
               </div>
 

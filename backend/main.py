@@ -1380,11 +1380,11 @@ async def upload_accreditation_evidence(
             "category": "Accreditation Evidence",
             "office": "Quality Assurance",
             "version": "1.0",
-            "status": "Pending", # <--- NEW: Defaults to Pending!
+            "status": "Pending", 
             "program": program,
             "area_code": area_code,
             "requirement_target": requirement_target, 
-            "uploaded_by": uploaded_by, # <--- NEW: Track the faculty member
+            "uploaded_by": uploaded_by, 
             "admin_feedback": "",
             "upload_date": datetime.now().isoformat(),
             "file_url": public_url
@@ -1394,9 +1394,9 @@ async def upload_accreditation_evidence(
 
         # --- SILENT AUDIT LOG ---
         try:
-            from vector_store import supabase
+            # FIX: Using the global supabase client instead of importing it locally
             supabase.table("system_events_logs").insert({
-                "user_email": uploaded_by, # We use the uploader's name/email here
+                "user_email": uploaded_by, 
                 "event_type": "Accreditation Upload",
                 "description": f"Uploaded '{document_name}' for {program} ({area_code}) - Pending Review"
             }).execute()
@@ -2308,3 +2308,202 @@ def update_system_settings(req: SettingsSchema, db: Session = Depends(get_db)):
         pass
     
     return {"message": "Settings successfully updated!"}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CHED MONITORING MODULE
+# ─────────────────────────────────────────────────────────────────────────────
+
+@app.post("/ched/requirements", response_model=schemas.ChedRequirementResponse)
+def create_ched_requirement(req: schemas.ChedRequirementCreate, db: Session = Depends(get_db)):
+    """Admin endpoint to add a new blank requirement to the checklist."""
+    new_req = models.ChedRequirement(
+        program=req.program,
+        cmo_name=req.cmo_name,
+        description=req.description,
+        status="Not Compliant"
+    )
+    db.add(new_req)
+    db.commit()
+    db.refresh(new_req)
+    
+    # --- SILENT AUDIT LOG ---
+    try:
+        supabase.table("system_events_logs").insert({
+            "user_email": "System Admin",
+            "event_type": "CHED Setup",
+            "description": f"Added new CHED requirement for {req.program}"
+        }).execute()
+    except Exception:
+        pass
+        
+    return new_req
+
+@app.put("/ched/requirements/{req_id}", response_model=schemas.ChedRequirementResponse)
+def update_ched_requirement(req_id: str, req: schemas.ChedRequirementCreate, db: Session = Depends(get_db)):
+    """Admin endpoint to edit an existing requirement."""
+    requirement = db.query(models.ChedRequirement).filter(models.ChedRequirement.id == req_id).first()
+    if not requirement:
+        raise HTTPException(status_code=404, detail="Requirement not found")
+        
+    requirement.cmo_name = req.cmo_name
+    requirement.description = req.description
+    db.commit()
+    db.refresh(requirement)
+    return requirement
+
+@app.delete("/ched/requirements/{req_id}")
+def delete_ched_requirement(req_id: str, db: Session = Depends(get_db)):
+    """Admin endpoint to delete a requirement."""
+    requirement = db.query(models.ChedRequirement).filter(models.ChedRequirement.id == req_id).first()
+    if not requirement:
+        raise HTTPException(status_code=404, detail="Requirement not found")
+        
+    db.delete(requirement)
+    db.commit()
+    return {"message": "Requirement deleted successfully."}
+
+@app.get("/ched/requirements/{program}", response_model=List[schemas.ChedRequirementResponse])
+def get_ched_requirements(program: str, db: Session = Depends(get_db)):
+    """Fetches all requirements for a specific program (e.g., BSIT), including nested attached files."""
+    reqs = db.query(models.ChedRequirement).filter(models.ChedRequirement.program == program).all()
+    return reqs
+
+@app.post("/ched/upload-evidence")
+async def upload_ched_evidence(
+    file: UploadFile = File(...),
+    requirement_id: str = Form(...),
+    document_name: str = Form(...),
+    uploaded_by: str = Form(...),
+    program: str = Form(...), # NEW: Needed for vector metadata
+    db: Session = Depends(get_db)
+):
+    """Uploads PDF evidence to Supabase Storage, links it to CHED, and embeds it for RAG."""
+    import PyPDF2
+    
+    # 1. Verify the requirement exists
+    requirement = db.query(models.ChedRequirement).filter(models.ChedRequirement.id == requirement_id).first()
+    if not requirement:
+        raise HTTPException(status_code=404, detail="CHED Requirement not found")
+
+    # 2. Extract Text & Upload File
+    contents = await file.read()
+    extracted_text = ""
+    filename_lower = file.filename.lower()
+
+    if filename_lower.endswith(".pdf"):
+        pdf_reader = PyPDF2.PdfReader(io.BytesIO(contents))
+        for page in pdf_reader.pages:
+            text = page.extract_text()
+            if text: extracted_text += text + "\n"
+    elif filename_lower.endswith(".docx"):
+        import docx
+        doc = docx.Document(io.BytesIO(contents))
+        extracted_text = "\n".join([paragraph.text for paragraph in doc.paragraphs])
+    
+    safe_filename = file.filename.replace(" ", "_")
+    unique_filename = f"ched_{int(time.time())}_{safe_filename}"
+    
+    try:
+        supabase.storage.from_("documents").upload(
+            file=contents, path=unique_filename, file_options={"content-type": file.content_type}
+        )
+        public_url = supabase.storage.from_("documents").get_public_url(unique_filename)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Failed to upload file to storage.")
+
+    # 3. Save Record in PostgreSQL Database
+    new_evidence = models.ChedEvidence(
+        requirement_id=requirement.id,
+        document_name=document_name,
+        file_url=public_url,
+        uploaded_by=uploaded_by
+    )
+    db.add(new_evidence)
+    
+    # 4. Automatically change the requirement status to "Pending"
+    requirement.status = "Pending"
+    db.commit()
+
+    # 5. NEW: Embed into Vector Database so the AI can read it!
+    if extracted_text.strip():
+        metadata = {
+            "name": document_name,
+            "category": "CHED Evidence",
+            "office": "Quality Assurance",
+            "version": "1.0",
+            "status": "Pending",
+            "program": program,
+            "requirement_target": requirement.description,
+            "uploaded_by": uploaded_by,
+            "upload_date": datetime.now().isoformat(),
+            "file_url": public_url,
+            "is_ched": True,
+            "req_id": str(requirement.id) # Link back to the SQL row
+        }
+        vector_store.add_to_vector_db(extracted_text, metadata)
+
+    return {"message": "Evidence uploaded successfully. Status set to Pending Review."}
+
+@app.put("/ched/requirements/{requirement_id}/status")
+def update_ched_status(requirement_id: str, status: str = Body(..., embed=True), db: Session = Depends(get_db)):
+    """Admin endpoint to Accept or Revoke. If Revoked, deletes the attached evidence."""
+    req = db.query(models.ChedRequirement).filter(models.ChedRequirement.id == requirement_id).first()
+    if not req:
+        raise HTTPException(status_code=404, detail="Requirement not found")
+        
+    req.status = status 
+    
+    # If the admin Revokes or Rejects, we must delete the evidence file record
+    if status == "Not Compliant":
+        # Delete from SQL
+        db.query(models.ChedEvidence).filter(models.ChedEvidence.requirement_id == requirement_id).delete()
+        
+        # Archive from Vector DB so AI stops reading it
+        try:
+            from vector_store import supabase
+            chunks_res = supabase.table("document_sections").select("id, metadata").eq("metadata->>req_id", requirement_id).execute()
+            if chunks_res.data:
+                for chunk in chunks_res.data:
+                    chunk_meta = chunk['metadata']
+                    chunk_meta['status'] = "Archived"
+                    supabase.table("document_sections").update({"metadata": chunk_meta}).eq("id", chunk['id']).execute()
+        except Exception:
+            pass
+            
+    db.commit()
+    return {"message": f"Requirement successfully marked as {status}"}
+
+# --- NEW: DELETE CHED EVIDENCE ---
+@app.delete("/ched/evidence/{evidence_id}")
+def delete_ched_evidence(evidence_id: str, db: Session = Depends(get_db)):
+    """Deletes specific CHED evidence and archives its vector chunks."""
+    evidence = db.query(models.ChedEvidence).filter(models.ChedEvidence.id == evidence_id).first()
+    if not evidence:
+        raise HTTPException(status_code=404, detail="Evidence not found")
+        
+    req_id = evidence.requirement_id
+    doc_name = evidence.document_name
+    
+    # Delete from SQL
+    db.delete(evidence)
+    
+    # Auto-revert requirement status to Not Compliant if empty
+    req = db.query(models.ChedRequirement).filter(models.ChedRequirement.id == req_id).first()
+    if req and len(req.evidences) == 0:
+        req.status = "Not Compliant"
+        
+    db.commit()
+    
+    # Archive from Vector DB
+    try:
+        from vector_store import supabase
+        chunks_res = supabase.table("document_sections").select("id, metadata").eq("metadata->>req_id", str(req_id)).eq("metadata->>name", doc_name).execute()
+        if chunks_res.data:
+            for chunk in chunks_res.data:
+                chunk_meta = chunk['metadata']
+                chunk_meta['status'] = "Archived"
+                supabase.table("document_sections").update({"metadata": chunk_meta}).eq("id", chunk['id']).execute()
+    except Exception:
+        pass
+        
+    return {"message": "Evidence deleted successfully."}

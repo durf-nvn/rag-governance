@@ -68,3 +68,25 @@ class SystemSettings(Base):
     ai_temperature = Column(Float, default=0.3)
     ai_system_prompt = Column(Text, default="You are the friendly and professional AI Policy Assistant for Cebu Technological University (CTU) Argao Campus. INSTRUCTIONS: 1. If the question is about university rules, grades, or handbooks, use the CONTEXT provided below to answer. 2. If NO CONTEXT is found, apologize and direct them to the campus office.")
     rag_max_chunks = Column(Integer, default=5)
+
+# --- NEW: CHED MONITORING TABLES ---
+class ChedRequirement(Base):
+    __tablename__ = "ched_requirements"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    program = Column(String(255), nullable=False) # e.g., "BSIT"
+    cmo_name = Column(String(255), nullable=False) # e.g., "CMO 25 series of 2015"
+    description = Column(Text, nullable=False) # The actual rule/requirement
+    status = Column(String(50), default="Not Compliant") # Compliant, Pending, Not Compliant
+
+    evidences = relationship("ChedEvidence", back_populates="requirement", cascade="all, delete-orphan")
+
+class ChedEvidence(Base):
+    __tablename__ = "ched_evidences"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    requirement_id = Column(UUID(as_uuid=True), ForeignKey("ched_requirements.id", ondelete="CASCADE"))
+    document_name = Column(String(255), nullable=False)
+    file_url = Column(String, nullable=False)
+    uploaded_by = Column(String(255), nullable=False)
+    upload_date = Column(DateTime, default=datetime.utcnow)
+
+    requirement = relationship("ChedRequirement", back_populates="evidences")
