@@ -18,6 +18,82 @@ import PyPDF2
 import groq
 import time
 import re
+import traceback
+import numpy as np
+from PIL import Image as PILImage
+
+# Lazy-load PaddleOCR to avoid blocking at startup
+_ocr_instance = None
+
+def get_ocr():
+    global _ocr_instance
+    if _ocr_instance is None:
+        from paddleocr import PaddleOCR
+        _ocr_instance = PaddleOCR(use_angle_cls=True, lang='en')
+    return _ocr_instance
+
+def run_ocr(ocr_instance, img_array):
+    """Run OCR and extract text lines. Compatible with PaddleOCR 2.x."""
+    extracted = ""
+    result = ocr_instance.ocr(img_array, cls=True)
+    if result and result[0]:
+        for line in result[0]:
+            if line and len(line) >= 2:
+                extracted += line[1][0] + "\n"
+    return extracted
+
+# Minimum characters per page from PyPDF2 before we OCR that page.
+# Pages with tables/images embedded as images usually yield < 50 chars.
+OCR_FALLBACK_THRESHOLD = 50
+
+def extract_pdf_text(contents: bytes) -> str:
+    """
+    Extract text from a PDF with per-page OCR fallback.
+
+    Strategy:
+    - For each page, try PyPDF2 first (fast).
+    - If a page yields fewer than OCR_FALLBACK_THRESHOLD characters,
+      it likely contains an embedded image/table — render the page
+      as an image and run PaddleOCR on it instead.
+    - This correctly handles:
+        1. Normal text PDFs      → PyPDF2 only (fast)
+        2. Fully scanned PDFs    → OCR every page
+        3. Mixed PDFs (e.g. Student Handbook with image tables)
+                                 → PyPDF2 for text pages, OCR for image pages
+    """
+    import fitz
+
+    extracted_text = ""
+    pdf_reader    = PyPDF2.PdfReader(io.BytesIO(contents))
+    pdf_document  = fitz.open(stream=contents, filetype="pdf")
+    ocr_instance  = None  # lazy-init only if needed
+
+    for page_num, page in enumerate(pdf_reader.pages):
+        page_text = page.extract_text() or ""
+
+        if len(page_text.strip()) >= OCR_FALLBACK_THRESHOLD:
+            # Enough text from PyPDF2 — use it directly
+            extracted_text += page_text + "\n"
+        else:
+            # Too little text → page is likely an image/table scan → use OCR
+            if ocr_instance is None:
+                ocr_instance = get_ocr()
+
+            fitz_page = pdf_document.load_page(page_num)
+            pix       = fitz_page.get_pixmap(dpi=150)
+            img_array = np.frombuffer(pix.samples, dtype=np.uint8).reshape(
+                pix.height, pix.width, pix.n
+            )
+            if pix.n == 4:  # RGBA → RGB
+                img_array = img_array[:, :, :3]
+
+            ocr_text = run_ocr(ocr_instance, img_array)
+            # Prefer OCR result; if OCR also yields nothing, keep PyPDF2 text
+            extracted_text += (ocr_text if ocr_text.strip() else page_text) + "\n"
+
+    pdf_document.close()
+    return extracted_text
+
 
 def supabase_query_with_retry(query_fn, retries=3, delay=1):
     """Retry a Supabase query on connection drops."""
@@ -668,11 +744,12 @@ async def upload_document(
         filename_lower = file.filename.lower()
 
         if filename_lower.endswith(".pdf"):
-            pdf_reader = PyPDF2.PdfReader(io.BytesIO(contents))
-            for page in pdf_reader.pages:
-                text = page.extract_text()
-                if text:
-                    extracted_text += text + "\n"
+            extracted_text = extract_pdf_text(contents)
+        elif filename_lower.endswith((".png", ".jpg", ".jpeg")):
+            img = PILImage.open(io.BytesIO(contents)).convert("RGB")
+            img_array = np.array(img)
+            ocr = get_ocr()
+            extracted_text = run_ocr(ocr, img_array)
         elif filename_lower.endswith(".txt"):
             extracted_text = contents.decode("utf-8")
         elif filename_lower.endswith(".docx"):
@@ -680,10 +757,10 @@ async def upload_document(
             doc = docx.Document(io.BytesIO(contents))
             extracted_text = "\n".join([paragraph.text for paragraph in doc.paragraphs])
         else:
-            raise HTTPException(status_code=400, detail="Unsupported file format. Please upload PDF, DOCX, or TXT.")
+            raise HTTPException(status_code=400, detail="Unsupported file format. Please upload PDF, DOCX, TXT, or Image.")
 
         if not extracted_text.strip():
-            raise HTTPException(status_code=400, detail="Could not extract text from document.")
+            raise HTTPException(status_code=400, detail="Could not extract text from document or image.")
 
         safe_filename   = file.filename.replace(" ", "_")
         unique_filename = f"{int(time.time())}_{safe_filename}"
@@ -734,8 +811,9 @@ async def upload_document(
         }
 
     except Exception as e:
-        print(f"Error: {str(e)}")
-        raise HTTPException(status_code=500, detail="Internal Server Error during processing.")
+        print(f"Error in upload-document: {str(e)}")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
 
 
 @app.post("/upload-new-version")
@@ -768,11 +846,12 @@ async def upload_new_version(
         filename_lower = file.filename.lower()
 
         if filename_lower.endswith(".pdf"):
-            pdf_reader = PyPDF2.PdfReader(io.BytesIO(contents))
-            for page in pdf_reader.pages:
-                text = page.extract_text()
-                if text:
-                    extracted_text += text + "\n"
+            extracted_text = extract_pdf_text(contents)
+        elif filename_lower.endswith((".png", ".jpg", ".jpeg")):
+            img = PILImage.open(io.BytesIO(contents)).convert("RGB")
+            img_array = np.array(img)
+            ocr = get_ocr()
+            extracted_text = run_ocr(ocr, img_array)
         elif filename_lower.endswith(".txt"):
             extracted_text = contents.decode("utf-8")
         elif filename_lower.endswith(".docx"):
@@ -964,7 +1043,30 @@ def archive_document(doc_name: str, db: Session = Depends(get_db)):
 def ask_policy(request: QuestionRequest, db: Session = Depends(get_db)):
     question = request.question
     user_email = request.user_email
-    user_role = request.user_role
+    user_role = request.user_role.upper()
+
+    # ==========================================
+    # ROLE-BASED ACCESS CONFIGURATION
+    # ==========================================
+    # Define which document categories are restricted per role.
+    # STUDENT → cannot access Accreditation Evidence (confidential).
+    # FACULTY and ADMIN → full access to all categories.
+    STUDENT_RESTRICTED_CATEGORIES = ["Accreditation Evidence"]
+
+    excluded_categories = []
+    if user_role == "STUDENT":
+        excluded_categories = STUDENT_RESTRICTED_CATEGORIES
+
+    # Keywords that strongly indicate a query about restricted content.
+    # Used to detect when a student is asking about a restricted topic
+    # so we can return a clear explanation instead of a generic 'not found'.
+    RESTRICTED_TOPIC_KEYWORDS = [
+        "accreditation", "aaccup", "accredit", "self-survey",
+        "survey instrument", "accreditation evidence",
+        "area i", "area ii", "area iii", "area iv", "area v",
+        "area vi", "area vii", "area viii", "area ix", "area x",
+        "accreditation standard", "accreditor"
+    ]
 
     # ==========================================
     # 1. FETCH DYNAMIC SETTINGS
@@ -972,7 +1074,7 @@ def ask_policy(request: QuestionRequest, db: Session = Depends(get_db)):
     settings = db.query(models.SystemSettings).filter(models.SystemSettings.id == 1).first()
     
     # Fallbacks in case settings aren't set yet
-    ai_model = settings.ai_model if settings else "llama-3.1-8b-instant"
+    ai_model = settings.ai_model if settings else "qwen/qwen3-32b"
     ai_temp = settings.ai_temperature if settings else 0.3
     base_prompt = settings.ai_system_prompt if settings else "You are the friendly and professional AI Policy Assistant for Cebu Technological University (CTU) Argao Campus."
 
@@ -990,7 +1092,12 @@ def ask_policy(request: QuestionRequest, db: Session = Depends(get_db)):
         
         FORMATTING RULE:
         You must separate your main answer from the follow-up questions using exactly this string: |FOLLOWUPS|
-        Put exactly 3 logical follow-up questions they might ask about university policies on a new line. Do not number them.
+        Everything after |FOLLOWUPS| must be written from the STUDENT'S or USER'S point of view — questions
+        THEY might type next to the assistant (e.g. "What is the deadline for adding subjects?").
+        NEVER use this section to ask the user a clarifying question yourself. If you genuinely need more
+        information to answer well, put that clarifying question inside your main answer instead, and leave
+        the |FOLLOWUPS| section empty.
+        Put each follow-up question on a new line. Do not number them.
         """
         
         try:
@@ -1037,9 +1144,26 @@ def ask_policy(request: QuestionRequest, db: Session = Depends(get_db)):
         print(f"Failed to log query: {e}")
 
     # ==========================================
-    # 4. ORIGINAL RAG RETRIEVAL & FILTERING
+    # 4. ROLE-AWARE RAG RETRIEVAL
     # ==========================================
-    relevant_chunks = vector_store.search_knowledge(question)
+    # Pass excluded_categories so the vector search itself skips restricted
+    # documents — we don't waste retrieval slots and never leak context to the AI.
+    relevant_chunks = vector_store.search_knowledge(
+        question, excluded_categories=excluded_categories
+    )
+
+    # Early exit: student is asking about a restricted topic.
+    # Check this BEFORE the generic 'not found' so they get a clear reason.
+    if user_role == "STUDENT" and excluded_categories:
+        q_lower_check = question.strip().lower()
+        is_restricted_query = any(kw in q_lower_check for kw in RESTRICTED_TOPIC_KEYWORDS)
+        if is_restricted_query:
+            return {
+                "answer": "This information is restricted to faculty and administrators only. Accreditation documents are confidential and cannot be shared with students.",
+                "sources": [],
+                "follow_ups": [],
+                "restricted": True
+            }
 
     if not relevant_chunks:
         return {
@@ -1048,24 +1172,41 @@ def ask_policy(request: QuestionRequest, db: Session = Depends(get_db)):
             "follow_ups": []
         }
 
-    safe_chunks = []
-    for chunk in relevant_chunks:
-        chunk_meta = chunk.get('metadata', {})
-        if chunk_meta.get('status') == "Archived":
-            continue 
-        if user_role.upper() == "STUDENT" and chunk_meta.get('category') == "Accreditation Evidence":
-            continue 
-        safe_chunks.append(chunk)
-
+    # Final safety net: strip any restricted chunks that slipped through
+    # (should not happen after the retrieval-level filter, but belt-and-suspenders).
+    safe_chunks = [
+        chunk for chunk in relevant_chunks
+        if chunk.get('metadata', {}).get('status') != 'Archived'
+        and chunk.get('metadata', {}).get('category') not in excluded_categories
+    ]
     relevant_chunks = safe_chunks
     context_text = "\n\n".join([chunk['content'] for chunk in relevant_chunks])
 
     # ==========================================
-    # 5. DYNAMIC PROMPT WITH ORIGINAL FORMATTING
+    # 5. ROLE-AWARE SYSTEM PROMPT
     # ==========================================
+    role_context = {
+        "STUDENT": (
+            "The user is a STUDENT. Answer using publicly accessible institutional documents "
+            "such as student handbooks, academic policies, enrollment guidelines, and general "
+            "university procedures. Accreditation materials are confidential and must not be discussed."
+        ),
+        "FACULTY": (
+            "The user is a FACULTY MEMBER. You may reference all institutional documents including "
+            "faculty policies, research guidelines, curriculum documents, and accreditation-related materials."
+        ),
+        "ADMIN": (
+            "The user is an ADMINISTRATOR. You have full access to all institutional documents "
+            "including accreditation evidence, administrative policies, and confidential reports."
+        ),
+    }.get(user_role, "The user's role is unknown. Answer conservatively using only general public policies.")
+
     system_prompt = f"""{base_prompt}
     
     You are the official CTU Argao Campus AI Policy Assistant. Your task is to answer user queries strictly and exclusively using the provided text snippets from the verified institutional knowledge repository.
+
+    USER CONTEXT:
+    {role_context}
 
     YOUR PERSONALITY:
     - You are warm, welcoming, and helpful.

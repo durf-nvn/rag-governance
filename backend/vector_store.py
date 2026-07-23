@@ -45,21 +45,34 @@ def add_to_vector_db(text, metadata):
         
     return len(chunks)
 
-def search_knowledge(question: str, match_count: int = 3):
+def search_knowledge(question: str, match_count: int = 3, excluded_categories: list = None):
     # Check if supabase was actually initialized before using it
     if supabase is None:
         print("⚠️ search_knowledge called but supabase client is not initialized!")
         return []
 
     query_embedding = model.encode(question).tolist()
-    
+
+    # Fetch more chunks than needed so filtering doesn't leave us short.
+    # If we exclude categories, we need a bigger pool to pull from.
+    fetch_count = match_count * 3 if excluded_categories else match_count
+
     response = supabase.rpc(
         'match_document_sections',
         {
             'query_embedding': query_embedding,
             'match_threshold': 0.3,
-            'match_count': match_count
+            'match_count': fetch_count
         }
     ).execute()
-    
-    return response.data
+
+    results = response.data or []
+
+    if excluded_categories:
+        results = [
+            r for r in results
+            if r.get('metadata', {}).get('category') not in excluded_categories
+            and r.get('metadata', {}).get('status') != 'Archived'
+        ]
+
+    return results[:match_count]
