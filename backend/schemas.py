@@ -94,3 +94,60 @@ class ChedRequirementResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+# --- NEW: PAPER TRAIL SCHEMAS ---
+class PaperTrailCreate(BaseModel):
+    title: str
+    document_type: str
+    office: str
+    sender_name: str
+    sender_email: str
+    sender_role: str = "FACULTY"
+    recipient_name: Optional[str] = None
+    recipient_email: Optional[str] = None
+    recipient_role: Optional[str] = None
+    remarks: Optional[str] = None
+    file_url: Optional[str] = None
+
+class PaperTrailStatusUpdate(BaseModel):
+    status: str # "Received", "Under Review", "Approved", "Needs Revision", "Released"
+    actor_name: str
+    actor_email: str
+    actor_role: str
+    notes: Optional[str] = None
+
+class PaperTrailLogResponse(BaseModel):
+    id: uuid.UUID
+    record_id: uuid.UUID
+    action: str
+    status: str
+    actor_name: str
+    actor_email: str
+    actor_role: str
+    notes: Optional[str] = None
+    timestamp: datetime
+
+    class Config:
+        from_attributes = True
+
+class PaperTrailRecordResponse(BaseModel):
+    id: uuid.UUID
+    tracking_number: str
+    title: str
+    document_type: str
+    office: str
+    sender_name: str
+    sender_email: str
+    sender_role: str
+    recipient_name: Optional[str] = None
+    recipient_email: Optional[str] = None
+    recipient_role: Optional[str] = None
+    status: str
+    remarks: Optional[str] = None
+    file_url: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+    logs: list[PaperTrailLogResponse] = []
+
+    class Config:
+        from_attributes = True

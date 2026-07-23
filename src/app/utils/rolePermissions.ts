@@ -12,6 +12,7 @@ export const rolePermissions = {
     canAccessSettings: true,
     canAccessBroadcastAnnouncement: true,
     canAccessDocumentGenerator: true,
+    canAccessPaperTrail: true,
     canAccessGradeEvaluation: false,
     canUploadDocuments: true,
     canDeleteDocuments: true,
@@ -30,6 +31,7 @@ export const rolePermissions = {
     canAccessSettings: true,
     canAccessBroadcastAnnouncement: false,
     canAccessDocumentGenerator: true,
+    canAccessPaperTrail: true,
     canAccessGradeEvaluation: false,
     canUploadDocuments: true,
     canDeleteDocuments: false,
@@ -48,6 +50,7 @@ export const rolePermissions = {
     canAccessSettings: false,
     canAccessBroadcastAnnouncement: false,
     canAccessDocumentGenerator: false,
+    canAccessPaperTrail: false,
     canAccessGradeEvaluation: true,
     canUploadDocuments: false,
     canDeleteDocuments: false,
@@ -75,7 +78,9 @@ export function getAccessibleRoutes(role: UserRole) {
   if (permissions.canAccessSettings) routes.push("/app/settings");
   if (permissions.canAccessBroadcastAnnouncement) routes.push("/app/broadcast-announcement");
   if (permissions.canAccessDocumentGenerator) routes.push("/app/document-generator");
+  if (permissions.canAccessPaperTrail) routes.push("/app/paper-trail");
   if (permissions.canAccessGradeEvaluation) routes.push("/app/grade-evaluation");
 
   return routes;
 }
+

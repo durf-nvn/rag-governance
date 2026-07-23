@@ -560,12 +560,12 @@ export function KnowledgeRepository() {
                   ) : (
                     <div>
                       <UploadCloud className="h-8 w-8 mx-auto mb-2 text-[#9CA3AF]" />
-                      <p className="text-sm text-[#1F2937] font-medium">Click or drag new PDF, Word, or TXT</p>
+                      <p className="text-sm text-[#1F2937] font-medium">Click or drag new PDF, Word, TXT, or Image</p>
                     </div>
                   )}
                   <input 
                     type="file" 
-                    accept=".pdf,.docx,.txt"
+                    accept=".pdf,.docx,.txt,.png,.jpg,.jpeg"
                     className="hidden" 
                     ref={updateFileInputRef}
                     onChange={(e) => handleFileSelect(e, true)}
@@ -689,13 +689,13 @@ export function KnowledgeRepository() {
                     ) : (
                       <div>
                         <Upload className="h-10 w-10 mx-auto mb-3 text-[#9CA3AF]" />
-                        <p className="text-sm text-[#1F2937] mb-1 font-medium">Drag and drop your PDF, Word, or TXT here</p>
+                        <p className="text-sm text-[#1F2937] mb-1 font-medium">Drag and drop your PDF, Word, TXT, or Image here</p>
                         <p className="text-xs text-[#6B7280]">or click to browse from your computer</p>
                       </div>
                     )}
                     <input 
                       type="file" 
-                      accept=".pdf,.docx,.txt"
+                      accept=".pdf,.docx,.txt,.png,.jpg,.jpeg"
                       className="hidden" 
                       ref={fileInputRef}
                       onChange={(e) => handleFileSelect(e, false)}

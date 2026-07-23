@@ -90,3 +90,41 @@ class ChedEvidence(Base):
     upload_date = Column(DateTime, default=datetime.utcnow)
 
     requirement = relationship("ChedRequirement", back_populates="evidences")
+
+
+# --- NEW: PAPER TRAIL (RECEIVING & RELEASING HISTORY) TABLES ---
+class PaperTrailRecord(Base):
+    __tablename__ = "paper_trail_records"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tracking_number = Column(String(50), unique=True, nullable=False, index=True) # e.g. "PT-2026-1001"
+    title = Column(String(255), nullable=False)
+    document_type = Column(String(100), nullable=False) # Syllabus, Clearance, Transmittal, Grade Sheet, Report, etc.
+    office = Column(String(255), nullable=False) # Target Office e.g. "Academic Affairs", "Dean's Office", "Registrar"
+    sender_name = Column(String(255), nullable=False)
+    sender_email = Column(String(255), nullable=False)
+    sender_role = Column(String(50), default="FACULTY")
+    recipient_name = Column(String(255), nullable=True)
+    recipient_email = Column(String(255), nullable=True)
+    recipient_role = Column(String(50), nullable=True)
+    status = Column(String(50), default="Pending Receiving") # Pending Receiving, Received, Under Review, Approved, Needs Revision, Released
+    remarks = Column(Text, nullable=True)
+    file_url = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    logs = relationship("PaperTrailLog", back_populates="record", cascade="all, delete-orphan", order_by="PaperTrailLog.timestamp.desc()")
+
+
+class PaperTrailLog(Base):
+    __tablename__ = "paper_trail_logs"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    record_id = Column(UUID(as_uuid=True), ForeignKey("paper_trail_records.id", ondelete="CASCADE"), nullable=False)
+    action = Column(String(100), nullable=False) # Document Released, Received by Office, Approved, Returned for Revision, etc.
+    status = Column(String(50), nullable=False)
+    actor_name = Column(String(255), nullable=False)
+    actor_email = Column(String(255), nullable=False)
+    actor_role = Column(String(50), nullable=False)
+    notes = Column(Text, nullable=True)
+    timestamp = Column(DateTime, default=datetime.utcnow)
+
+    record = relationship("PaperTrailRecord", back_populates="logs")

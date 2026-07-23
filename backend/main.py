@@ -2648,3 +2648,206 @@ def delete_ched_evidence(evidence_id: str, db: Session = Depends(get_db)):
         pass
         
     return {"message": "Evidence deleted successfully."}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PAPER TRAIL (RECEIVING & RELEASING HISTORY) API ENDPOINTS
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _generate_tracking_number(db: Session) -> str:
+    """Generates a unique tracking number format: PT-YYYY-XXXX."""
+    import random
+    year = datetime.now().year
+    while True:
+        num = random.randint(1000, 9999)
+        tracking_no = f"PT-{year}-{num}"
+        existing = db.query(models.PaperTrailRecord).filter(models.PaperTrailRecord.tracking_number == tracking_no).first()
+        if not existing:
+            return tracking_no
+
+
+@app.post("/paper-trail", response_model=schemas.PaperTrailRecordResponse, status_code=status.HTTP_201_CREATED)
+def create_paper_trail_record(payload: schemas.PaperTrailCreate, db: Session = Depends(get_db)):
+    """Creates a new document paper trail record and logs initial release."""
+    tracking_no = _generate_tracking_number(db)
+    
+    new_record = models.PaperTrailRecord(
+        tracking_number=tracking_no,
+        title=payload.title,
+        document_type=payload.document_type,
+        office=payload.office,
+        sender_name=payload.sender_name,
+        sender_email=payload.sender_email,
+        sender_role=payload.sender_role.upper(),
+        recipient_name=payload.recipient_name,
+        recipient_email=payload.recipient_email,
+        recipient_role=payload.recipient_role.upper() if payload.recipient_role else None,
+        status="Pending Receiving",
+        remarks=payload.remarks,
+        file_url=payload.file_url
+    )
+    db.add(new_record)
+    db.commit()
+    db.refresh(new_record)
+
+    # Initial Log Entry
+    initial_log = models.PaperTrailLog(
+        record_id=new_record.id,
+        action="Document Released / Submitted",
+        status="Pending Receiving",
+        actor_name=payload.sender_name,
+        actor_email=payload.sender_email,
+        actor_role=payload.sender_role.upper(),
+        notes=payload.remarks or f"Document '{payload.title}' released to {payload.office}."
+    )
+    db.add(initial_log)
+    db.commit()
+    db.refresh(new_record)
+
+    # Notifications
+    try:
+        if payload.recipient_email:
+            _send_notification(
+                user_email=payload.recipient_email,
+                n_type="info",
+                title=f"New Document Received: {tracking_no}",
+                message=f"{payload.sender_name} released document '{payload.title}' to your office ({payload.office})."
+            )
+        _notify_all_admins(
+            db=db,
+            n_type="info",
+            title=f"Paper Trail Created: {tracking_no}",
+            message=f"Document '{payload.title}' ({payload.document_type}) released by {payload.sender_name} to {payload.office}."
+        )
+    except Exception as exc:
+        print(f"[paper_trail] notification warning: {exc}")
+
+    return new_record
+
+
+@app.get("/paper-trail", response_model=List[schemas.PaperTrailRecordResponse])
+def get_paper_trail_records(
+    role: Optional[str] = None,
+    email: Optional[str] = None,
+    office: Optional[str] = None,
+    status_filter: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    """Fetches paper trail records filtered by role/email/office/status."""
+    query = db.query(models.PaperTrailRecord)
+    
+    # If user is FACULTY (and not ADMIN), show documents they sent OR documents sent to them/their office
+    if role and role.upper() == "FACULTY" and email:
+        query = query.filter(
+            (models.PaperTrailRecord.sender_email == email) | 
+            (models.PaperTrailRecord.recipient_email == email) |
+            (models.PaperTrailRecord.sender_role == "FACULTY")
+        )
+    
+    if office and office != "all":
+        query = query.filter(models.PaperTrailRecord.office == office)
+        
+    if status_filter and status_filter != "all":
+        query = query.filter(models.PaperTrailRecord.status == status_filter)
+        
+    return query.order_by(models.PaperTrailRecord.updated_at.desc()).all()
+
+
+@app.get("/paper-trail/{record_id}", response_model=schemas.PaperTrailRecordResponse)
+def get_paper_trail_detail(record_id: str, db: Session = Depends(get_db)):
+    """Fetches single paper trail record with full movement history."""
+    record = db.query(models.PaperTrailRecord).filter(models.PaperTrailRecord.id == record_id).first()
+    if not record:
+        raise HTTPException(status_code=404, detail="Paper trail record not found.")
+    return record
+
+
+@app.put("/paper-trail/{record_id}/status", response_model=schemas.PaperTrailRecordResponse)
+def update_paper_trail_status(
+    record_id: str,
+    payload: schemas.PaperTrailStatusUpdate,
+    db: Session = Depends(get_db)
+):
+    """Updates document status (e.g. Received, Approved/Paper OK, Needs Revision, Released) & logs movement."""
+    record = db.query(models.PaperTrailRecord).filter(models.PaperTrailRecord.id == record_id).first()
+    if not record:
+        raise HTTPException(status_code=404, detail="Paper trail record not found.")
+
+    old_status = record.status
+    new_status = payload.status
+    record.status = new_status
+    record.updated_at = datetime.utcnow()
+
+    # Determine action narrative
+    action_map = {
+        "Received": "Document Received by Office",
+        "Under Review": "Under Office Review",
+        "Approved": "Verified & Approved (Paper OK)",
+        "Needs Revision": "Returned / Flagged for Revision",
+        "Released": "Released to Owner / Department"
+    }
+    action_text = action_map.get(new_status, f"Status changed to {new_status}")
+
+    # Append movement log
+    new_log = models.PaperTrailLog(
+        record_id=record.id,
+        action=action_text,
+        status=new_status,
+        actor_name=payload.actor_name,
+        actor_email=payload.actor_email,
+        actor_role=payload.actor_role.upper(),
+        notes=payload.notes or f"Status updated from {old_status} to {new_status} by {payload.actor_name}."
+    )
+    db.add(new_log)
+    db.commit()
+    db.refresh(record)
+
+    # Notifications to Sender and Recipient
+    notif_type_map = {
+        "Approved": "success",
+        "Needs Revision": "warning",
+        "Received": "info",
+        "Released": "info"
+    }
+    n_type = notif_type_map.get(new_status, "info")
+
+    try:
+        # Notify sender
+        _send_notification(
+            user_email=record.sender_email,
+            n_type=n_type,
+            title=f"Paper Trail Update [{record.tracking_number}]",
+            message=f"Document '{record.title}' status updated to '{new_status}' by {payload.actor_name}."
+        )
+        # Notify recipient if set and different from actor
+        if record.recipient_email and record.recipient_email != payload.actor_email:
+            _send_notification(
+                user_email=record.recipient_email,
+                n_type=n_type,
+                title=f"Paper Trail Update [{record.tracking_number}]",
+                message=f"Document '{record.title}' status updated to '{new_status}' by {payload.actor_name}."
+            )
+    except Exception as exc:
+        print(f"[update_paper_trail_status] notification error: {exc}")
+
+    return record
+
+
+@app.post("/paper-trail/upload")
+async def upload_paper_trail_attachment(file: UploadFile = File(...)):
+    """Uploads an optional file attachment for a paper trail record."""
+    try:
+        contents = await file.read()
+        safe_filename = file.filename.replace(" ", "_")
+        unique_filename = f"papertrail/{int(time.time())}_{safe_filename}"
+
+        supabase.storage.from_("documents").upload(
+            file=contents,
+            path=unique_filename,
+            file_options={"content-type": file.content_type or "application/pdf"}
+        )
+        public_url = supabase.storage.from_("documents").get_public_url(unique_filename)
+        return {"file_url": public_url, "filename": file.filename}
+    except Exception as exc:
+        print(f"[upload_paper_trail_attachment] error: {exc}")
+        raise HTTPException(status_code=500, detail="Failed to upload attachment.")

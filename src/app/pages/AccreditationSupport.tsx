@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Search, CheckCircle, AlertCircle, FileText, Award, Target, Upload, ChevronDown, ChevronUp, X, Loader2, ArrowLeft, Archive, Eye, ShieldAlert, Lock, Check, FileCheck, MessageSquareWarning, Clock, BarChart2, Calendar, Plus, Edit, Trash2 } from "lucide-react";
+import { Search, CheckCircle, AlertCircle, FileText, Award, Target, Upload, ChevronDown, ChevronUp, X, Loader2, ArrowLeft, Archive, Eye, ShieldAlert, Lock, Check, FileCheck, MessageSquareWarning, Clock, BarChart2, Calendar, Plus, Edit, Trash2, Download, ExternalLink, FileBadge, History, TrendingUp } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "../components/ui/tabs";
 import axios from "axios";
 
@@ -504,7 +504,6 @@ export function AccreditationSupport() {
         </div>
       )}
 
-      {/* <Tabs defaultValue="aaccup" className="w-full"> */}
       <Tabs defaultValue="aaccup" className="w-full">
         <TabsList className="grid w-full grid-cols-4 bg-gray-100 p-1">
           <TabsTrigger value="aaccup" className="data-[state=active]:bg-[#FF9501] data-[state=active]:text-white cursor-pointer transition-all">AACCUP</TabsTrigger>
@@ -553,7 +552,6 @@ export function AccreditationSupport() {
           </div>
         </div>
 
-        {}
         <TabsContent value="aaccup" className="space-y-6 mt-6">
           {!expandedArea ? (
             <>
@@ -792,7 +790,6 @@ export function AccreditationSupport() {
           )}
         </TabsContent>
 
-        {}
         <TabsContent value="ched" className="mt-6 space-y-6">
           <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
             <div className="border-b border-gray-100 p-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-gray-50/50">
@@ -1017,35 +1014,115 @@ export function AccreditationSupport() {
           </div>
         </TabsContent>
 
-        <TabsContent value="results" className="mt-6 space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="col-span-1 lg:col-span-2 bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
-              <div className="flex justify-between items-center mb-6">
-                <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-                  <BarChart2 className="w-5 h-5 text-[#FF9501]" />
-                  Historical Analytics
-                </h2>
-                <span className="px-3 py-1 bg-[#FFF4E5] text-[#D97E00] text-[10px] font-bold rounded-full uppercase tracking-widest flex items-center gap-1.5 border border-[#FF9501]/20 shadow-sm">
-                  <Lock className="w-3 h-3" />
-                  Phase 2 Preview
-                </span>
-              </div>
-              <div className="space-y-4">
-                <div className="p-5 border border-orange-100 bg-orange-50/30 rounded-xl flex justify-between items-center relative overflow-hidden">
-                  <div className="absolute right-0 top-0 w-32 h-32 bg-[#FF9501]/10 rounded-full blur-3xl opacity-50 -mr-10 -mt-10"></div>
-                  <div className="relative z-10">
-                    <p className="text-[10px] font-bold text-[#D97E00] uppercase tracking-widest mb-1">Latest Achievement</p>
-                    <p className="font-bold text-gray-900 text-lg leading-tight">AACCUP Level III Re-accredited</p>
-                    <p className="text-xs text-gray-500 mt-1.5 flex items-center gap-1 font-medium">
-                      <Calendar className="w-3.5 h-3.5" /> Valid until: October 2027
-                    </p>
+        <TabsContent value="results" className="mt-6 space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+          <div className="flex flex-col lg:flex-row gap-6">
+            
+            {/* Left Column: Timeline & History */}
+            <div className="w-full lg:w-2/3 space-y-6">
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+                <div className="border-b border-gray-100 p-6 bg-[#F9FAFB] flex justify-between items-center">
+                  <div>
+                    <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                      <History className="w-5 h-5 text-[#FF9501]" />
+                      Accreditation Timeline
+                    </h2>
+                    <p className="text-sm text-gray-500 mt-1">Historical milestones for {selectedProgram}</p>
                   </div>
-                  <Award className="w-12 h-12 text-[#FF9501] relative z-10 opacity-80" />
+                  <button className="flex items-center gap-2 text-[#D97E00] hover:text-[#995900] text-xs font-bold bg-[#FFF4E5] px-3 py-1.5 rounded-lg transition-colors cursor-pointer">
+                    <Download className="w-3.5 h-3.5" /> Export Report
+                  </button>
+                </div>
+                
+                <div className="p-6 relative">
+                  {/* Vertical Line */}
+                  <div className="absolute left-10 top-10 bottom-10 w-0.5 bg-gray-100 z-0"></div>
+                  
+                  <div className="space-y-8 relative z-10">
+                    {[
+                      { year: "2024", title: "AACCUP Level III Re-accredited", type: "Active", date: "Valid until Oct 2027", icon: Award, color: "text-[#006837]", bg: "bg-green-100", ring: "ring-[#006837]/20" },
+                      { year: "2021", title: "AACCUP Level II Re-accredited", type: "Expired", date: "Valid until Oct 2024", icon: Check, color: "text-gray-400", bg: "bg-gray-100", ring: "ring-gray-200" },
+                      { year: "2019", title: "CHED Certificate of Program Compliance (COPC)", type: "Active", date: "Indefinite Validity", icon: FileCheck, color: "text-[#FF9501]", bg: "bg-orange-100", ring: "ring-[#FF9501]/20" },
+                      { year: "2018", title: "AACCUP Level I Accredited", type: "Expired", date: "Valid until Oct 2021", icon: Check, color: "text-gray-400", bg: "bg-gray-100", ring: "ring-gray-200" },
+                    ].map((item, idx) => (
+                      <div key={idx} className="flex gap-4">
+                        <div className={`w-8 h-8 rounded-full ${item.bg} flex items-center justify-center shrink-0 ring-4 ring-white shadow-sm mt-1`}>
+                          <item.icon className={`w-4 h-4 ${item.color}`} />
+                        </div>
+                        <div className="flex-1 bg-white border border-gray-100 hover:border-[#FF9501]/30 hover:shadow-md transition-all p-4 rounded-xl group cursor-pointer">
+                          <div className="flex justify-between items-start mb-1">
+                            <span className="text-xs font-bold text-[#FF9501] uppercase tracking-wider">{item.year}</span>
+                            <span className={`text-[9px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full ${item.type === 'Active' ? 'bg-green-50 text-[#006837]' : 'bg-gray-100 text-gray-500'}`}>
+                              {item.type}
+                            </span>
+                          </div>
+                          <h3 className="font-bold text-gray-900 text-sm group-hover:text-[#FF9501] transition-colors">{item.title}</h3>
+                          <p className="text-xs text-gray-500 mt-1 flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5" /> {item.date}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
             </div>
-            <div className="col-span-1 bg-white rounded-2xl shadow-sm border border-gray-200 p-6 flex flex-col items-center justify-center text-center italic text-gray-400 text-xs">
-              Official Certificates view is currently restricted.
+
+            {/* Right Column: Certificates & Metrics */}
+            <div className="w-full lg:w-1/3 space-y-6">
+              
+              {/* Metrics Card */}
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
+                <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider flex items-center gap-2 mb-5">
+                  <TrendingUp className="w-4 h-4 text-[#FF9501]" /> Program Excellence
+                </h3>
+                <div className="space-y-4">
+                  {[
+                    { label: "Faculty with Master's/PhD", value: "85%", trend: "+12% from 2021" },
+                    { label: "Licensure Passing Rate", value: "92.4%", trend: "Top 5 in Region VII" },
+                    { label: "Employability (1 yr)", value: "88%", trend: "Industry Aligned" }
+                  ].map((metric, idx) => (
+                    <div key={idx} className="p-3 bg-gray-50 rounded-xl border border-gray-100">
+                      <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">{metric.label}</p>
+                      <div className="flex items-end justify-between mt-1">
+                        <span className="text-xl font-black text-gray-900">{metric.value}</span>
+                        <span className="text-[10px] font-bold text-[#006837] bg-green-100 px-2 py-0.5 rounded">{metric.trend}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Official Certificates */}
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
+                <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider flex items-center gap-2 mb-5">
+                  <FileBadge className="w-4 h-4 text-[#FF9501]" /> Official Certificates
+                </h3>
+                <div className="space-y-3">
+                  <div className="p-4 bg-gradient-to-br from-[#FFF4E5] to-orange-50/30 rounded-xl border border-[#FF9501]/20 group cursor-pointer hover:shadow-md transition-all relative overflow-hidden">
+                    <div className="absolute right-0 top-0 w-16 h-16 bg-[#FF9501]/10 rounded-full blur-2xl -mr-5 -mt-5"></div>
+                    <div className="flex items-center gap-3 relative z-10">
+                      <Award className="w-8 h-8 text-[#D97E00]" />
+                      <div>
+                        <p className="text-xs font-bold text-gray-900 group-hover:text-[#FF9501] transition-colors">AACCUP Level III Certificate.pdf</p>
+                        <p className="text-[10px] text-gray-500 mt-0.5">Issued: Oct 12, 2024 • 2.4 MB</p>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="p-4 bg-gray-50 rounded-xl border border-gray-200 group cursor-pointer hover:border-[#FF9501]/40 hover:bg-[#FFF4E5]/50 transition-all">
+                    <div className="flex items-center gap-3">
+                      <FileCheck className="w-8 h-8 text-gray-400 group-hover:text-[#FF9501] transition-colors" />
+                      <div>
+                        <p className="text-xs font-bold text-gray-900 group-hover:text-[#FF9501] transition-colors">CHED COPC Document.pdf</p>
+                        <p className="text-[10px] text-gray-500 mt-0.5">Issued: Mar 05, 2019 • 1.1 MB</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                
+                <button className="w-full mt-4 py-2 flex items-center justify-center gap-2 text-xs font-bold text-[#D97E00] hover:text-[#995900] bg-orange-50 rounded-lg transition-colors cursor-pointer">
+                  View Full Registry <ExternalLink className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
             </div>
           </div>
         </TabsContent>
