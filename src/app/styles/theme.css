@@ -216,3 +216,12 @@
     line-height: 1.5;
   }
 }
+
+/* ===== Utility: Hide Scrollbars (for mobile horizontal scroll) ===== */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;     /* Firefox */
+}

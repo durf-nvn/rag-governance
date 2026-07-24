@@ -12,10 +12,11 @@ export function AccreditationSupport() {
   const [searchQuery, setSearchQuery] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   
-  const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' } | null>(null);
-  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+  const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' | 'warning' | 'info' } | null>(null);
+  const showToast = (message: string, type: 'success' | 'error' | 'warning' | 'info' = 'success') => {
     setToast({ message, type });
-    setTimeout(() => setToast(null), 3000);
+    const duration = type === 'error' ? 5000 : type === 'warning' ? 4000 : 3000;
+    setTimeout(() => setToast(null), duration);
   };
 
   const [activeTab, setActiveTab] = useState("aaccup");
@@ -94,6 +95,22 @@ export function AccreditationSupport() {
   const [isEditingIsoReq, setIsEditingIsoReq] = useState(false);
   const [showDeleteIsoReqModal, setShowDeleteIsoReqModal] = useState(false);
   const [isoReqToDelete, setIsoReqToDelete] = useState<any>(null);
+
+  // ISO evidence delete confirm
+  const [showDeleteIsoEvidenceModal, setShowDeleteIsoEvidenceModal] = useState(false);
+  const [isoEvidenceToDelete, setIsoEvidenceToDelete] = useState<any>(null);
+
+  // ISO status change confirm
+  const [showIsoStatusModal, setShowIsoStatusModal] = useState(false);
+  const [pendingIsoStatus, setPendingIsoStatus] = useState<{ reqId: string; status: string; title: string } | null>(null);
+
+  // AACCUP approve confirm
+  const [showAaccupApproveModal, setShowAaccupApproveModal] = useState(false);
+  const [pendingAaccupApprove, setPendingAaccupApprove] = useState<any>(null);
+
+  // CHED admin review confirm
+  const [showChedReviewModal, setShowChedReviewModal] = useState(false);
+  const [pendingChedReview, setPendingChedReview] = useState<{ reqId: string; status: string } | null>(null);
 
   // Dynamic IQA Schedule & Days States
   const [iqaSchedule, setIqaSchedule] = useState<any>(null);
@@ -435,13 +452,24 @@ export function AccreditationSupport() {
     }
   };
 
-  const handleChedAdminReview = async (reqId: string, status: string) => {
+  const confirmChedAdminReview = (reqId: string, status: string) => {
+    setPendingChedReview({ reqId, status });
+    setShowChedReviewModal(true);
+  };
+
+  const executeChedAdminReview = async () => {
+    if (!pendingChedReview) return;
+    setIsReviewing(true);
     try {
-      await axios.put(`http://localhost:8000/ched/requirements/${reqId}/status`, { status });
-      showToast(`Requirement marked as ${status}!`, "success");
+      await axios.put(`http://localhost:8000/ched/requirements/${pendingChedReview.reqId}/status`, { status: pendingChedReview.status });
+      showToast(`Requirement marked as ${pendingChedReview.status}!`, "success");
+      setShowChedReviewModal(false);
+      setPendingChedReview(null);
       fetchChedData();
     } catch (error) {
-      showToast("Failed to update status.", "error");
+      showToast("Failed to update CHED requirement status.", "error");
+    } finally {
+      setIsReviewing(false);
     }
   };
 
@@ -476,23 +504,45 @@ export function AccreditationSupport() {
     }
   };
 
-  const handleIsoStatusUpdate = async (reqId: string, status: string) => {
+  const confirmIsoStatusUpdate = (reqId: string, status: string, title: string) => {
+    setPendingIsoStatus({ reqId, status, title });
+    setShowIsoStatusModal(true);
+  };
+
+  const executeIsoStatusUpdate = async () => {
+    if (!pendingIsoStatus) return;
+    setIsDeleting(true);
     try {
-      await axios.put(`http://localhost:8000/iso/requirements/${reqId}/status`, { status });
-      showToast(`ISO Clause marked as ${status}!`, "success");
+      await axios.put(`http://localhost:8000/iso/requirements/${pendingIsoStatus.reqId}/status`, { status: pendingIsoStatus.status });
+      showToast(`ISO Clause marked as ${pendingIsoStatus.status}!`, "success");
+      setShowIsoStatusModal(false);
+      setPendingIsoStatus(null);
       fetchIsoData();
     } catch (error) {
-      showToast("Failed to update status.", "error");
+      showToast("Failed to update ISO clause status.", "error");
+    } finally {
+      setIsDeleting(false);
     }
   };
 
-  const handleDeleteIsoEvidence = async (evidenceId: string) => {
+  const confirmDeleteIsoEvidence = (evidence: any) => {
+    setIsoEvidenceToDelete(evidence);
+    setShowDeleteIsoEvidenceModal(true);
+  };
+
+  const executeDeleteIsoEvidence = async () => {
+    if (!isoEvidenceToDelete) return;
+    setIsDeleting(true);
     try {
-      await axios.delete(`http://localhost:8000/iso/evidence/${evidenceId}`);
-      showToast("ISO evidence removed.", "success");
+      await axios.delete(`http://localhost:8000/iso/evidence/${isoEvidenceToDelete.id}`);
+      showToast("ISO evidence removed successfully.", "success");
+      setShowDeleteIsoEvidenceModal(false);
+      setIsoEvidenceToDelete(null);
       fetchIsoData();
     } catch (error) {
-      showToast("Failed to remove evidence.", "error");
+      showToast("Failed to remove ISO evidence.", "error");
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -680,17 +730,26 @@ export function AccreditationSupport() {
     <div className="space-y-6 relative pb-10">
       
       {toast && (
-        <div className={`fixed bottom-8 right-8 px-6 py-4 rounded-xl shadow-2xl flex items-center gap-3 text-sm font-bold z-[100] transition-all duration-300 animate-in slide-in-from-bottom-5 fade-in ${
-          toast.type === 'success' ? 'bg-gray-900 text-white' : 'bg-red-50 text-red-700 border-2 border-red-200'
+        <div className={`fixed bottom-4 right-4 left-4 sm:left-auto sm:right-8 sm:bottom-8 sm:max-w-sm px-5 py-4 rounded-xl shadow-2xl flex items-center gap-3 text-sm font-bold z-[100] transition-all duration-300 animate-in slide-in-from-bottom-5 fade-in border ${
+          toast.type === 'success' ? 'bg-gray-900 text-white border-gray-700' :
+          toast.type === 'error' ? 'bg-red-50 text-red-700 border-red-200' :
+          toast.type === 'warning' ? 'bg-amber-50 text-amber-700 border-amber-300' :
+          'bg-blue-50 text-blue-700 border-blue-200'
         }`}>
-          {toast.type === 'success' ? <CheckCircle className="h-5 w-5 text-green-400" /> : <AlertCircle className="h-5 w-5" />}
-          {toast.message}
+          {toast.type === 'success' ? <CheckCircle className="h-5 w-5 text-green-400 shrink-0" /> :
+           toast.type === 'error' ? <AlertCircle className="h-5 w-5 text-red-500 shrink-0" /> :
+           toast.type === 'warning' ? <AlertCircle className="h-5 w-5 text-amber-500 shrink-0" /> :
+           <AlertCircle className="h-5 w-5 text-blue-500 shrink-0" />}
+          <span className="leading-snug flex-1">{toast.message}</span>
+          <button onClick={() => setToast(null)} className="ml-1 opacity-60 hover:opacity-100 cursor-pointer shrink-0">
+            <X className="h-4 w-4" />
+          </button>
         </div>
       )}
 
       <div>
-        <h1 className="text-xl text-gray-900 mb-2 font-semibold">QA & Accreditation Support</h1>
-        <p className="text-sm text-[#6B7280] mt-1">Comprehensive quality assurance tracking across AACCUP, ISO, CHED monitoring, and accreditation results</p>
+        <h1 className="text-lg sm:text-xl text-gray-900 mb-1 font-semibold">QA & Accreditation Support</h1>
+        <p className="text-xs sm:text-sm text-[#6B7280] mt-1 hidden sm:block">Comprehensive quality assurance tracking across AACCUP, ISO, CHED monitoring, and accreditation results</p>
       </div>
 
       {/* --- GLOBAL ADMIN REVIEW QUEUE --- */}
@@ -731,7 +790,7 @@ export function AccreditationSupport() {
                   <p className="text-gray-500 font-medium">All caught up! No pending documents in the queue.</p>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 gap-4">
                   {allPendingReviews.map((doc, idx) => (
                     <div key={idx} className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow flex flex-col">
                       <div className="flex items-start justify-between mb-3">
@@ -771,7 +830,7 @@ export function AccreditationSupport() {
                               Request Revision
                             </button>
                             <button 
-                              onClick={() => handleAdminReview(doc.name, "Approved")}
+                              onClick={() => { setPendingAaccupApprove(doc); setShowAaccupApproveModal(true); }}
                               disabled={isReviewing}
                               className="flex-1 py-2 bg-[#FF9501] text-white text-xs font-bold rounded-lg hover:bg-[#D97E00] transition-colors cursor-pointer shadow-sm"
                             >
@@ -781,13 +840,13 @@ export function AccreditationSupport() {
                         ) : (
                           <>
                             <button 
-                              onClick={() => handleChedAdminReview(doc.id, "Not Compliant")}
+                              onClick={() => confirmChedAdminReview(doc.id, "Not Compliant")}
                               className="flex-1 py-2 bg-red-50 text-red-600 text-xs font-bold rounded-lg hover:bg-red-100 transition-colors cursor-pointer"
                             >
                               Request Revision
                             </button>
                             <button 
-                              onClick={() => handleChedAdminReview(doc.id, "Compliant")}
+                              onClick={() => confirmChedAdminReview(doc.id, "Compliant")}
                               className="flex-1 py-2 bg-[#FF9501] text-white text-xs font-bold rounded-lg hover:bg-[#D97E00] transition-colors cursor-pointer shadow-sm"
                             >
                               Approve
@@ -805,19 +864,19 @@ export function AccreditationSupport() {
       )}
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-4 bg-gray-100 p-1">
-          <TabsTrigger value="aaccup" className="data-[state=active]:bg-[#FF9501] data-[state=active]:text-white cursor-pointer transition-all">AACCUP</TabsTrigger>
-          <TabsTrigger value="iso" className="data-[state=active]:bg-[#FF9501] data-[state=active]:text-white cursor-pointer transition-all">ISO Standards</TabsTrigger>
-          <TabsTrigger value="ched" className="data-[state=active]:bg-[#FF9501] data-[state=active]:text-white cursor-pointer transition-all">CHED Monitoring</TabsTrigger>
-          <TabsTrigger value="results" className="data-[state=active]:bg-[#FF9501] data-[state=active]:text-white cursor-pointer transition-all">Accreditation Results</TabsTrigger>
+        <TabsList className="flex w-full overflow-x-auto bg-gray-100 p-1 gap-1 no-scrollbar">
+          <TabsTrigger value="aaccup" className="data-[state=active]:bg-[#FF9501] data-[state=active]:text-white cursor-pointer transition-all text-xs sm:text-sm whitespace-nowrap flex-1">AACCUP</TabsTrigger>
+          <TabsTrigger value="iso" className="data-[state=active]:bg-[#FF9501] data-[state=active]:text-white cursor-pointer transition-all text-xs sm:text-sm whitespace-nowrap flex-1"><span className="hidden sm:inline">ISO </span>Standards</TabsTrigger>
+          <TabsTrigger value="ched" className="data-[state=active]:bg-[#FF9501] data-[state=active]:text-white cursor-pointer transition-all text-xs sm:text-sm whitespace-nowrap flex-1"><span className="hidden sm:inline">CHED </span>Monitoring</TabsTrigger>
+          <TabsTrigger value="results" className="data-[state=active]:bg-[#FF9501] data-[state=active]:text-white cursor-pointer transition-all text-xs sm:text-sm whitespace-nowrap flex-1"><span className="hidden sm:inline">Accreditation </span>Results</TabsTrigger>
         </TabsList>
 
         <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4 mt-6">
           <div>
-            <h2 className="text-lg font-semibold text-gray-900">
-              {activeTab === 'iso' ? 'Institutional Quality Management System' : 'Program Evaluation Context'}
+            <h2 className="text-base sm:text-lg font-semibold text-gray-900">
+              {activeTab === 'iso' ? 'Institutional QMS' : 'Program Evaluation'}
             </h2>
-            <p className="text-sm text-gray-500">
+            <p className="text-xs sm:text-sm text-gray-500 hidden sm:block">
               {activeTab === 'iso' ? 'Campus-wide ISO 9001:2015 QMS (Applies to the entire CTU Argao Campus).' : 'Tracking compliance templates per degree program.'}
             </p>
           </div>
@@ -862,8 +921,8 @@ export function AccreditationSupport() {
             </div>
 
             {activeTab !== 'iso' && (
-              <div className="flex items-center gap-2 px-5 py-3 bg-gradient-to-r from-[#FF9501] to-[#D97E00] text-white rounded-lg shadow-md border border-[#FF9501]/50 w-full sm:w-auto justify-center">
-                <Award className="h-5 w-5 drop-shadow-sm" />
+              <div className="flex items-center gap-2 px-3 sm:px-5 py-2.5 sm:py-3 bg-gradient-to-r from-[#FF9501] to-[#D97E00] text-white rounded-lg shadow-md border border-[#FF9501]/50 w-full sm:w-auto justify-center">
+                <Award className="h-4 w-4 sm:h-5 sm:w-5 drop-shadow-sm" />
                 <span className="font-bold tracking-wide text-shadow-sm uppercase text-xs">{currentData.level || "Level II"}</span>
               </div>
             )}
@@ -873,22 +932,22 @@ export function AccreditationSupport() {
         <TabsContent value="aaccup" className="space-y-6 mt-6">
           {!expandedArea ? (
             <>
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                <div className="bg-white rounded-xl shadow-sm p-6 border-t-4 border-[#006837]">
-                  <h3 className="text-4xl font-bold text-[#006837] mb-2">{currentData.overall}%</h3>
-                  <p className="text-gray-600 text-xs font-semibold uppercase tracking-wider">Overall Compliance</p>
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
+                <div className="bg-white rounded-xl shadow-sm p-4 sm:p-6 border-t-4 border-[#006837]">
+                  <h3 className="text-3xl sm:text-4xl font-bold text-[#006837] mb-1 sm:mb-2">{currentData.overall}%</h3>
+                  <p className="text-gray-600 text-[10px] sm:text-xs font-semibold uppercase tracking-wider">Overall Compliance</p>
                 </div>
-                <div className="bg-white rounded-xl shadow-sm p-6 border-t-4 border-red-500">
-                  <h3 className="text-4xl font-bold text-red-500 mb-2">{currentData.gaps}</h3>
-                  <p className="text-gray-600 text-xs font-semibold uppercase tracking-wider">Total Gaps Identified</p>
+                <div className="bg-white rounded-xl shadow-sm p-4 sm:p-6 border-t-4 border-red-500">
+                  <h3 className="text-3xl sm:text-4xl font-bold text-red-500 mb-1 sm:mb-2">{currentData.gaps}</h3>
+                  <p className="text-gray-600 text-[10px] sm:text-xs font-semibold uppercase tracking-wider">Total Gaps</p>
                 </div>
-                <div className="bg-white rounded-xl shadow-sm p-6 border-t-4 border-[#FF9501]">
-                  <h3 className="text-4xl font-bold text-[#FF9501] mb-2">{currentData.evidence}</h3>
-                  <p className="text-gray-600 text-xs font-semibold uppercase tracking-wider">Approved Documents</p>
+                <div className="bg-white rounded-xl shadow-sm p-4 sm:p-6 border-t-4 border-[#FF9501]">
+                  <h3 className="text-3xl sm:text-4xl font-bold text-[#FF9501] mb-1 sm:mb-2">{currentData.evidence}</h3>
+                  <p className="text-gray-600 text-[10px] sm:text-xs font-semibold uppercase tracking-wider">Approved Docs</p>
                 </div>
-                <div className="bg-white rounded-xl shadow-sm p-6 border-t-4 border-[#995900]">
-                  <h3 className="text-4xl font-bold text-[#995900] mb-2">{currentData.areas.length}</h3>
-                  <p className="text-gray-600 text-xs font-semibold uppercase tracking-wider">Active Areas</p>
+                <div className="bg-white rounded-xl shadow-sm p-4 sm:p-6 border-t-4 border-[#995900]">
+                  <h3 className="text-3xl sm:text-4xl font-bold text-[#995900] mb-1 sm:mb-2">{currentData.areas.length}</h3>
+                  <p className="text-gray-600 text-[10px] sm:text-xs font-semibold uppercase tracking-wider">Active Areas</p>
                 </div>
               </div>
 
@@ -969,9 +1028,9 @@ export function AccreditationSupport() {
                 <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
                   <div>
                     <h2 className="text-2xl font-bold text-gray-900">{expandedArea.code}: {expandedArea.title}</h2>
-                    <div className="flex items-center gap-4 mt-2 text-sm text-gray-600">
-                      <span className="flex items-center gap-1 font-medium"><CheckCircle className="h-4 w-4 text-[#006837]"/> {expandedArea.evidenceCount} / {expandedArea.required} Approved</span>
-                      <span className="flex items-center gap-1 font-medium"><AlertCircle className="h-4 w-4 text-red-500"/> {expandedArea.gaps} Gaps Remaining</span>
+                    <div className="flex flex-wrap items-center gap-3 mt-2 text-xs sm:text-sm text-gray-600">
+                      <span className="flex items-center gap-1 font-medium"><CheckCircle className="h-4 w-4 text-[#006837]"/>{expandedArea.evidenceCount} / {expandedArea.required} <span className="hidden sm:inline">Approved</span></span>
+                      <span className="flex items-center gap-1 font-medium"><AlertCircle className="h-4 w-4 text-red-500"/>{expandedArea.gaps} <span className="hidden sm:inline">Gaps Remaining</span></span>
                     </div>
                   </div>
                   <div className="text-right">
@@ -1017,13 +1076,13 @@ export function AccreditationSupport() {
                 {/* Uploaded Evidence Table */}
                 <div className="lg:col-span-2 space-y-6">
                   <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden flex flex-col h-full">
-                    <div className="p-4 bg-[#F9FAFB] border-b border-gray-200 flex justify-between items-center">
+                    <div className="p-3 sm:p-4 bg-[#F9FAFB] border-b border-gray-200 flex justify-between items-center">
                       <h3 className="font-bold text-[#1F2937] text-sm uppercase tracking-wider">Uploaded Evidence</h3>
                       <button 
                         onClick={() => openUploadModal(expandedArea)}
-                        className="flex items-center gap-2 px-4 py-2 bg-[#FF9501] text-white rounded-lg hover:bg-[#D97E00] transition-all text-xs font-bold cursor-pointer shadow-sm active:scale-95"
+                        className="flex items-center gap-1.5 sm:gap-2 px-3 py-2 bg-[#FF9501] text-white rounded-lg hover:bg-[#D97E00] transition-all text-xs font-bold cursor-pointer shadow-sm active:scale-95"
                       >
-                        <Upload className="h-3.5 w-3.5" /> Upload File
+                        <Upload className="h-3.5 w-3.5" /><span className="hidden sm:inline"> Upload File</span><span className="sm:hidden">Upload</span>
                       </button>
                     </div>
                     
@@ -1128,9 +1187,9 @@ export function AccreditationSupport() {
                 {userRole === "ADMIN" && (
                   <button 
                     onClick={() => setShowAddChedReqModal(true)}
-                    className="flex items-center gap-2 px-4 py-2 bg-[#FF9501] text-white rounded-lg hover:bg-[#D97E00] transition-all text-xs font-bold cursor-pointer shadow-sm active:scale-95"
+                    className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 bg-[#FF9501] text-white rounded-lg hover:bg-[#D97E00] transition-all text-xs font-bold cursor-pointer shadow-sm active:scale-95"
                   >
-                    <Plus className="h-3.5 w-3.5" /> Add Requirement
+                    <Plus className="h-3.5 w-3.5" /><span className="hidden sm:inline"> Add Requirement</span><span className="sm:hidden">Add</span>
                   </button>
                 )}
               </div>
@@ -1156,19 +1215,19 @@ export function AccreditationSupport() {
                 </div>
               ) : (
                 <div className="overflow-x-auto">
-                  <table className="w-full text-left whitespace-nowrap">
+                  <table className="w-full text-left">
                     <thead className="bg-gray-50 border-b border-gray-200 text-[10px] text-gray-500 uppercase font-bold tracking-widest">
                       <tr>
-                        <th className="px-6 py-4 w-1/3">Requirement & CMO</th>
-                        <th className="px-6 py-4 text-center">Status</th>
-                        <th className="px-6 py-4 w-1/4">Attached Evidence</th>
-                        <th className="px-6 py-4 text-right">Actions</th>
+                        <th className="px-4 sm:px-6 py-4">Requirement & CMO</th>
+                        <th className="px-4 sm:px-6 py-4 text-center">Status</th>
+                        <th className="px-4 sm:px-6 py-4 hidden md:table-cell">Attached Evidence</th>
+                        <th className="px-4 sm:px-6 py-4 text-right">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100 bg-white">
                       {chedRequirements.map((req: any, index: number) => (
                         <tr key={index} className="hover:bg-orange-50/20 transition-colors group">
-                          <td className="px-6 py-4 whitespace-normal min-w-[250px]">
+                          <td className="px-4 sm:px-6 py-4">
                             <div className="flex items-start gap-3">
                               <div className="mt-1">
                                 {req.status === "Compliant" ? <CheckCircle className="h-5 w-5 text-[#006837]" /> : <div className="h-5 w-5 rounded-full border-2 border-gray-300" />}
@@ -1180,10 +1239,15 @@ export function AccreditationSupport() {
                                 <p className="text-[11px] text-[#FF9501] font-bold mt-1 uppercase tracking-wider">
                                   {req.cmo_name}
                                 </p>
+                                <div className="md:hidden mt-2">
+                                   {req.evidences && req.evidences.length > 0 ? (
+                                       <span className="text-xs text-blue-600 font-bold">{req.evidences.length} file(s) attached</span>
+                                   ) : <span className="text-xs text-gray-400 italic">No files attached</span>}
+                                </div>
                               </div>
                             </div>
                           </td>
-                          <td className="px-6 py-4">
+                          <td className="px-4 sm:px-6 py-4">
                             <div className="flex justify-center">
                               {req.status === "Compliant" ? (
                                 <span className="flex items-center w-max gap-1.5 px-3 py-1.5 bg-green-100 text-[#006837] text-[10px] font-bold rounded-md uppercase tracking-wider shadow-sm border border-green-200">
@@ -1200,7 +1264,7 @@ export function AccreditationSupport() {
                               )}
                             </div>
                           </td>
-                          <td className="px-6 py-4 whitespace-normal">
+                          <td className="px-6 py-4 whitespace-normal hidden md:table-cell">
                             {req.evidences && req.evidences.length > 0 ? (
                               <div className="space-y-2">
                                 {req.evidences.map((ev: any, idx: number) => (
@@ -1214,7 +1278,6 @@ export function AccreditationSupport() {
                                       <button onClick={() => window.open(ev.file_url, "_blank")} className="p-1.5 text-gray-400 hover:text-[#FF9501] bg-white rounded shadow-sm shrink-0">
                                         <Eye className="h-3 w-3" />
                                       </button>
-                                      {/* Allow user who uploaded it or ADMIN to delete it */}
                                       {(userRole === 'ADMIN' || ev.uploaded_by === userName) && (
                                         <button onClick={() => confirmDeleteChedEvidence(ev)} className="p-1.5 text-gray-400 hover:text-red-500 bg-white rounded shadow-sm shrink-0">
                                           <Archive className="h-3 w-3" />
@@ -1228,9 +1291,8 @@ export function AccreditationSupport() {
                               <span className="text-xs text-gray-400 italic">No files attached</span>
                             )}
                           </td>
-                          <td className="px-6 py-4 text-right">
+                          <td className="px-4 sm:px-6 py-4 text-right">
                             <div className="flex items-center justify-end gap-2">
-                              {/* If Not Compliant, anyone can upload evidence */}
                               {req.status === "Not Compliant" && (
                                 <button 
                                   onClick={() => { setSelectedChedReq(req); setUploadForm({ fileName: "", requirementTarget: "" }); setSelectedFile(null); setShowChedUploadModal(true); }}
@@ -1239,8 +1301,6 @@ export function AccreditationSupport() {
                                   <Upload className="h-3 w-3" /> Upload
                                 </button>
                               )}
-
-                              {/* Admin Controls (Moved Approve/Reject to Top Queue, kept Edit/Delete/Revoke here) */}
                               {userRole === "ADMIN" && (
                                 <>
                                   {req.status === "Compliant" && (
@@ -1248,8 +1308,6 @@ export function AccreditationSupport() {
                                        Revoke
                                      </button>
                                   )}
-                                  
-                                  {/* Only show Edit/Delete if no evidence is attached or it's not compliant */}
                                   {(req.status === "Not Compliant" || req.status === "Pending") && (
                                     <>
                                       <button 
@@ -1323,15 +1381,16 @@ export function AccreditationSupport() {
           <div className="bg-white rounded-2xl shadow-sm border border-gray-200 border-t-4 border-t-[#FF9501] overflow-hidden">
             <div className="border-b border-gray-100 p-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-gray-50/50">
               <div>
-                <div className="flex items-center gap-2">
-                  <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-                    <Target className="w-5 h-5 text-[#FF9501]" />
-                    ISO 9001:2015 Quality Management System (QMS) & IQA Framework
-                  </h2>
-                  <span className="px-2.5 py-0.5 bg-blue-100 text-blue-800 text-[10px] font-bold rounded-full uppercase tracking-wider border border-blue-200">
-                    Institutional Campus-Wide
-                  </span>
-                </div>
+                <div className="flex items-start gap-2">
+                    <h2 className="text-sm sm:text-lg font-bold text-gray-900 flex items-center gap-2">
+                      <Target className="w-4 h-4 sm:w-5 sm:h-5 text-[#FF9501] shrink-0" />
+                      <span className="hidden sm:inline">ISO 9001:2015 Quality Management System (QMS) & IQA Framework</span>
+                      <span className="sm:hidden">ISO 9001:2015 QMS</span>
+                    </h2>
+                    <span className="hidden sm:inline-flex px-2.5 py-0.5 bg-blue-100 text-blue-800 text-[10px] font-bold rounded-full uppercase tracking-wider border border-blue-200">
+                      Institutional Campus-Wide
+                    </span>
+                  </div>
                 <p className="text-sm text-gray-500 mt-1">
                   Official CTU Argao Campus-Wide Internal Quality Audit (IQA) clauses, risk assessments, and auditee office compliance.
                 </p>
@@ -1347,13 +1406,13 @@ export function AccreditationSupport() {
                 {userRole === "ADMIN" && (
                   <button
                     onClick={() => setShowAddIsoReqModal(true)}
-                    className="flex items-center gap-2 px-4 py-2 bg-[#FF9501] text-white rounded-lg hover:bg-[#D97E00] transition-all text-xs font-bold cursor-pointer shadow-sm active:scale-95"
+                    className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 bg-[#FF9501] text-white rounded-lg hover:bg-[#D97E00] transition-all text-xs font-bold cursor-pointer shadow-sm active:scale-95"
                   >
-                    <Plus className="h-3.5 w-3.5" /> Add ISO Clause
+                    <Plus className="h-3.5 w-3.5" /><span className="hidden sm:inline"> Add ISO Clause</span><span className="sm:hidden">Add</span>
                   </button>
                 )}
 
-                <span className="px-3 py-1 bg-[#FFF4E5] text-[#D97E00] text-[10px] font-bold rounded-full uppercase tracking-widest flex items-center gap-1.5 border border-[#FF9501]/20 shadow-sm">
+                <span className="hidden sm:flex px-3 py-1 bg-[#FFF4E5] text-[#D97E00] text-[10px] font-bold rounded-full uppercase tracking-widest items-center gap-1.5 border border-[#FF9501]/20 shadow-sm">
                   <CheckCircle2 className="w-3 h-3 text-[#FF9501]" />
                   Active QMS Matrix
                 </span>
@@ -1402,13 +1461,13 @@ export function AccreditationSupport() {
 
             {/* Auditee Office Dropdown Filter Bar */}
             <div className="px-6 py-4 bg-[#F9FAFB] border-b border-gray-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <Building className="h-4 w-4 text-[#FF9501]" />
-                <label className="text-xs font-bold text-gray-700 uppercase tracking-wider">Auditee Office Filter:</label>
+              <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                <Building className="h-4 w-4 text-[#FF9501] shrink-0" />
+                <label className="text-xs font-bold text-gray-700 uppercase tracking-wider whitespace-nowrap">Filter:</label>
                 <select
                   value={isoOfficeFilter}
                   onChange={(e) => setIsoOfficeFilter(e.target.value)}
-                  className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-xs font-bold text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#FF9501] shadow-sm cursor-pointer min-w-[260px]"
+                  className="flex-1 sm:flex-none px-3 sm:px-4 py-2 bg-white border border-gray-300 rounded-lg text-xs font-bold text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#FF9501] shadow-sm cursor-pointer sm:min-w-[260px]"
                 >
                   <option value="all">All Auditee Offices (8 Offices)</option>
                   <option value="Director of Instruction (DOI) & SAO">Director of Instruction (DOI) & SAO</option>
@@ -1424,8 +1483,8 @@ export function AccreditationSupport() {
                 </select>
               </div>
 
-              <div className="text-xs text-gray-500 font-semibold">
-                Showing {isoRequirements.filter((req) => isoOfficeFilter === "all" || req.auditee_office === isoOfficeFilter).length} of {isoTotalCount} ISO Clauses
+              <div className="text-xs text-gray-500 font-semibold whitespace-nowrap">
+                <span className="hidden sm:inline">Showing </span>{isoRequirements.filter((req) => isoOfficeFilter === "all" || req.auditee_office === isoOfficeFilter).length}<span className="hidden sm:inline"> of {isoTotalCount} ISO Clauses</span><span className="sm:hidden"> clauses</span>
               </div>
             </div>
 
@@ -1495,7 +1554,7 @@ export function AccreditationSupport() {
                                       <Eye className="h-3.5 w-3.5" />
                                     </button>
                                     {(userRole === 'ADMIN' || ev.uploaded_by === userName) && (
-                                      <button onClick={() => handleDeleteIsoEvidence(ev.id)} className="p-1 text-gray-400 hover:text-red-600 bg-white rounded shadow-sm">
+                                      <button onClick={() => confirmDeleteIsoEvidence(ev)} className="p-1 text-gray-400 hover:text-red-600 bg-white rounded shadow-sm cursor-pointer" title="Remove Evidence">
                                         <Archive className="h-3.5 w-3.5" />
                                       </button>
                                     )}
@@ -1520,11 +1579,11 @@ export function AccreditationSupport() {
                           {userRole === "ADMIN" && (
                             <div className="flex items-center gap-1.5">
                               {req.status !== "Compliant" ? (
-                                <button onClick={() => handleIsoStatusUpdate(req.id, "Compliant")} className="px-2.5 py-1.5 bg-green-50 text-green-700 hover:bg-green-100 text-[10px] font-bold uppercase rounded border border-green-200 transition-colors cursor-pointer">
+                                <button onClick={() => confirmIsoStatusUpdate(req.id, "Compliant", req.title)} className="px-2.5 py-1.5 bg-green-50 text-green-700 hover:bg-green-100 text-[10px] font-bold uppercase rounded border border-green-200 transition-colors cursor-pointer">
                                   Approve
                                 </button>
                               ) : (
-                                <button onClick={() => handleIsoStatusUpdate(req.id, "Not Compliant")} className="px-2.5 py-1.5 bg-red-50 text-red-600 hover:bg-red-100 text-[10px] font-bold uppercase rounded border border-red-200 transition-colors cursor-pointer">
+                                <button onClick={() => confirmIsoStatusUpdate(req.id, "Not Compliant", req.title)} className="px-2.5 py-1.5 bg-red-50 text-red-600 hover:bg-red-100 text-[10px] font-bold uppercase rounded border border-red-200 transition-colors cursor-pointer">
                                   Revoke
                                 </button>
                               )}
@@ -1569,9 +1628,9 @@ export function AccreditationSupport() {
                 {userRole === "ADMIN" && (
                   <button
                     onClick={() => { setIqaDayForm({ day_number: iqaDays.length + 1, day_date: "", title: "", scope: "" }); setShowAddIqaDayModal(true); }}
-                    className="flex items-center gap-1.5 px-3.5 py-1.5 bg-[#FF9501] text-white text-xs font-bold rounded-lg hover:bg-[#D97E00] transition-all cursor-pointer shadow-sm active:scale-95"
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-[#FF9501] text-white text-xs font-bold rounded-lg hover:bg-[#D97E00] transition-all cursor-pointer shadow-sm active:scale-95"
                   >
-                    <Plus className="h-3.5 w-3.5" /> Add Audit Day
+                    <Plus className="h-3.5 w-3.5" /><span className="hidden sm:inline"> Add Audit Day</span><span className="sm:hidden">Add</span>
                   </button>
                 )}
               </div>
@@ -1637,8 +1696,8 @@ export function AccreditationSupport() {
                     </h2>
                     <p className="text-sm text-gray-500 mt-1">Historical milestones for {selectedProgram}</p>
                   </div>
-                  <button className="flex items-center gap-2 text-[#D97E00] hover:text-[#995900] text-xs font-bold bg-[#FFF4E5] px-3 py-1.5 rounded-lg transition-colors cursor-pointer">
-                    <Download className="w-3.5 h-3.5" /> Export Report
+                  <button className="flex items-center gap-1.5 sm:gap-2 text-[#D97E00] hover:text-[#995900] text-xs font-bold bg-[#FFF4E5] px-2.5 sm:px-3 py-1.5 rounded-lg transition-colors cursor-pointer">
+                    <Download className="w-3.5 h-3.5" /><span className="hidden sm:inline"> Export Report</span>
                   </button>
                 </div>
                 
@@ -2787,6 +2846,151 @@ export function AccreditationSupport() {
         </div>
       )}
 
-    </div>
+
+      {/* ===== UNIFORM CONFIRMATION MODALS ===== */}
+
+      {/* AACCUP Approve Confirmation */}
+      {showAaccupApproveModal && pendingAaccupApprove && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in">
+          <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl overflow-hidden border-t-4 border-t-[#006837]">
+            <div className="p-6 border-b border-green-50 bg-green-50 flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-[#006837] flex items-center justify-center shrink-0">
+                <CheckCircle className="h-5 w-5 text-white" />
+              </div>
+              <div>
+                <h2 className="text-lg font-bold text-gray-900">Confirm Approval</h2>
+                <p className="text-xs text-gray-500 mt-0.5">AACCUP Accreditation Evidence Review</p>
+              </div>
+            </div>
+            <div className="p-6 space-y-3">
+              <p className="text-sm text-gray-700 leading-relaxed">
+                You are about to approve the following evidence document:
+              </p>
+              <div className="bg-green-50 border border-green-200 rounded-xl px-4 py-3">
+                <p className="text-sm font-bold text-gray-900">{pendingAaccupApprove.name}</p>
+                <p className="text-xs text-gray-500 mt-0.5">Uploaded by {pendingAaccupApprove.uploaded_by} · {pendingAaccupApprove.program}</p>
+              </div>
+              <p className="text-xs text-gray-500 leading-relaxed">This will mark the document as <span className="font-bold text-green-700">Approved</span> and notify the uploader. This action can be reversed by requesting a revision afterward.</p>
+            </div>
+            <div className="p-5 border-t border-gray-100 bg-[#F9FAFB] flex justify-end gap-3">
+              <button onClick={() => { setShowAaccupApproveModal(false); setPendingAaccupApprove(null); }} disabled={isReviewing} className="px-5 py-2.5 text-xs font-bold text-gray-500 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors uppercase tracking-widest cursor-pointer">
+                Cancel
+              </button>
+              <button onClick={async () => { await handleAdminReview(pendingAaccupApprove.name, "Approved"); setShowAaccupApproveModal(false); setPendingAaccupApprove(null); }} disabled={isReviewing} className="px-5 py-2.5 text-xs font-bold text-white rounded-xl bg-[#006837] hover:bg-green-800 transition-all disabled:opacity-50 flex justify-center items-center gap-2 uppercase tracking-widest shadow-md cursor-pointer">
+                {isReviewing ? <><Loader2 className="h-4 w-4 animate-spin"/> Approving...</> : <><Check className="h-4 w-4" /> Yes, Approve</>}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* CHED Admin Review Confirmation */}
+      {showChedReviewModal && pendingChedReview && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in">
+          <div className={`bg-white rounded-2xl max-w-md w-full shadow-2xl overflow-hidden border-t-4 ${pendingChedReview.status === 'Compliant' ? 'border-t-[#006837]' : 'border-t-red-600'}`}>
+            <div className={`p-6 border-b flex items-center gap-3 ${pendingChedReview.status === 'Compliant' ? 'bg-green-50 border-green-50' : 'bg-red-50 border-red-50'}`}>
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${pendingChedReview.status === 'Compliant' ? 'bg-[#006837]' : 'bg-red-600'}`}>
+                {pendingChedReview.status === 'Compliant' ? <CheckCircle className="h-5 w-5 text-white" /> : <AlertCircle className="h-5 w-5 text-white" />}
+              </div>
+              <div>
+                <h2 className="text-lg font-bold text-gray-900">
+                  {pendingChedReview.status === 'Compliant' ? 'Confirm Approval' : 'Request Revision'}
+                </h2>
+                <p className="text-xs text-gray-500 mt-0.5">CHED Monitoring Requirement Review</p>
+              </div>
+            </div>
+            <div className="p-6 space-y-3">
+              <p className="text-sm text-gray-700 leading-relaxed">
+                {pendingChedReview.status === 'Compliant'
+                  ? 'You are about to mark this CHED requirement as Compliant. This signals that all submitted evidence meets CHED standards.'
+                  : 'You are about to mark this CHED requirement as Not Compliant. The faculty will be notified to revise and re-upload evidence.'}
+              </p>
+              <p className="text-xs text-gray-400">This action updates the compliance status immediately and is reflected in the CHED Monitoring dashboard.</p>
+            </div>
+            <div className="p-5 border-t border-gray-100 bg-[#F9FAFB] flex justify-end gap-3">
+              <button onClick={() => { setShowChedReviewModal(false); setPendingChedReview(null); }} disabled={isReviewing} className="px-5 py-2.5 text-xs font-bold text-gray-500 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors uppercase tracking-widest cursor-pointer">
+                Cancel
+              </button>
+              <button onClick={executeChedAdminReview} disabled={isReviewing} className={`px-5 py-2.5 text-xs font-bold text-white rounded-xl transition-all disabled:opacity-50 flex justify-center items-center gap-2 uppercase tracking-widest shadow-md cursor-pointer ${pendingChedReview.status === 'Compliant' ? 'bg-[#006837] hover:bg-green-800' : 'bg-red-600 hover:bg-red-700'}`}>
+                {isReviewing ? <><Loader2 className="h-4 w-4 animate-spin"/> Processing...</> : pendingChedReview.status === 'Compliant' ? <><Check className="h-4 w-4" /> Yes, Approve</> : 'Request Revision'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ISO Clause Status Change Confirmation */}
+      {showIsoStatusModal && pendingIsoStatus && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in">
+          <div className={`bg-white rounded-2xl max-w-md w-full shadow-2xl overflow-hidden border-t-4 ${pendingIsoStatus.status === 'Compliant' ? 'border-t-[#006837]' : 'border-t-amber-500'}`}>
+            <div className={`p-6 border-b flex items-center gap-3 ${pendingIsoStatus.status === 'Compliant' ? 'bg-green-50 border-green-50' : 'bg-amber-50 border-amber-50'}`}>
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${pendingIsoStatus.status === 'Compliant' ? 'bg-[#006837]' : 'bg-amber-500'}`}>
+                {pendingIsoStatus.status === 'Compliant' ? <CheckCircle className="h-5 w-5 text-white" /> : <AlertCircle className="h-5 w-5 text-white" />}
+              </div>
+              <div>
+                <h2 className="text-lg font-bold text-gray-900">
+                  {pendingIsoStatus.status === 'Compliant' ? 'Approve ISO Clause' : 'Revoke ISO Compliance'}
+                </h2>
+                <p className="text-xs text-gray-500 mt-0.5">ISO 9001:2015 QMS Clause Status Update</p>
+              </div>
+            </div>
+            <div className="p-6 space-y-3">
+              <p className="text-sm text-gray-700 leading-relaxed">
+                {pendingIsoStatus.status === 'Compliant'
+                  ? 'You are about to mark this ISO clause as Compliant. This will count toward the campus-wide ISO QMS compliance score.'
+                  : 'You are about to revoke the Compliant status of this ISO clause. It will return to Pending and reduce the campus QMS compliance score.'}
+              </p>
+              <div className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-0.5">Affected Clause</p>
+                <p className="text-sm font-bold text-gray-900">{pendingIsoStatus.title}</p>
+              </div>
+            </div>
+            <div className="p-5 border-t border-gray-100 bg-[#F9FAFB] flex justify-end gap-3">
+              <button onClick={() => { setShowIsoStatusModal(false); setPendingIsoStatus(null); }} disabled={isDeleting} className="px-5 py-2.5 text-xs font-bold text-gray-500 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors uppercase tracking-widest cursor-pointer">
+                Cancel
+              </button>
+              <button onClick={executeIsoStatusUpdate} disabled={isDeleting} className={`px-5 py-2.5 text-xs font-bold text-white rounded-xl transition-all disabled:opacity-50 flex justify-center items-center gap-2 uppercase tracking-widest shadow-md cursor-pointer ${pendingIsoStatus.status === 'Compliant' ? 'bg-[#006837] hover:bg-green-800' : 'bg-amber-500 hover:bg-amber-600'}`}>
+                {isDeleting ? <><Loader2 className="h-4 w-4 animate-spin"/> Updating...</> : pendingIsoStatus.status === 'Compliant' ? <><Check className="h-4 w-4" /> Yes, Approve</> : 'Yes, Revoke'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ISO Evidence Delete Confirmation */}
+      {showDeleteIsoEvidenceModal && isoEvidenceToDelete && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in">
+          <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl overflow-hidden border-t-4 border-t-red-600">
+            <div className="p-6 border-b border-red-50 bg-red-50 flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-red-600 flex items-center justify-center shrink-0">
+                <Archive className="h-5 w-5 text-white" />
+              </div>
+              <div>
+                <h2 className="text-lg font-bold text-red-700">Remove ISO Evidence</h2>
+                <p className="text-xs text-gray-500 mt-0.5">This action cannot be undone</p>
+              </div>
+            </div>
+            <div className="p-6 space-y-3">
+              <p className="text-sm text-gray-700 leading-relaxed">
+                Are you sure you want to permanently remove this evidence file?
+              </p>
+              <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 flex items-center gap-2">
+                <FileText className="h-4 w-4 text-red-500 shrink-0" />
+                <span className="text-sm font-bold text-gray-900 truncate">{isoEvidenceToDelete.document_name}</span>
+              </div>
+              <p className="text-xs text-gray-400 leading-relaxed">The file will be removed from the ISO evidence repository and the Knowledge Base. The clause compliance status may be affected.</p>
+            </div>
+            <div className="p-5 border-t border-gray-100 bg-[#F9FAFB] flex justify-end gap-3">
+              <button onClick={() => { setShowDeleteIsoEvidenceModal(false); setIsoEvidenceToDelete(null); }} disabled={isDeleting} className="px-5 py-2.5 text-xs font-bold text-gray-500 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors uppercase tracking-widest cursor-pointer">
+                Cancel
+              </button>
+              <button onClick={executeDeleteIsoEvidence} disabled={isDeleting} className="px-5 py-2.5 text-xs font-bold text-white rounded-xl bg-red-600 hover:bg-red-700 transition-all disabled:opacity-50 flex justify-center items-center gap-2 uppercase tracking-widest shadow-md cursor-pointer">
+                {isDeleting ? <><Loader2 className="h-4 w-4 animate-spin"/> Removing...</> : <><Archive className="h-4 w-4" /> Yes, Remove</>}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+  </div>
   );
 }
