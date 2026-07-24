@@ -276,18 +276,20 @@ export function PaperTrail() {
 
         {/* Metric Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="bg-white p-5 rounded-xl border border-[#E5E7EB] shadow-sm flex items-center justify-between">
+          {/* Total Tracked */}
+          <div className="bg-white p-5 rounded-xl border border-[#E5E7EB] border-t-4 border-t-[#1D6FA3] shadow-sm flex items-center justify-between hover:shadow-md transition-shadow">
             <div>
               <p className="text-xs font-semibold text-[#6B7280] uppercase tracking-wider">Total Tracked</p>
               <h3 className="text-2xl font-bold text-[#1F2937] mt-1">{totalTracked}</h3>
               <p className="text-[11px] text-[#6B7280] mt-0.5">Documents in paper trail</p>
             </div>
-            <div className="w-12 h-12 bg-gray-100 rounded-xl flex items-center justify-center text-[#1F2937]">
+            <div className="w-12 h-12 bg-blue-50 rounded-xl flex items-center justify-center text-[#1D6FA3]">
               <FileText className="h-6 w-6" />
             </div>
           </div>
 
-          <div className="bg-white p-5 rounded-xl border border-[#E5E7EB] shadow-sm flex items-center justify-between">
+          {/* Pending Receiving */}
+          <div className="bg-white p-5 rounded-xl border border-[#E5E7EB] border-t-4 border-t-[#FF9501] shadow-sm flex items-center justify-between hover:shadow-md transition-shadow">
             <div>
               <p className="text-xs font-semibold text-[#6B7280] uppercase tracking-wider">Pending Receiving</p>
               <h3 className="text-2xl font-bold text-[#D97E00] mt-1">{pendingReceiving}</h3>
@@ -298,7 +300,8 @@ export function PaperTrail() {
             </div>
           </div>
 
-          <div className="bg-white p-5 rounded-xl border border-[#E5E7EB] shadow-sm flex items-center justify-between">
+          {/* Verified / Approved */}
+          <div className="bg-white p-5 rounded-xl border border-[#E5E7EB] border-t-4 border-t-emerald-500 shadow-sm flex items-center justify-between hover:shadow-md transition-shadow">
             <div>
               <p className="text-xs font-semibold text-[#6B7280] uppercase tracking-wider">Verified / Approved</p>
               <h3 className="text-2xl font-bold text-emerald-600 mt-1">{approvedCount}</h3>
@@ -309,7 +312,8 @@ export function PaperTrail() {
             </div>
           </div>
 
-          <div className="bg-white p-5 rounded-xl border border-[#E5E7EB] shadow-sm flex items-center justify-between">
+          {/* Needs Revision */}
+          <div className="bg-white p-5 rounded-xl border border-[#E5E7EB] border-t-4 border-t-rose-500 shadow-sm flex items-center justify-between hover:shadow-md transition-shadow">
             <div>
               <p className="text-xs font-semibold text-[#6B7280] uppercase tracking-wider">Needs Revision</p>
               <h3 className="text-2xl font-bold text-rose-600 mt-1">{needsRevisionCount}</h3>
@@ -322,7 +326,7 @@ export function PaperTrail() {
         </div>
 
         {/* Filter and Search Bar */}
-        <div className="bg-white p-5 rounded-xl border border-[#E5E7EB] shadow-sm">
+        <div className="bg-white p-5 rounded-xl shadow-sm">
           <div className="flex flex-col lg:flex-row gap-4">
             <div className="flex-1 relative">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-[#9CA3AF]" />
@@ -541,7 +545,7 @@ export function PaperTrail() {
       {/* CREATE & RELEASE DOCUMENT MODAL */}
       {showCreateModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl max-w-xl w-full shadow-2xl overflow-hidden animate-in fade-in zoom-in-95">
+          <div className="bg-white rounded-xl border-t-4 border-t-[#FF9501] max-w-xl w-full shadow-2xl overflow-hidden animate-in fade-in zoom-in-95">
             <div className="p-6 border-b border-[#E5E7EB] flex justify-between items-center bg-[#F9FAFB]">
               <div>
                 <h2 className="text-xl font-semibold text-[#1F2937]">Release / Submit Document</h2>
@@ -698,7 +702,7 @@ export function PaperTrail() {
       {/* UPDATE STATUS MODAL */}
       {showStatusModal && selectedRecordForStatus && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl max-w-md w-full shadow-2xl overflow-hidden animate-in fade-in zoom-in-95">
+          <div className="bg-white rounded-xl border-t-4 border-t-[#FF9501] max-w-md w-full shadow-2xl overflow-hidden animate-in fade-in zoom-in-95">
             <div className="p-5 border-b border-[#E5E7EB] flex justify-between items-center bg-[#F9FAFB]">
               <div>
                 <h2 className="text-lg font-semibold text-[#1F2937]">Update Paper Status</h2>

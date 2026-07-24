@@ -127,4 +127,32 @@ class PaperTrailLog(Base):
     notes = Column(Text, nullable=True)
     timestamp = Column(DateTime, default=datetime.utcnow)
 
-    record = relationship("PaperTrailRecord", back_populates="logs")
+    record = relationship("PaperTrailRecord", back_populates="logs")
+
+
+class ISORequirement(Base):
+    __tablename__ = "iso_requirements"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    program = Column(String(50), nullable=False) # e.g. BSIT, BEED, BSED_MATH
+    iso_clause = Column(String(50), nullable=False) # e.g. Clause 6.1, Clause 7.1, Clause 7.2, Clause 7.5, Clause 8.1 & 8.5, Clause 8.4, Clause 8.6 & 10.2, Clause 9.1
+    title = Column(String(255), nullable=False)
+    description = Column(Text, nullable=False)
+    auditee_office = Column(String(255), nullable=False) # e.g. Director of Instruction, HRMO, Registrar, Finance, BAC, SAO, Document Controller, Library Services
+    risk_level = Column(String(20), default="Medium") # High, Medium, Low
+    status = Column(String(50), default="Not Compliant") # Compliant, Pending, Not Compliant
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    evidences = relationship("ISOEvidence", back_populates="requirement", cascade="all, delete-orphan")
+
+
+class ISOEvidence(Base):
+    __tablename__ = "iso_evidences"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    iso_requirement_id = Column(UUID(as_uuid=True), ForeignKey("iso_requirements.id", ondelete="CASCADE"), nullable=False)
+    document_name = Column(String(255), nullable=False)
+    file_url = Column(String, nullable=False)
+    uploaded_by = Column(String(255), nullable=False)
+    upload_date = Column(DateTime, default=datetime.utcnow)
+
+    requirement = relationship("ISORequirement", back_populates="evidences")
+

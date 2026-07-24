@@ -5,8 +5,39 @@
 Last Updated: July 24, 2026
 
 --------------------------------------------------------------------------------
-[2026-07-24] SYSTEM SECURITY HARDENING (PHASES 1 - 4)
+[2026-07-24] ISO 9001:2015 QUALITY MANAGEMENT SYSTEM (QMS) & IQA INTEGRATION
 --------------------------------------------------------------------------------
+• Extracted ISO 9001:2015 IQA Program & Clause Matrix from public/iso program final.pdf:
+  - Clause 6.1: Actions to Address Risks & Opportunities (Director of Instruction & SAO)
+  - Clause 7.1: Resource Management & Financial Adequacy (Property Custodian & Finance)
+  - Clause 7.2: Faculty Competence & Training (Human Resources HRMO)
+  - Clause 7.5: Control of Documented Information (Document Controller & Registrar)
+  - Clause 8.1 & 8.5: Curriculum Design & CMO Compliance (Deans & Program Chairs)
+  - Clause 8.4: Control of External Providers (BAC / Procurement & Supply)
+  - Clause 8.6 & 10.2: Nonconforming Outputs & Corrective Actions (Quality Assurance & Deans)
+  - Clause 9.1 & 9.1.2: Performance Evaluation & Student Satisfaction (Registrar & MIS)
+
+• Backend API & Database Infrastructure (models.py, schemas.py, main.py):
+  - Created ISORequirement and ISOEvidence SQLAlchemy models and Pydantic schemas.
+  - Added REST API routes: /iso/requirements/{program}, /iso/requirements (Admin CRUD), /iso/upload-evidence, /iso/evidence/{id}, and /iso/requirements/{id}/status.
+  - Integrated automatic seeding of CTU Argao's 8 default ISO clauses upon system initialization.
+
+• Frontend Accreditation Support Redesign (AccreditationSupport.tsx):
+  - Built interactive ISO Standard tab with overall readiness score %, clause cards, risk indicators, and auditee office tags.
+  - Filterable by Auditee Office (DOI, Deans, HRMO, Registrar, Document Controller, BAC, Finance, SAO).
+  - Integrated 3-Day IQA Audit Schedule Viewer (Day 1: Context & Governance, Day 2: Operations & Control, Day 3: Closing & Reports).
+  - Built ISO Upload Evidence Modal supporting PDF/Image evidence upload and Admin review toggles.
+
+• Paper Trail Card UI Enhancements (PaperTrail.tsx):
+  - Updated card designs to match Users & Roles card styling (UsersRoles.tsx).
+  - Added vibrant top accent borders (border-t-4):
+    - Total Tracked Card: CTU Blue (border-t-[#1D6FA3])
+    - Pending Receiving Card: Warm Amber (border-t-[#FF9501])
+    - Verified / Approved Card: Emerald Green (border-t-emerald-500)
+    - Needs Revision Card: Rose Red (border-t-rose-500)
+    - Search/Filter Card & Main Table Container: Warm Amber (border-t-[#FF9501])
+    - Modal Dialog Containers: Warm Amber top accent border (border-t-[#FF9501])
+
 • Phase 1: Backend Auth Enforcement & Security Headers
   - Enforced JWT Bearer Token validation across backend API routes (/ask-policy, 
     /paper-trail, /users, document management).

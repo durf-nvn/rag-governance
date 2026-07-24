@@ -150,4 +150,43 @@ class PaperTrailRecordResponse(BaseModel):
     logs: list[PaperTrailLogResponse] = []
 
     class Config:
-        from_attributes = True
+        from_attributes = True
+
+
+class ISORequirementCreate(BaseModel):
+    program: str
+    iso_clause: str
+    title: str
+    description: str
+    auditee_office: str
+    risk_level: Optional[str] = "Medium"
+
+class ISOEvidenceResponse(BaseModel):
+    id: uuid.UUID
+    iso_requirement_id: uuid.UUID
+    document_name: str
+    file_url: str
+    uploaded_by: str
+    upload_date: datetime
+
+    class Config:
+        from_attributes = True
+
+class ISORequirementResponse(BaseModel):
+    id: uuid.UUID
+    program: str
+    iso_clause: str
+    title: str
+    description: str
+    auditee_office: str
+    risk_level: str
+    status: str
+    created_at: datetime
+    evidences: list[ISOEvidenceResponse] = []
+
+    class Config:
+        from_attributes = True
+
+class ISOStatusUpdate(BaseModel):
+    status: str # Compliant, Pending, Not Compliant
+

@@ -3062,4 +3062,277 @@ async def upload_paper_trail_attachment(file: UploadFile = File(...)):
         return {"file_url": public_url, "filename": file.filename}
     except Exception as exc:
         print(f"[upload_paper_trail_attachment] error: {exc}")
-        raise HTTPException(status_code=500, detail="Failed to upload attachment.")
+        raise HTTPException(status_code=500, detail="Failed to upload attachment.")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ISO 9001:2015 QUALITY MANAGEMENT SYSTEM (QMS) & IQA ENDPOINTS
+# ─────────────────────────────────────────────────────────────────────────────
+
+DEFAULT_ISO_CLAUSES = [
+    {
+        "iso_clause": "Clause 6.1",
+        "title": "Actions to Address Risks & Opportunities in Education",
+        "description": "Assessment of risk planning for student services (resource limitations, student attrition) and leveraging opportunities (new program development, technology integration).",
+        "auditee_office": "Director of Instruction (DOI) & SAO",
+        "risk_level": "High"
+    },
+    {
+        "iso_clause": "Clause 7.1",
+        "title": "Resource Management & Financial Adequacy",
+        "description": "Evaluation of financial processes, resource acquisition, storage, property custody, asset tracking, and budget allocation.",
+        "auditee_office": "Property Custodian & Finance",
+        "risk_level": "Medium"
+    },
+    {
+        "iso_clause": "Clause 7.2",
+        "title": "Faculty Competence & Professional Training",
+        "description": "Review of processes for determining faculty qualifications, ongoing professional development, loading distribution, and competency enhancement.",
+        "auditee_office": "Human Resources Management Office (HRMO)",
+        "risk_level": "High"
+    },
+    {
+        "iso_clause": "Clause 7.5",
+        "title": "Control of Documented Information & Records",
+        "description": "Verification of system for managing QMS policies, procedures, inventory assets, CMO compliance records, and nonconformity reports.",
+        "auditee_office": "Document Controller & Registrar",
+        "risk_level": "Medium"
+    },
+    {
+        "iso_clause": "Clause 8.1 & 8.5",
+        "title": "Curriculum Design, CMO Compliance & Instruction",
+        "description": "Assessment of systematic process for designing, developing, and revising academic curricula adhering to CHED Memorandum Orders and teaching standards.",
+        "auditee_office": "College Deans & Program Chairs",
+        "risk_level": "High"
+    },
+    {
+        "iso_clause": "Clause 8.4",
+        "title": "Control of Externally Provided Services",
+        "description": "Audit of external service providers, BAC procurement procedures, canteen/dormitory services, and supply management affecting student welfare.",
+        "auditee_office": "BAC / Procurement & Supply",
+        "risk_level": "Medium"
+    },
+    {
+        "iso_clause": "Clause 8.6 & 10.2",
+        "title": "Nonconforming Outputs & Corrective Actions",
+        "description": "Scrutiny of controls for nonconforming outputs, student assessment methodologies, evaluation, and implementing corrective actions for QMS improvement.",
+        "auditee_office": "Quality Assurance & Deans",
+        "risk_level": "High"
+    },
+    {
+        "iso_clause": "Clause 9.1 & 9.1.2",
+        "title": "Performance Evaluation & Student Satisfaction",
+        "description": "Enrolment data management, student record-keeping, student satisfaction monitoring, data integrity, and internal quality audit (IQA) reporting.",
+        "auditee_office": "Registrar & MIS",
+        "risk_level": "Medium"
+    }
+]
+
+
+@app.get("/iso/requirements/{program}", response_model=List[schemas.ISORequirementResponse])
+def get_iso_requirements(program: str, db: Session = Depends(get_db)):
+    """Retrieves or seeds ISO 9001:2015 clause checklists for a specific degree program."""
+    existing = db.query(models.ISORequirement).filter(models.ISORequirement.program == program).all()
+    if not existing:
+        # Seed default 8 ISO Clauses from iso program final.pdf
+        seeded_reqs = []
+        for item in DEFAULT_ISO_CLAUSES:
+            req = models.ISORequirement(
+                program=program,
+                iso_clause=item["iso_clause"],
+                title=item["title"],
+                description=item["description"],
+                auditee_office=item["auditee_office"],
+                risk_level=item["risk_level"],
+                status="Not Compliant"
+            )
+            db.add(req)
+            seeded_reqs.append(req)
+        db.commit()
+        for r in seeded_reqs:
+            db.refresh(r)
+        return seeded_reqs
+    return existing
+
+
+@app.post("/iso/requirements", response_model=schemas.ISORequirementResponse, status_code=status.HTTP_201_CREATED)
+def create_iso_requirement(
+    payload: schemas.ISORequirementCreate,
+    db: Session = Depends(get_db),
+    admin: models.User = Depends(get_current_admin)
+):
+    """Admin creates a new ISO requirement item."""
+    new_req = models.ISORequirement(
+        program=payload.program,
+        iso_clause=payload.iso_clause,
+        title=payload.title,
+        description=payload.description,
+        auditee_office=payload.auditee_office,
+        risk_level=payload.risk_level or "Medium",
+        status="Not Compliant"
+    )
+    db.add(new_req)
+    db.commit()
+    db.refresh(new_req)
+    return new_req
+
+
+@app.put("/iso/requirements/{req_id}", response_model=schemas.ISORequirementResponse)
+def update_iso_requirement(
+    req_id: str,
+    payload: schemas.ISORequirementCreate,
+    db: Session = Depends(get_db),
+    admin: models.User = Depends(get_current_admin)
+):
+    """Admin updates an ISO requirement item."""
+    req = db.query(models.ISORequirement).filter(models.ISORequirement.id == req_id).first()
+    if not req:
+        raise HTTPException(status_code=404, detail="ISO requirement not found.")
+
+    req.iso_clause = payload.iso_clause
+    req.title = payload.title
+    req.description = payload.description
+    req.auditee_office = payload.auditee_office
+    req.risk_level = payload.risk_level or req.risk_level
+    db.commit()
+    db.refresh(req)
+    return req
+
+
+@app.delete("/iso/requirements/{req_id}")
+def delete_iso_requirement(
+    req_id: str,
+    db: Session = Depends(get_db),
+    admin: models.User = Depends(get_current_admin)
+):
+    """Admin deletes an ISO requirement item."""
+    req = db.query(models.ISORequirement).filter(models.ISORequirement.id == req_id).first()
+    if not req:
+        raise HTTPException(status_code=404, detail="ISO requirement not found.")
+    db.delete(req)
+    db.commit()
+    return {"message": "ISO requirement deleted successfully."}
+
+
+@app.post("/iso/upload-evidence")
+async def upload_iso_evidence(
+    file: UploadFile = File(...),
+    requirement_id: str = Form(...),
+    document_name: str = Form(...),
+    uploaded_by: str = Form(...),
+    program: str = Form(...),
+    db: Session = Depends(get_db)
+):
+    """Uploads an evidence file linked to an ISO clause requirement."""
+    req = db.query(models.ISORequirement).filter(models.ISORequirement.id == requirement_id).first()
+    if not req:
+        raise HTTPException(status_code=404, detail="ISO requirement not found.")
+
+    try:
+        contents = await file.read()
+        safe_filename = file.filename.replace(" ", "_")
+        unique_path = f"iso_evidence/{program}/{int(time.time())}_{safe_filename}"
+
+        supabase.storage.from_("documents").upload(
+            file=contents,
+            path=unique_path,
+            file_options={"content-type": file.content_type or "application/pdf"}
+        )
+        public_url = supabase.storage.from_("documents").get_public_url(unique_path)
+
+        new_evidence = models.ISOEvidence(
+            iso_requirement_id=req.id,
+            document_name=document_name,
+            file_url=public_url,
+            uploaded_by=uploaded_by
+        )
+        db.add(new_evidence)
+        
+        # Set status to Pending
+        req.status = "Pending"
+        db.commit()
+        db.refresh(req)
+
+        # RAG AI Vector Ingestion
+        try:
+            extracted_text = ""
+            fn_lower = file.filename.lower()
+            if fn_lower.endswith(".pdf"):
+                pdf_reader = PyPDF2.PdfReader(io.BytesIO(contents))
+                for page in pdf_reader.pages:
+                    txt = page.extract_text()
+                    if txt: extracted_text += txt + "\n"
+            elif fn_lower.endswith(".txt"):
+                extracted_text = contents.decode("utf-8")
+            elif fn_lower.endswith(".docx"):
+                import docx
+                d = docx.Document(io.BytesIO(contents))
+                extracted_text = "\n".join([p.text for p in d.paragraphs])
+
+            if extracted_text.strip():
+                vector_store.add_to_vector_db(extracted_text, {
+                    "name": document_name,
+                    "category": "Accreditation Evidence",
+                    "office": req.auditee_office,
+                    "program": program,
+                    "iso_clause": req.iso_clause,
+                    "uploaded_by": uploaded_by,
+                    "file_url": public_url
+                })
+        except Exception as vexc:
+            print(f"[upload_iso_evidence] vector store ingestion warning: {vexc}")
+
+        # Audit event
+        try:
+            supabase.table("system_events_logs").insert({
+                "user_email": uploaded_by,
+                "event_type": "ISO Evidence Upload",
+                "description": f"Uploaded evidence '{document_name}' for {req.iso_clause} ({program})"
+            }).execute()
+        except Exception:
+            pass
+
+        return {"message": "ISO evidence uploaded successfully!", "public_url": public_url}
+    except Exception as exc:
+        print(f"[upload_iso_evidence] error: {exc}")
+        raise HTTPException(status_code=500, detail="Failed to upload ISO evidence file.")
+
+
+@app.delete("/iso/evidence/{evidence_id}")
+def delete_iso_evidence(
+    evidence_id: str,
+    db: Session = Depends(get_db)
+):
+    """Deletes an ISO evidence file."""
+    ev = db.query(models.ISOEvidence).filter(models.ISOEvidence.id == evidence_id).first()
+    if not ev:
+        raise HTTPException(status_code=404, detail="ISO evidence not found.")
+
+    req = ev.requirement
+    db.delete(ev)
+    db.commit()
+
+    # Re-evaluate requirement status if no evidences remain
+    if req and len(req.evidences) == 0:
+        req.status = "Not Compliant"
+        db.commit()
+
+    return {"message": "ISO evidence removed successfully."}
+
+
+@app.put("/iso/requirements/{req_id}/status", response_model=schemas.ISORequirementResponse)
+def update_iso_status(
+    req_id: str,
+    payload: schemas.ISOStatusUpdate,
+    db: Session = Depends(get_db)
+):
+    """Updates ISO clause compliance status (e.g. Compliant, Pending, Not Compliant)."""
+    req = db.query(models.ISORequirement).filter(models.ISORequirement.id == req_id).first()
+    if not req:
+        raise HTTPException(status_code=404, detail="ISO requirement not found.")
+
+    req.status = payload.status
+    db.commit()
+    db.refresh(req)
+    return req
+
