@@ -7,9 +7,9 @@ from typing import List, Optional
 
 # Third-party imports
 from dotenv import load_dotenv
-from fastapi import FastAPI, Depends, HTTPException, status, File, UploadFile, Form, Body
+from fastapi import FastAPI, Depends, HTTPException, status, File, UploadFile, Form, Body, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.security import OAuth2PasswordRequestForm
+from fastapi.security import OAuth2PasswordRequestForm, OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, EmailStr
 from groq import Groq
@@ -18,6 +18,8 @@ import PyPDF2
 import groq
 import time
 import re
+from rate_limiter import limiter
+from sanitizer import sanitize_user_input, check_prompt_injection
 import traceback
 import numpy as np
 from PIL import Image as PILImage
@@ -327,13 +329,130 @@ app = FastAPI(
     description="Backend for the RAG-Powered Quality Assurance System"
 )
 
+# ─────────────────────────────────────────────────────────────────────────────
+# SECURITY HARDENING: CORS & HEADERS MIDDLEWARE
+# ─────────────────────────────────────────────────────────────────────────────
+allowed_origins_env = os.getenv("ALLOWED_ORIGINS")
+if allowed_origins_env:
+    allowed_origins = [origin.strip() for origin in allowed_origins_env.split(",") if origin.strip()]
+else:
+    allowed_origins = [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000"
+    ]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    """Applies Security Headers to defeat Clickjacking, MIME sniffing, and XSS attacks."""
+    response = await call_next(request)
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    return response
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# AUTHENTICATION DEPENDENCIES (JWT VALIDATION)
+# ─────────────────────────────────────────────────────────────────────────────
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login", auto_error=False)
+
+def _extract_token_from_request(request: Request, bearer_token: Optional[str] = None) -> Optional[str]:
+    """Helper to extract token from Bearer header OR HttpOnly cookie."""
+    if bearer_token:
+        return bearer_token
+    auth_header = request.headers.get("Authorization")
+    if auth_header and auth_header.startswith("Bearer "):
+        return auth_header.split(" ")[1]
+    cookie_token = request.cookies.get("access_token")
+    if cookie_token:
+        return cookie_token.replace("Bearer ", "") if cookie_token.startswith("Bearer ") else cookie_token
+    return None
+
+def get_current_user(
+    request: Request,
+    token: Optional[str] = Depends(oauth2_scheme),
+    db: Session = Depends(get_db)
+) -> models.User:
+    """Verifies incoming JWT access token from Header or HttpOnly Cookie."""
+    extracted_token = _extract_token_from_request(request, token)
+    if not extracted_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required. Missing Bearer access token or auth cookie.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    try:
+        payload = utils.decode_access_token(extracted_token)
+        email: str = payload.get("sub")
+        if not email:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token claims.",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Access token has expired or is invalid.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    user = db.query(models.User).filter(models.User.email == email).first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User account not found.")
+
+    if user.status != "Active":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User account is disabled.")
+
+    return user
+
+def get_optional_user(
+    request: Request,
+    token: Optional[str] = Depends(oauth2_scheme),
+    db: Session = Depends(get_db)
+) -> Optional[models.User]:
+    """Optional user resolution supporting both Header and Cookie auth."""
+    extracted_token = _extract_token_from_request(request, token)
+    if not extracted_token:
+        return None
+    try:
+        payload = utils.decode_access_token(extracted_token)
+        email = payload.get("sub")
+        if email:
+            return db.query(models.User).filter(models.User.email == email).first()
+    except Exception:
+        pass
+    return None
+
+def get_current_admin(current_user: models.User = Depends(get_current_user)) -> models.User:
+    """Enforces Admin role requirement for administrative routes."""
+    if current_user.role.upper() != "ADMIN":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access restricted. Administrator privileges required."
+        )
+    return current_user
+
+def get_current_faculty_or_admin(current_user: models.User = Depends(get_current_user)) -> models.User:
+    """Enforces Faculty or Admin role requirement."""
+    if current_user.role.upper() not in ["FACULTY", "ADMIN"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access restricted to Faculty and Administrator roles."
+        )
+    return current_user
+
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -353,7 +472,10 @@ def test_db_connection(db: Session = Depends(get_db)):
         return {"status": "Failed", "error": str(e)}
     
 @app.post("/auth/send-otp")
-def send_otp(req: SendOTPRequest, db: Session = Depends(get_db)):
+def send_otp(request: Request, req: SendOTPRequest, db: Session = Depends(get_db)):
+    # Rate Limit Enforcement: Max 3 OTP requests per 5 minutes per IP
+    limiter.check(request, key_name="send_otp", max_requests=3, window_seconds=300)
+
     # 1. Check if email is already taken
     existing_user = db.query(models.User).filter(models.User.email == req.email).first()
     if existing_user:
@@ -496,7 +618,15 @@ def register_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
 # ─────────────────────────────────────────────────────────────────────────────
 
 @app.post("/login", response_model=schemas.Token)
-def login_user(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+def login_user(
+    request: Request,
+    response: Response,
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    db: Session = Depends(get_db)
+):
+    # Anti-Brute-Force Rate Limiting: Max 5 login attempts per minute per IP
+    limiter.check(request, key_name="login_attempt", max_requests=5, window_seconds=60)
+
     user = db.query(models.User).filter(models.User.email == form_data.username).first()
 
     if not user or not utils.verify_password(form_data.password, user.hashed_password):
@@ -518,7 +648,17 @@ def login_user(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = D
             detail="Your Faculty account is currently pending Admin verification."
         )
 
-    access_token = utils.create_access_token(data={"sub": user.email})
+    access_token = utils.create_access_token(data={"sub": user.email, "role": user.role})
+
+    # Set HttpOnly, SameSite cookie so browser handles authentication securely without JS access
+    response.set_cookie(
+        key="access_token",
+        value=f"Bearer {access_token}",
+        httponly=True,
+        max_age=60 * 60 * 8, # 8 hours
+        samesite="lax",
+        secure=False  # Set to True when deploying under HTTPS
+    )
 
     # Audit log
     try:
@@ -544,6 +684,14 @@ def login_user(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = D
         "role":         user.role,
         "department":   user_dept,
     }
+
+
+@app.post("/logout")
+def logout_user(response: Response):
+    """Clears HttpOnly auth cookie on logout."""
+    response.delete_cookie(key="access_token", samesite="lax")
+    return {"message": "Successfully logged out."}
+
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -597,12 +745,19 @@ def update_password(request: UpdatePasswordRequest, db: Session = Depends(get_db
 # ─────────────────────────────────────────────────────────────────────────────
 
 @app.get("/users", response_model=List[schemas.UserResponse])
-def get_all_users(db: Session = Depends(get_db)):
+def get_all_users(
+    db: Session = Depends(get_db),
+    admin: models.User = Depends(get_current_admin)
+):
     return db.query(models.User).all()
 
 
 @app.put("/users/{user_id}/verify")
-def verify_user(user_id: str, db: Session = Depends(get_db)):
+def verify_user(
+    user_id: str,
+    db: Session = Depends(get_db),
+    admin: models.User = Depends(get_current_admin)
+):
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -625,7 +780,11 @@ def verify_user(user_id: str, db: Session = Depends(get_db)):
 
 
 @app.delete("/users/{user_id}")
-def delete_user(user_id: str, db: Session = Depends(get_db)):
+def delete_user(
+    user_id: str,
+    db: Session = Depends(get_db),
+    admin: models.User = Depends(get_current_admin)
+):
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -636,7 +795,11 @@ def delete_user(user_id: str, db: Session = Depends(get_db)):
 
 
 @app.put("/users/{user_id}/disable")
-def disable_user(user_id: str, db: Session = Depends(get_db)):
+def disable_user(
+    user_id: str,
+    db: Session = Depends(get_db),
+    admin: models.User = Depends(get_current_admin)
+):
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -658,7 +821,11 @@ def disable_user(user_id: str, db: Session = Depends(get_db)):
 
 
 @app.put("/users/{user_id}/enable")
-def enable_user(user_id: str, db: Session = Depends(get_db)):
+def enable_user(
+    user_id: str,
+    db: Session = Depends(get_db),
+    admin: models.User = Depends(get_current_admin)
+):
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -1040,10 +1207,38 @@ def archive_document(doc_name: str, db: Session = Depends(get_db)):
 # ─────────────────────────────────────────────────────────────────────────────
 
 @app.post("/ask-policy")
-def ask_policy(request: QuestionRequest, db: Session = Depends(get_db)):
-    question = request.question
-    user_email = request.user_email
-    user_role = request.user_role.upper()
+def ask_policy(
+    req: Request,
+    request: QuestionRequest,
+    db: Session = Depends(get_db),
+    current_user: Optional[models.User] = Depends(get_optional_user)
+):
+    # RAG Query Rate Limiting: Max 15 questions per 1 minute per IP to prevent vector database scraping
+    limiter.check(req, key_name="ask_policy", max_requests=15, window_seconds=60)
+
+    raw_question = request.question or ""
+    
+    # SECURITY HARDENING: Sanitize input and detect prompt injection attempts
+    question = sanitize_user_input(raw_question)
+    is_injection, reason = check_prompt_injection(question)
+    if is_injection:
+        return {
+            "answer": (
+                "🛡️ **Security Guardrail Triggered**: Your query contains pattern signatures associated with "
+                "prompt manipulation, system instruction override, or role bypass attempts. "
+                "Please rephrase your question to ask directly about institutional policies."
+            ),
+            "sources": [],
+            "restricted": False
+        }
+
+    # SECURITY HARDENING: Use cryptographically verified identity from JWT token if logged in
+    if current_user:
+        user_email = current_user.email
+        user_role = current_user.role.upper()
+    else:
+        user_email = request.user_email
+        user_role = (request.user_role or "STUDENT").upper()
 
     # ==========================================
     # ROLE-BASED ACCESS CONFIGURATION
@@ -2667,18 +2862,26 @@ def _generate_tracking_number(db: Session) -> str:
 
 
 @app.post("/paper-trail", response_model=schemas.PaperTrailRecordResponse, status_code=status.HTTP_201_CREATED)
-def create_paper_trail_record(payload: schemas.PaperTrailCreate, db: Session = Depends(get_db)):
+def create_paper_trail_record(
+    payload: schemas.PaperTrailCreate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_faculty_or_admin)
+):
     """Creates a new document paper trail record and logs initial release."""
     tracking_no = _generate_tracking_number(db)
     
+    sender_name = current_user.full_name or payload.sender_name
+    sender_email = current_user.email
+    sender_role = current_user.role.upper()
+
     new_record = models.PaperTrailRecord(
         tracking_number=tracking_no,
         title=payload.title,
         document_type=payload.document_type,
         office=payload.office,
-        sender_name=payload.sender_name,
-        sender_email=payload.sender_email,
-        sender_role=payload.sender_role.upper(),
+        sender_name=sender_name,
+        sender_email=sender_email,
+        sender_role=sender_role,
         recipient_name=payload.recipient_name,
         recipient_email=payload.recipient_email,
         recipient_role=payload.recipient_role.upper() if payload.recipient_role else None,
@@ -2695,9 +2898,9 @@ def create_paper_trail_record(payload: schemas.PaperTrailCreate, db: Session = D
         record_id=new_record.id,
         action="Document Released / Submitted",
         status="Pending Receiving",
-        actor_name=payload.sender_name,
-        actor_email=payload.sender_email,
-        actor_role=payload.sender_role.upper(),
+        actor_name=sender_name,
+        actor_email=sender_email,
+        actor_role=sender_role,
         notes=payload.remarks or f"Document '{payload.title}' released to {payload.office}."
     )
     db.add(initial_log)
@@ -2711,13 +2914,13 @@ def create_paper_trail_record(payload: schemas.PaperTrailCreate, db: Session = D
                 user_email=payload.recipient_email,
                 n_type="info",
                 title=f"New Document Received: {tracking_no}",
-                message=f"{payload.sender_name} released document '{payload.title}' to your office ({payload.office})."
+                message=f"{sender_name} released document '{payload.title}' to your office ({payload.office})."
             )
         _notify_all_admins(
             db=db,
             n_type="info",
             title=f"Paper Trail Created: {tracking_no}",
-            message=f"Document '{payload.title}' ({payload.document_type}) released by {payload.sender_name} to {payload.office}."
+            message=f"Document '{payload.title}' ({payload.document_type}) released by {sender_name} to {payload.office}."
         )
     except Exception as exc:
         print(f"[paper_trail] notification warning: {exc}")
@@ -2731,16 +2934,20 @@ def get_paper_trail_records(
     email: Optional[str] = None,
     office: Optional[str] = None,
     status_filter: Optional[str] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_faculty_or_admin)
 ):
     """Fetches paper trail records filtered by role/email/office/status."""
     query = db.query(models.PaperTrailRecord)
     
     # If user is FACULTY (and not ADMIN), show documents they sent OR documents sent to them/their office
-    if role and role.upper() == "FACULTY" and email:
+    user_role = current_user.role.upper()
+    user_email = current_user.email
+    
+    if user_role == "FACULTY":
         query = query.filter(
-            (models.PaperTrailRecord.sender_email == email) | 
-            (models.PaperTrailRecord.recipient_email == email) |
+            (models.PaperTrailRecord.sender_email == user_email) | 
+            (models.PaperTrailRecord.recipient_email == user_email) |
             (models.PaperTrailRecord.sender_role == "FACULTY")
         )
     
@@ -2754,7 +2961,11 @@ def get_paper_trail_records(
 
 
 @app.get("/paper-trail/{record_id}", response_model=schemas.PaperTrailRecordResponse)
-def get_paper_trail_detail(record_id: str, db: Session = Depends(get_db)):
+def get_paper_trail_detail(
+    record_id: str,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_faculty_or_admin)
+):
     """Fetches single paper trail record with full movement history."""
     record = db.query(models.PaperTrailRecord).filter(models.PaperTrailRecord.id == record_id).first()
     if not record:
@@ -2766,7 +2977,8 @@ def get_paper_trail_detail(record_id: str, db: Session = Depends(get_db)):
 def update_paper_trail_status(
     record_id: str,
     payload: schemas.PaperTrailStatusUpdate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_faculty_or_admin)
 ):
     """Updates document status (e.g. Received, Approved/Paper OK, Needs Revision, Released) & logs movement."""
     record = db.query(models.PaperTrailRecord).filter(models.PaperTrailRecord.id == record_id).first()

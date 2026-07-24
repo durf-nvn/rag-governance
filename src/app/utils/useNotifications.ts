@@ -118,7 +118,7 @@ export function useNotifications(): UseNotificationsReturn {
     try {
       const res = await fetch(
         `${API_BASE}/notifications?email=${encodeURIComponent(userEmail)}&filter=all`,
-        { headers: { Authorization: `Bearer ${sessionStorage.getItem("token") ?? ""}` } }
+        { credentials: "include" }
       );
       if (!res.ok) throw new Error(`Server error ${res.status}`);
       const data: Notification[] = await res.json();
@@ -159,9 +159,9 @@ export function useNotifications(): UseNotificationsReturn {
     try {
       await fetch(`${API_BASE}/notifications/mark-all-read`, {
         method: "PATCH",
+        credentials: "include",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${sessionStorage.getItem("token") ?? ""}`,
         },
         body: JSON.stringify({ email: userEmail }),
       });
@@ -178,7 +178,7 @@ export function useNotifications(): UseNotificationsReturn {
     try {
       await fetch(`${API_BASE}/notifications/${id}/read`, {
         method: "PATCH",
-        headers: { Authorization: `Bearer ${sessionStorage.getItem("token") ?? ""}` },
+        credentials: "include",
       });
     } catch {
       refresh();
@@ -194,9 +194,9 @@ export function useNotifications(): UseNotificationsReturn {
     try {
       await fetch(`${API_BASE}/notifications/delete-read`, {
         method: "DELETE",
+        credentials: "include",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${sessionStorage.getItem("token") ?? ""}`,
         },
         body: JSON.stringify({ email: userEmail }),
       });

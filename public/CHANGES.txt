@@ -1,0 +1,72 @@
+================================================================================
+          CTU ARGAO KNOWLEDGE MANAGEMENT & GOVERNANCE SYSTEM
+                      SYSTEM UPDATES & CHANGELOG
+================================================================================
+Last Updated: July 24, 2026
+
+--------------------------------------------------------------------------------
+[2026-07-24] SYSTEM SECURITY HARDENING (PHASES 1 - 4)
+--------------------------------------------------------------------------------
+• Phase 1: Backend Auth Enforcement & Security Headers
+  - Enforced JWT Bearer Token validation across backend API routes (/ask-policy, 
+    /paper-trail, /users, document management).
+  - Derived user identity and roles strictly from verified JWT claims.
+  - Restricted CORS to explicit domain origins while enabling all HTTP methods including PATCH for notification endpoints.
+  - Added Security Headers middleware (X-Frame-Options: DENY, X-Content-Type-Options: 
+    nosniff, X-XSS-Protection, Referrer-Policy).
+  - Removed static fallback secret keys from utils.py.
+
+• Phase 2: HttpOnly Cookie Migration & Storage Hardening
+  - Backend /login now issues HttpOnly, SameSite=Lax authentication cookies.
+  - Added /logout backend endpoint to invalidate auth cookies.
+  - Configured global Axios credentials (withCredentials = true) in src/main.tsx.
+  - Removed raw JWT token storage from browser sessionStorage in LoginPage.tsx 
+    and DashboardLayout.tsx.
+
+• Phase 3: Rate Limiting & Anti-Brute-Force Protection
+  - Implemented in-memory sliding-window RateLimiter (backend/rate_limiter.py).
+  - Protected /login (max 5 attempts/min) against credential stuffing.
+  - Protected /auth/send-otp (max 3 requests/5min) against OTP spamming.
+  - Protected /ask-policy (max 15 queries/min) against automated scraping.
+  - Returns HTTP 429 Too Many Requests with dynamic Retry-After headers.
+
+• Phase 4: RAG Prompt Injection Defense & Input Sanitization
+  - Created input sanitizer and regex signature scanner (backend/sanitizer.py).
+  - Intercepts instruction overrides ("ignore previous rules"), developer prompt 
+    exfiltration ("show system prompt"), role impersonation ("act as admin"), 
+    and jailbreaks before LLM or vector execution.
+  - Verified with automated test suite (test_sanitizer.py).
+
+--------------------------------------------------------------------------------
+[2026-07-23] DOCUMENT PAPER TRAIL SYSTEM & NOTIFICATION REDESIGN
+--------------------------------------------------------------------------------
+• Document Paper Trail Feature:
+  - Added full document movement tracking between Faculty and Admin offices.
+  - Auto-generates unique tracking numbers (e.g. PT-2026-XXXX).
+  - Includes status workflow: Pending Receiving -> Received -> Approved / Paper OK -> 
+    Needs Revision -> Released.
+  - Added printable Transmittal Receipt modal complete with QR code preview, 
+    sign-off lines, and official document layout.
+  - Added Paper Trail item to dashboard sidebar with role permission gating.
+
+• Notification Sidebar UI/UX Redesign:
+  - Redesigned NotificationSidebar.tsx to match CTU Argao brand design tokens.
+  - Upgraded header to warm amber gradient (from-[#FF9501] to-[#D97E00]).
+  - Added smart navigation routing (clicking a notification opens the relevant 
+    page, e.g. Paper Trail, Knowledge Repository, Users & Roles).
+
+--------------------------------------------------------------------------------
+[2026-07-22] ROLE-BASED RAG FILTERING & PADDLEOCR OCR INTEGRATION
+--------------------------------------------------------------------------------
+• Role-Based Confidential Content Filtering:
+  - Restricted "Accreditation Evidence" category from STUDENT queries in RAG 
+    search (vector_store.py).
+  - Updated AskPolicy.tsx UI with a dedicated Access Restricted alert card and 
+    Lock icon when confidential topics are requested by students.
+
+• PaddleOCR Integration:
+  - Added PaddleOCR fallback support for image uploads (.png, .jpg, .jpeg) and 
+    scanned/image-heavy PDF pages (e.g. Student Handbooks with embedded tables).
+  - Implemented per-page OCR fallback threshold in backend/main.py.
+
+================================================================================

@@ -61,6 +61,7 @@ export function LoginPage() {
     try {
       const response = await axios.post("http://localhost:8000/login", formBody, {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        withCredentials: true,
       });
 
       if (rememberMe) {
@@ -69,7 +70,8 @@ export function LoginPage() {
         sessionStorage.removeItem("rememberedEmail");
       }
 
-      sessionStorage.setItem('token', response.data.access_token);
+      // Security Hardening: Token is stored safely in HttpOnly cookie by backend.
+      // Store non-sensitive user metadata for UI display only.
       sessionStorage.setItem('userName', response.data.full_name);
       sessionStorage.setItem('userEmail', response.data.email);
       sessionStorage.setItem('userRole', response.data.role);

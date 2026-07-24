@@ -15,18 +15,18 @@ supabase = None
 if SUPABASE_URL and SUPABASE_KEY:
     try:
         supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
-        print("✅ Supabase client initialized successfully.")
+        print("[INFO] Supabase client initialized successfully.")
     except Exception as e:
-        print(f"❌ Failed to initialize Supabase: {e}")
+        print(f"[ERROR] Failed to initialize Supabase: {e}")
 else:
-    print("❌ ERROR: SUPABASE_URL or SUPABASE_SERVICE_KEY is missing from .env!")
+    print("[ERROR] SUPABASE_URL or SUPABASE_SERVICE_KEY is missing from .env!")
 
 model = SentenceTransformer('all-MiniLM-L6-v2')
 
 def add_to_vector_db(text, metadata):
     # Check if supabase was actually initialized before using it
     if supabase is None:
-        print("⚠️ search_knowledge called but supabase client is not initialized!")
+        print("[WARNING] search_knowledge called but supabase client is not initialized!")
         return []
     
     # Split text into chunks of 500 characters

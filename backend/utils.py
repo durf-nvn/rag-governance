@@ -10,9 +10,15 @@ from jose import jwt
 
 load_dotenv()
 
-SECRET_KEY = os.getenv("SECRET_KEY", "a_very_secret_key_for_ctu_project") 
+SECRET_KEY = os.getenv("SECRET_KEY")
+if not SECRET_KEY:
+    # Strong random key for runtime security if missing in .env
+    import secrets
+    SECRET_KEY = secrets.token_hex(32)
+    print("[WARNING] SECRET_KEY not found in .env! A temporary random key has been generated for this process runtime.")
+
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
+ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 8  # 8 hours session
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto", truncate_error=False)
 
@@ -28,6 +34,16 @@ def create_access_token(data: dict):
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
+
+def decode_access_token(token: str) -> dict:
+    """Decodes and validates a JWT access token. Raises JWTError if invalid."""
+    from jose import JWTError
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        return payload
+    except JWTError as e:
+        raise e
+
 
 def send_forgot_password_email(target_email: str):
     sender_email = os.getenv("EMAIL_ADDRESS")

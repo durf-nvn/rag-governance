@@ -75,9 +75,16 @@ export function DashboardLayout() {
 
   const badge = getRoleBadge();
 
-  const handleLogout = () => {
-    sessionStorage.removeItem("token");
-    navigate("/login");
+  const handleLogout = async () => {
+    try {
+      const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000";
+      await axios.post(`${API_BASE}/logout`, {}, { withCredentials: true });
+    } catch (e) {
+      console.error("Logout warning:", e);
+    } finally {
+      sessionStorage.clear();
+      navigate("/login");
+    }
   };
 
   return (
