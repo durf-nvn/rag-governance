@@ -1108,6 +1108,7 @@ def get_documents():
                     "name":             name,
                     "category":         meta.get("category",         ""),
                     "office":           meta.get("office",           ""),
+                    "program":          meta.get("program",          "GLOBAL"),
                     "version":          meta.get("version",          "1.0"),
                     "effectivity_date": meta.get("effectivity_date", ""),
                     "status":           meta.get("status",           "Active"),
@@ -3131,14 +3132,15 @@ DEFAULT_ISO_CLAUSES = [
 
 @app.get("/iso/requirements/{program}", response_model=List[schemas.ISORequirementResponse])
 def get_iso_requirements(program: str, db: Session = Depends(get_db)):
-    """Retrieves or seeds ISO 9001:2015 clause checklists for a specific degree program."""
-    existing = db.query(models.ISORequirement).filter(models.ISORequirement.program == program).all()
+    """Retrieves or seeds ISO 9001:2015 clause checklists for the campus (Institutional QMS)."""
+    target_prog = "GLOBAL"
+    existing = db.query(models.ISORequirement).filter(models.ISORequirement.program == target_prog).all()
     if not existing:
-        # Seed default 8 ISO Clauses from iso program final.pdf
+        # Seed default 8 ISO Clauses from iso program final.pdf for campus-wide QMS
         seeded_reqs = []
         for item in DEFAULT_ISO_CLAUSES:
             req = models.ISORequirement(
-                program=program,
+                program=target_prog,
                 iso_clause=item["iso_clause"],
                 title=item["title"],
                 description=item["description"],
@@ -3274,7 +3276,7 @@ async def upload_iso_evidence(
                     "name": document_name,
                     "category": "Accreditation Evidence",
                     "office": req.auditee_office,
-                    "program": program,
+                    "program": "GLOBAL",
                     "iso_clause": req.iso_clause,
                     "uploaded_by": uploaded_by,
                     "file_url": public_url
@@ -3335,4 +3337,162 @@ def update_iso_status(
     db.commit()
     db.refresh(req)
     return req
+
+
+@app.get("/iso/schedule/{program}", response_model=schemas.IQAScheduleResponse)
+def get_iqa_schedule(program: str, db: Session = Depends(get_db)):
+    """Retrieves or seeds the dynamic 3-Day IQA Audit Program Schedule for the campus (Institutional QMS)."""
+    target_prog = "GLOBAL"
+    sched = db.query(models.IQASchedule).filter(models.IQASchedule.program == target_prog).first()
+    if not sched:
+        sched = models.IQASchedule(
+            program=target_prog,
+            academic_year="IQA Audit Cycle 2025-2026",
+            day1_date="Sept 10, 2025",
+            day1_title="Context, Risk & Resource Audit",
+            day1_scope="On-site clause audit of Director of Instruction (DOI), College Deans, Financial Management, Property Custodian & SAO. Audit of Clauses 6.1, 7.1 & 8.5.",
+            day2_date="Sept 11, 2025",
+            day2_title="HR, Data Systems & External Control",
+            day2_scope="Audit of HRMO (Clause 7.2), Registrar & MIS (Clause 9.1), Document Controller (Clause 7.5), Library, and BAC Procurement (Clause 8.4).",
+            day3_date="Sept 12, 2025",
+            day3_title="Consolidation & Closing Meeting",
+            day3_scope="Internal data cross-referencing, synthesis of observations, drafting formal audit findings report, and official Closing Ceremony & Certificate Awarding."
+        )
+        db.add(sched)
+        db.commit()
+        db.refresh(sched)
+    return sched
+
+
+@app.put("/iso/schedule/{program}", response_model=schemas.IQAScheduleResponse)
+def update_iqa_schedule(
+    program: str,
+    payload: schemas.IQAScheduleUpdate,
+    db: Session = Depends(get_db),
+    admin: models.User = Depends(get_current_admin)
+):
+    """Admin updates the 3-Day IQA Audit Program Schedule dates and focus scope for campus QMS."""
+    target_prog = "GLOBAL"
+    sched = db.query(models.IQASchedule).filter(models.IQASchedule.program == target_prog).first()
+    if not sched:
+        sched = models.IQASchedule(program=target_prog)
+        db.add(sched)
+
+    sched.academic_year = payload.academic_year
+    sched.day1_date = payload.day1_date
+    sched.day1_title = payload.day1_title
+    sched.day1_scope = payload.day1_scope
+    sched.day2_date = payload.day2_date
+    sched.day2_title = payload.day2_title
+    sched.day2_scope = payload.day2_scope
+    sched.day3_date = payload.day3_date
+    sched.day3_title = payload.day3_title
+    sched.day3_scope = payload.day3_scope
+
+    db.commit()
+    db.refresh(sched)
+    return sched
+
+
+DEFAULT_IQA_DAYS = [
+    {
+        "day_number": 1,
+        "day_date": "2025-09-10",
+        "title": "Context, Risk & Resource Audit",
+        "scope": "On-site clause audit of Director of Instruction (DOI), College Deans, Financial Management, Property Custodian & SAO. Audit of Clauses 6.1, 7.1 & 8.5."
+    },
+    {
+        "day_number": 2,
+        "day_date": "2025-09-11",
+        "title": "HR, Data Systems & External Control",
+        "scope": "Audit of HRMO (Clause 7.2), Registrar & MIS (Clause 9.1), Document Controller (Clause 7.5), Library, and BAC Procurement (Clause 8.4)."
+    },
+    {
+        "day_number": 3,
+        "day_date": "2025-09-12",
+        "title": "Consolidation & Closing Meeting",
+        "scope": "Internal data cross-referencing, synthesis of observations, drafting formal audit findings report, and official Closing Ceremony & Certificate Awarding."
+    }
+]
+
+
+@app.get("/iso/schedule-days", response_model=List[schemas.IQADayScheduleResponse])
+def get_iqa_schedule_days(db: Session = Depends(get_db)):
+    """Retrieves or seeds dynamic IQA Audit Days for the campus QMS."""
+    days = db.query(models.IQADaySchedule).filter(models.IQADaySchedule.program == "GLOBAL").order_by(models.IQADaySchedule.day_number.asc()).all()
+    if not days:
+        seeded = []
+        for d in DEFAULT_IQA_DAYS:
+            item = models.IQADaySchedule(
+                program="GLOBAL",
+                day_number=d["day_number"],
+                day_date=d["day_date"],
+                title=d["title"],
+                scope=d["scope"]
+            )
+            db.add(item)
+            seeded.append(item)
+        db.commit()
+        for s in seeded: db.refresh(s)
+        return seeded
+    return days
+
+
+@app.post("/iso/schedule-days", response_model=schemas.IQADayScheduleResponse, status_code=status.HTTP_201_CREATED)
+def create_iqa_schedule_day(
+    payload: schemas.IQADayScheduleCreate,
+    db: Session = Depends(get_db),
+    admin: models.User = Depends(get_current_admin)
+):
+    """Admin creates a new dynamic IQA Audit Day."""
+    new_day = models.IQADaySchedule(
+        program="GLOBAL",
+        day_number=payload.day_number,
+        day_date=payload.day_date,
+        title=payload.title,
+        scope=payload.scope
+    )
+    db.add(new_day)
+    db.commit()
+    db.refresh(new_day)
+    return new_day
+
+
+@app.put("/iso/schedule-days/{day_id}", response_model=schemas.IQADayScheduleResponse)
+def update_iqa_schedule_day(
+    day_id: str,
+    payload: schemas.IQADayScheduleCreate,
+    db: Session = Depends(get_db),
+    admin: models.User = Depends(get_current_admin)
+):
+    """Admin updates an existing dynamic IQA Audit Day."""
+    item = db.query(models.IQADaySchedule).filter(models.IQADaySchedule.id == day_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="IQA Audit Day not found.")
+    
+    item.day_number = payload.day_number
+    item.day_date = payload.day_date
+    item.title = payload.title
+    item.scope = payload.scope
+
+    db.commit()
+    db.refresh(item)
+    return item
+
+
+@app.delete("/iso/schedule-days/{day_id}")
+def delete_iqa_schedule_day(
+    day_id: str,
+    db: Session = Depends(get_db),
+    admin: models.User = Depends(get_current_admin)
+):
+    """Admin deletes an IQA Audit Day."""
+    item = db.query(models.IQADaySchedule).filter(models.IQADaySchedule.id == day_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="IQA Audit Day not found.")
+    db.delete(item)
+    db.commit()
+    return {"message": "IQA Audit Day deleted successfully."}
+
+
 

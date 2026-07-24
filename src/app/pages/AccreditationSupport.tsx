@@ -18,6 +18,8 @@ export function AccreditationSupport() {
     setTimeout(() => setToast(null), 3000);
   };
 
+  const [activeTab, setActiveTab] = useState("aaccup");
+
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [uploadTargetArea, setUploadTargetArea] = useState<any>(null);
   const [uploadForm, setUploadForm] = useState({ fileName: "", requirementTarget: "" });
@@ -75,6 +77,46 @@ export function AccreditationSupport() {
   const [selectedIsoReq, setSelectedIsoReq] = useState<any>(null);
   const [isoOfficeFilter, setIsoOfficeFilter] = useState("all");
 
+  // Add ISO Requirement States
+  const [showAddIsoReqModal, setShowAddIsoReqModal] = useState(false);
+  const [newIsoReq, setNewIsoReq] = useState({
+    iso_clause: "Clause 6.1",
+    title: "",
+    description: "",
+    auditee_office: "Director of Instruction (DOI) & SAO",
+    risk_level: "Medium"
+  });
+  const [isAddingIsoReq, setIsAddingIsoReq] = useState(false);
+
+  // Edit & Delete ISO Requirement States
+  const [showEditIsoModal, setShowEditIsoModal] = useState(false);
+  const [editingIsoReq, setEditingIsoReq] = useState<any>(null);
+  const [isEditingIsoReq, setIsEditingIsoReq] = useState(false);
+  const [showDeleteIsoReqModal, setShowDeleteIsoReqModal] = useState(false);
+  const [isoReqToDelete, setIsoReqToDelete] = useState<any>(null);
+
+  // Dynamic IQA Schedule & Days States
+  const [iqaSchedule, setIqaSchedule] = useState<any>(null);
+  const [showEditIqaModal, setShowEditIqaModal] = useState(false);
+  const [iqaFormData, setIqaFormData] = useState({ academic_year: "" });
+  const [isSavingIqa, setIsSavingIqa] = useState(false);
+
+  const [iqaDays, setIqaDays] = useState<any[]>([]);
+  const [isLoadingIqaDays, setIsLoadingIqaDays] = useState(false);
+  const [showAddIqaDayModal, setShowAddIqaDayModal] = useState(false);
+  const [showEditIqaDayModal, setShowEditIqaDayModal] = useState(false);
+  const [showDeleteIqaDayModal, setShowDeleteIqaDayModal] = useState(false);
+  const [editingIqaDay, setEditingIqaDay] = useState<any>(null);
+  const [deletingIqaDay, setDeletingIqaDay] = useState<any>(null);
+
+  const [iqaDayForm, setIqaDayForm] = useState({
+    day_number: 1,
+    day_date: "",
+    title: "",
+    scope: ""
+  });
+  const [isSavingIqaDay, setIsSavingIqaDay] = useState(false);
+
   const refreshData = async () => {
     try {
       const response = await axios.get(`http://localhost:8000/accreditation-status/${selectedProgram}`);
@@ -90,9 +132,40 @@ export function AccreditationSupport() {
       if (userRole === "ADMIN") fetchPendingQueue();
       fetchChedData(); 
       fetchIsoData();
+      fetchIqaSchedule();
+      fetchIqaDays();
       
     } catch (error) {
       console.error("Failed to refresh data", error);
+    }
+  };
+
+  const fetchIqaDays = async () => {
+    setIsLoadingIqaDays(true);
+    try {
+      const res = await axios.get("http://localhost:8000/iso/schedule-days");
+      setIqaDays(res.data || []);
+    } catch (error) {
+      console.error("Failed to fetch IQA schedule days", error);
+    } finally {
+      setIsLoadingIqaDays(false);
+    }
+  };
+
+  const fetchIqaSchedule = async () => {
+    try {
+      const res = await axios.get(`http://localhost:8000/iso/schedule/GLOBAL`);
+      setIqaSchedule(res.data);
+      if (res.data) {
+        setIqaFormData({
+          academic_year: res.data.academic_year || "IQA Audit Cycle 2025-2026",
+          day1_date: res.data.day1_date || "", day1_title: res.data.day1_title || "", day1_scope: res.data.day1_scope || "",
+          day2_date: res.data.day2_date || "", day2_title: res.data.day2_title || "", day2_scope: res.data.day2_scope || "",
+          day3_date: res.data.day3_date || "", day3_title: res.data.day3_title || "", day3_scope: res.data.day3_scope || ""
+        });
+      }
+    } catch (error) {
+      console.error("Failed to fetch IQA schedule", error);
     }
   };
 
@@ -120,7 +193,7 @@ export function AccreditationSupport() {
   const fetchIsoData = async () => {
     setIsLoadingIso(true);
     try {
-      const res = await axios.get(`http://localhost:8000/iso/requirements/${selectedProgram}`);
+      const res = await axios.get(`http://localhost:8000/iso/requirements/GLOBAL`);
       setIsoRequirements(res.data || []);
     } catch (error) {
       console.error("Failed to fetch ISO 9001:2015 requirements");
@@ -385,7 +458,7 @@ export function AccreditationSupport() {
     submitData.append("requirement_id", selectedIsoReq.id);
     submitData.append("document_name", uploadForm.fileName);
     submitData.append("uploaded_by", userName);
-    submitData.append("program", selectedProgram);
+    submitData.append("program", "GLOBAL");
 
     try {
       await axios.post("http://localhost:8000/iso/upload-evidence", submitData, {
@@ -420,6 +493,157 @@ export function AccreditationSupport() {
       fetchIsoData();
     } catch (error) {
       showToast("Failed to remove evidence.", "error");
+    }
+  };
+
+  const handleAddIsoRequirement = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newIsoReq.title.trim() || !newIsoReq.description.trim()) {
+      showToast("Please fill out all required fields.", "error"); return;
+    }
+    setIsAddingIsoReq(true);
+    try {
+      await axios.post("http://localhost:8000/iso/requirements", {
+        program: "GLOBAL",
+        iso_clause: newIsoReq.iso_clause,
+        title: newIsoReq.title,
+        description: newIsoReq.description,
+        auditee_office: newIsoReq.auditee_office,
+        risk_level: newIsoReq.risk_level
+      });
+      showToast("New ISO Clause Requirement added!", "success");
+      setNewIsoReq({
+        iso_clause: "Clause 6.1",
+        title: "",
+        description: "",
+        auditee_office: "Director of Instruction (DOI) & SAO",
+        risk_level: "Medium"
+      });
+      setShowAddIsoReqModal(false);
+      fetchIsoData();
+    } catch (error) {
+      showToast("Failed to add ISO requirement.", "error");
+    } finally {
+      setIsAddingIsoReq(false);
+    }
+  };
+
+  const handleDeleteIsoRequirement = async (reqId: string) => {
+    const req = isoRequirements.find(r => r.id === reqId);
+    if (req) {
+      setIsoReqToDelete(req);
+      setShowDeleteIsoReqModal(true);
+    }
+  };
+
+  const handleEditIsoRequirement = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingIsoReq || !editingIsoReq.title.trim() || !editingIsoReq.description.trim()) {
+      showToast("Please fill out all required fields.", "error"); return;
+    }
+    setIsEditingIsoReq(true);
+    try {
+      await axios.put(`http://localhost:8000/iso/requirements/${editingIsoReq.id}`, {
+        program: "GLOBAL",
+        iso_clause: editingIsoReq.iso_clause,
+        title: editingIsoReq.title,
+        description: editingIsoReq.description,
+        auditee_office: editingIsoReq.auditee_office,
+        risk_level: editingIsoReq.risk_level
+      });
+      showToast("ISO Clause requirement updated!", "success");
+      setShowEditIsoModal(false);
+      setEditingIsoReq(null);
+      fetchIsoData();
+    } catch (error) {
+      showToast("Failed to update ISO requirement.", "error");
+    } finally {
+      setIsEditingIsoReq(false);
+    }
+  };
+
+  const executeDeleteIsoRequirement = async () => {
+    if (!isoReqToDelete) return;
+    setIsDeleting(true);
+    try {
+      await axios.delete(`http://localhost:8000/iso/requirements/${isoReqToDelete.id}`);
+      showToast("ISO requirement deleted.", "success");
+      setShowDeleteIsoReqModal(false);
+      setIsoReqToDelete(null);
+      fetchIsoData();
+    } catch (error) {
+      showToast("Failed to delete ISO requirement.", "error");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const handleSaveIqaSchedule = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSavingIqa(true);
+    try {
+      await axios.put(`http://localhost:8000/iso/schedule/GLOBAL`, iqaFormData);
+      showToast("IQA Audit Schedule updated for upcoming cycle!", "success");
+      setShowEditIqaModal(false);
+      fetchIqaSchedule();
+    } catch (error) {
+      showToast("Failed to update IQA schedule.", "error");
+    } finally {
+      setIsSavingIqa(false);
+    }
+  };
+
+  const handleAddIqaDaySubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!iqaDayForm.title.trim() || !iqaDayForm.day_date.trim()) {
+      showToast("Please fill out all required fields.", "error"); return;
+    }
+    setIsSavingIqaDay(true);
+    try {
+      await axios.post("http://localhost:8000/iso/schedule-days", iqaDayForm);
+      showToast("New IQA Audit Day added!", "success");
+      setShowAddIqaDayModal(false);
+      setIqaDayForm({ day_number: iqaDays.length + 1, day_date: "", title: "", scope: "" });
+      fetchIqaDays();
+    } catch (error) {
+      showToast("Failed to add IQA Audit Day.", "error");
+    } finally {
+      setIsSavingIqaDay(false);
+    }
+  };
+
+  const handleEditIqaDaySubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingIqaDay || !editingIqaDay.title.trim() || !editingIqaDay.day_date.trim()) {
+      showToast("Please fill out all required fields.", "error"); return;
+    }
+    setIsSavingIqaDay(true);
+    try {
+      await axios.put(`http://localhost:8000/iso/schedule-days/${editingIqaDay.id}`, editingIqaDay);
+      showToast("IQA Audit Day updated!", "success");
+      setShowEditIqaDayModal(false);
+      setEditingIqaDay(null);
+      fetchIqaDays();
+    } catch (error) {
+      showToast("Failed to update IQA Audit Day.", "error");
+    } finally {
+      setIsSavingIqaDay(false);
+    }
+  };
+
+  const executeDeleteIqaDay = async () => {
+    if (!deletingIqaDay) return;
+    setIsDeleting(true);
+    try {
+      await axios.delete(`http://localhost:8000/iso/schedule-days/${deletingIqaDay.id}`);
+      showToast("IQA Audit Day removed.", "success");
+      setShowDeleteIqaDayModal(false);
+      setDeletingIqaDay(null);
+      fetchIqaDays();
+    } catch (error) {
+      showToast("Failed to remove IQA Audit Day.", "error");
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -580,7 +804,7 @@ export function AccreditationSupport() {
         </div>
       )}
 
-      <Tabs defaultValue="aaccup" className="w-full">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="grid w-full grid-cols-4 bg-gray-100 p-1">
           <TabsTrigger value="aaccup" className="data-[state=active]:bg-[#FF9501] data-[state=active]:text-white cursor-pointer transition-all">AACCUP</TabsTrigger>
           <TabsTrigger value="iso" className="data-[state=active]:bg-[#FF9501] data-[state=active]:text-white cursor-pointer transition-all">ISO Standards</TabsTrigger>
@@ -590,41 +814,59 @@ export function AccreditationSupport() {
 
         <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4 mt-6">
           <div>
-            <h2 className="text-lg font-semibold text-gray-900">Program Evaluation Context</h2>
-            <p className="text-sm text-gray-500">Tracking compliance templates per degree program.</p>
+            <h2 className="text-lg font-semibold text-gray-900">
+              {activeTab === 'iso' ? 'Institutional Quality Management System' : 'Program Evaluation Context'}
+            </h2>
+            <p className="text-sm text-gray-500">
+              {activeTab === 'iso' ? 'Campus-wide ISO 9001:2015 QMS (Applies to the entire CTU Argao Campus).' : 'Tracking compliance templates per degree program.'}
+            </p>
           </div>
           
           <div className="flex flex-col sm:flex-row items-center gap-4">
-            <div className="relative w-full sm:w-72">
-              <select 
-                value={selectedProgram}
-                onChange={(e) => setSelectedProgram(e.target.value)}
-                disabled={userRole === 'FACULTY'}
-                className={`appearance-none w-full px-4 py-3 border border-gray-300 rounded-lg text-sm font-medium text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#FF9501] pr-10 ${
-                  userRole === 'FACULTY' ? 'bg-gray-100 opacity-80 cursor-not-allowed' : 'bg-[#F5F7FA] cursor-pointer'
-                }`}
-              >
-                <option value="BEED">Bachelor of Elementary Education</option>
-                <option value="BSED_MATH">BSEd major in Mathematics</option>
-                <option value="BSED_ENGLISH">BSEd major in English</option>
-                <option value="BTLED_HE">BTLEd major in Home Economics</option>
-                <option value="AB_ELS">BA in English Language Studies</option>
-                <option value="AB_LIT">BA in Literature</option>
-                <option value="AB_PSYCH">BA in Psychology</option>
-                <option value="BSIE">BS in Industrial Engineering</option>
-                <option value="BSIT">BS in Information Technology</option>
-              </select>
-              {userRole === 'FACULTY' ? (
-                <Lock className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-500 pointer-events-none" />
+            <div className="relative w-full sm:w-80">
+              {activeTab === 'iso' ? (
+                <div className="w-full px-4 py-3 bg-gray-100 border border-gray-200 rounded-lg text-xs font-bold text-gray-600 flex items-center justify-between shadow-inner cursor-not-allowed opacity-85 select-none" title="Disabled: ISO 9001:2015 is an Institutional Campus-Wide QMS and does not depend on degree programs.">
+                  <div className="flex items-center gap-2">
+                    <Lock className="h-4 w-4 text-blue-600 shrink-0" />
+                    <span className="truncate">CTU Argao Institutional Campus-Wide</span>
+                  </div>
+                  <span className="px-2 py-0.5 bg-blue-100 text-blue-800 text-[10px] font-black uppercase rounded border border-blue-200">Global</span>
+                </div>
               ) : (
-                <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-500 pointer-events-none" />
+                <>
+                  <select 
+                    value={selectedProgram}
+                    onChange={(e) => setSelectedProgram(e.target.value)}
+                    disabled={userRole === 'FACULTY'}
+                    className={`appearance-none w-full px-4 py-3 border border-gray-300 rounded-lg text-sm font-medium text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#FF9501] pr-10 ${
+                      userRole === 'FACULTY' ? 'bg-gray-100 opacity-80 cursor-not-allowed' : 'bg-[#F5F7FA] cursor-pointer'
+                    }`}
+                  >
+                    <option value="BEED">Bachelor of Elementary Education</option>
+                    <option value="BSED_MATH">BSEd major in Mathematics</option>
+                    <option value="BSED_ENGLISH">BSEd major in English</option>
+                    <option value="BTLED_HE">BTLEd major in Home Economics</option>
+                    <option value="AB_ELS">BA in English Language Studies</option>
+                    <option value="AB_LIT">BA in Literature</option>
+                    <option value="AB_PSYCH">BA in Psychology</option>
+                    <option value="BSIE">BS in Industrial Engineering</option>
+                    <option value="BSIT">BS in Information Technology</option>
+                  </select>
+                  {userRole === 'FACULTY' ? (
+                    <Lock className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-500 pointer-events-none" />
+                  ) : (
+                    <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-500 pointer-events-none" />
+                  )}
+                </>
               )}
             </div>
 
-            <div className="flex items-center gap-2 px-5 py-3 bg-gradient-to-r from-[#FF9501] to-[#D97E00] text-white rounded-lg shadow-md border border-[#FF9501]/50 w-full sm:w-auto justify-center">
-              <Award className="h-5 w-5 drop-shadow-sm" />
-              <span className="font-bold tracking-wide text-shadow-sm uppercase text-xs">{currentData.level || "Level II"}</span>
-            </div>
+            {activeTab !== 'iso' && (
+              <div className="flex items-center gap-2 px-5 py-3 bg-gradient-to-r from-[#FF9501] to-[#D97E00] text-white rounded-lg shadow-md border border-[#FF9501]/50 w-full sm:w-auto justify-center">
+                <Award className="h-5 w-5 drop-shadow-sm" />
+                <span className="font-bold tracking-wide text-shadow-sm uppercase text-xs">{currentData.level || "Level II"}</span>
+              </div>
+            )}
           </div>
         </div>
 
@@ -1039,16 +1281,59 @@ export function AccreditationSupport() {
         </TabsContent>
 
         <TabsContent value="iso" className="mt-6 space-y-6">
+
+          {/* --- 100% ISO 9001:2015 COMPLIANCE SUCCESS BANNER --- */}
+          {isoTotalCount > 0 && isoCompliantCount === isoTotalCount && (
+            <div className="p-6 bg-gradient-to-r from-[#006837] via-emerald-600 to-teal-700 text-white rounded-2xl shadow-xl border-2 border-emerald-400 relative overflow-hidden animate-in fade-in zoom-in-95 duration-500">
+              <div className="absolute -right-10 -bottom-10 w-48 h-48 bg-white/10 rounded-full blur-2xl pointer-events-none"></div>
+              <div className="flex flex-col md:flex-row items-center justify-between gap-6 relative z-10">
+                <div className="flex items-center gap-4">
+                  <div className="w-16 h-16 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center shrink-0 border border-white/30 shadow-lg">
+                    <Award className="h-10 w-10 text-amber-300 drop-shadow" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="px-2.5 py-0.5 bg-amber-400 text-gray-900 text-[10px] font-black uppercase rounded-full tracking-widest shadow-sm">
+                        🏆 100% Fully Compliant
+                      </span>
+                      <span className="text-xs font-semibold text-emerald-100">ISO 9001:2015 Certified Audit Status</span>
+                    </div>
+                    <h3 className="text-xl font-black mt-1 tracking-tight">
+                      Institutional Quality Management System (QMS) Verified for CTU Argao Campus!
+                    </h3>
+                    <p className="text-xs text-emerald-100 mt-1 max-w-2xl leading-relaxed font-medium">
+                      All {isoTotalCount} Internal Quality Audit (IQA) clauses have been successfully audited, verified, and approved with complete documented evidence. CTU Argao Campus is fully ready for External Audit certification!
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3 shrink-0">
+                  <button
+                    onClick={() => showToast("Official ISO Compliance Audit Summary Report generated!", "success")}
+                    className="px-5 py-3 bg-amber-400 text-gray-900 font-bold text-xs rounded-xl hover:bg-amber-300 transition-all cursor-pointer shadow-lg active:scale-95 flex items-center gap-2 uppercase tracking-wider"
+                  >
+                    <Download className="h-4 w-4" /> Download ISO Audit Report
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* ISO 9001:2015 Summary Header */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-200 border-t-4 border-t-[#FF9501] overflow-hidden">
             <div className="border-b border-gray-100 p-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-gray-50/50">
               <div>
-                <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-                  <Target className="w-5 h-5 text-[#FF9501]" />
-                  ISO 9001:2015 Quality Management System (QMS) & IQA Framework
-                </h2>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                    <Target className="w-5 h-5 text-[#FF9501]" />
+                    ISO 9001:2015 Quality Management System (QMS) & IQA Framework
+                  </h2>
+                  <span className="px-2.5 py-0.5 bg-blue-100 text-blue-800 text-[10px] font-bold rounded-full uppercase tracking-wider border border-blue-200">
+                    Institutional Campus-Wide
+                  </span>
+                </div>
                 <p className="text-sm text-gray-500 mt-1">
-                  Official CTU Argao Campus Internal Quality Audit (IQA) clauses, risk assessments, and auditee office compliance.
+                  Official CTU Argao Campus-Wide Internal Quality Audit (IQA) clauses, risk assessments, and auditee office compliance.
                 </p>
               </div>
               <div className="flex items-center gap-4">
@@ -1058,6 +1343,16 @@ export function AccreditationSupport() {
                     {isoCompliancePercentage}%
                   </div>
                 </div>
+
+                {userRole === "ADMIN" && (
+                  <button
+                    onClick={() => setShowAddIsoReqModal(true)}
+                    className="flex items-center gap-2 px-4 py-2 bg-[#FF9501] text-white rounded-lg hover:bg-[#D97E00] transition-all text-xs font-bold cursor-pointer shadow-sm active:scale-95"
+                  >
+                    <Plus className="h-3.5 w-3.5" /> Add ISO Clause
+                  </button>
+                )}
+
                 <span className="px-3 py-1 bg-[#FFF4E5] text-[#D97E00] text-[10px] font-bold rounded-full uppercase tracking-widest flex items-center gap-1.5 border border-[#FF9501]/20 shadow-sm">
                   <CheckCircle2 className="w-3 h-3 text-[#FF9501]" />
                   Active QMS Matrix
@@ -1105,34 +1400,33 @@ export function AccreditationSupport() {
               </div>
             </div>
 
-            {/* Office Filter Pills */}
-            <div className="px-6 py-4 bg-[#F9FAFB] border-b border-gray-200 flex flex-wrap items-center gap-2">
-              <span className="text-xs font-bold text-gray-500 uppercase tracking-wider mr-2 flex items-center gap-1">
-                <Building className="h-3.5 w-3.5 text-[#FF9501]" /> Auditee Office:
-              </span>
-              {[
-                "all",
-                "Director of Instruction (DOI) & SAO",
-                "Human Resources Management Office (HRMO)",
-                "Document Controller & Registrar",
-                "College Deans & Program Chairs",
-                "BAC / Procurement & Supply",
-                "Property Custodian & Finance",
-                "Registrar & MIS",
-                "Quality Assurance & Deans"
-              ].map((off) => (
-                <button
-                  key={off}
-                  onClick={() => setIsoOfficeFilter(off)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                    isoOfficeFilter === off
-                      ? "bg-[#FF9501] text-white shadow-sm"
-                      : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-100"
-                  }`}
+            {/* Auditee Office Dropdown Filter Bar */}
+            <div className="px-6 py-4 bg-[#F9FAFB] border-b border-gray-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <Building className="h-4 w-4 text-[#FF9501]" />
+                <label className="text-xs font-bold text-gray-700 uppercase tracking-wider">Auditee Office Filter:</label>
+                <select
+                  value={isoOfficeFilter}
+                  onChange={(e) => setIsoOfficeFilter(e.target.value)}
+                  className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-xs font-bold text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#FF9501] shadow-sm cursor-pointer min-w-[260px]"
                 >
-                  {off === "all" ? "All Auditee Offices" : off.split("(")[0].trim()}
-                </button>
-              ))}
+                  <option value="all">All Auditee Offices (8 Offices)</option>
+                  <option value="Director of Instruction (DOI) & SAO">Director of Instruction (DOI) & SAO</option>
+                  <option value="Human Resources Management Office (HRMO)">Human Resources Management Office (HRMO)</option>
+                  <option value="Document Controller & Registrar">Document Controller & Registrar</option>
+                  <option value="College Deans & Program Chairs">College Deans & Program Chairs</option>
+                  <option value="BAC / Procurement & Supply">BAC / Procurement & Supply</option>
+                  <option value="Property Custodian & Finance">Property Custodian & Finance</option>
+                  <option value="Registrar & MIS">Registrar & MIS</option>
+                  <option value="Quality Assurance & Deans">Quality Assurance & Deans</option>
+                  <option value="Library Services">Library Services</option>
+                  <option value="Student Affairs Office (SAO)">Student Affairs Office (SAO)</option>
+                </select>
+              </div>
+
+              <div className="text-xs text-gray-500 font-semibold">
+                Showing {isoRequirements.filter((req) => isoOfficeFilter === "all" || req.auditee_office === isoOfficeFilter).length} of {isoTotalCount} ISO Clauses
+              </div>
             </div>
 
             {/* Clauses List */}
@@ -1234,6 +1528,19 @@ export function AccreditationSupport() {
                                   Revoke
                                 </button>
                               )}
+
+                              <button
+                                onClick={() => { setEditingIsoReq(req); setShowEditIsoModal(true); }}
+                                className="p-1.5 text-gray-400 hover:text-[#FF9501] transition-colors rounded cursor-pointer" title="Edit Requirement"
+                              >
+                                <Edit className="h-4 w-4" />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteIsoRequirement(req.id)}
+                                className="p-1.5 text-gray-400 hover:text-red-500 transition-colors rounded cursor-pointer" title="Delete Requirement"
+                              >
+                                <Archive className="h-4 w-4" />
+                              </button>
                             </div>
                           )}
                         </div>
@@ -1244,53 +1551,75 @@ export function AccreditationSupport() {
             </div>
           </div>
 
-          {/* 3-Day IQA Audit Program & Timeline Viewer */}
+          {/* Dynamic Internal Quality Audit (IQA) Program Schedule */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-200 border-t-4 border-t-[#FF9501] overflow-hidden p-6 space-y-4">
-            <div className="flex justify-between items-center border-b border-gray-100 pb-4">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-gray-100 pb-4">
               <div>
                 <h3 className="text-base font-bold text-gray-900 flex items-center gap-2">
                   <Calendar className="h-5 w-5 text-[#FF9501]" />
-                  CTU Argao 3-Day Internal Quality Audit (IQA) Program Schedule
+                  CTU Argao Internal Quality Audit (IQA) Program Schedule
                 </h3>
-                <p className="text-xs text-gray-500 mt-0.5">Reference schedule extracted from official ISO manual (September 10-12, 2025)</p>
+                <p className="text-xs text-gray-500 mt-0.5">Configured campus-wide audit dates and focus scope for CTU Argao (Institutional QMS)</p>
               </div>
-              <span className="px-3 py-1 bg-gray-100 text-gray-700 text-xs font-bold rounded-lg">IQA Audit Cycle 2025-2026</span>
+              <div className="flex items-center gap-3">
+                <span className="px-3 py-1 bg-orange-50 text-[#D97E00] text-xs font-bold rounded-lg border border-[#FF9501]/20">
+                  {iqaSchedule?.academic_year || "IQA Audit Cycle 2025-2026"}
+                </span>
+
+                {userRole === "ADMIN" && (
+                  <button
+                    onClick={() => { setIqaDayForm({ day_number: iqaDays.length + 1, day_date: "", title: "", scope: "" }); setShowAddIqaDayModal(true); }}
+                    className="flex items-center gap-1.5 px-3.5 py-1.5 bg-[#FF9501] text-white text-xs font-bold rounded-lg hover:bg-[#D97E00] transition-all cursor-pointer shadow-sm active:scale-95"
+                  >
+                    <Plus className="h-3.5 w-3.5" /> Add Audit Day
+                  </button>
+                )}
+              </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-              <div className="p-4 bg-orange-50/40 border border-orange-200 rounded-xl space-y-2">
-                <div className="flex justify-between items-center">
-                  <span className="px-2 py-0.5 bg-[#FF9501] text-white text-[10px] font-bold uppercase rounded">Day 1</span>
-                  <span className="text-xs font-bold text-gray-500">Sept 10, 2025</span>
-                </div>
-                <h4 className="font-bold text-gray-900 text-sm mt-1">Context, Risk & Resource Audit</h4>
-                <p className="text-xs text-gray-600 leading-relaxed">
-                  On-site clause audit of Director of Instruction (DOI), College Deans, Financial Management, Property Custodian & SAO. Audit of Clauses 6.1, 7.1 & 8.5.
-                </p>
-              </div>
+            {isLoadingIqaDays ? (
+              <div className="py-8 flex justify-center"><Loader2 className="h-6 w-6 animate-spin text-[#FF9501]" /></div>
+            ) : iqaDays.length === 0 ? (
+              <div className="text-center py-8 text-xs text-gray-400">No IQA audit days configured. Click "+ Add Audit Day" to add one.</div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                {iqaDays.map((day, idx) => (
+                  <div key={day.id || idx} className="p-5 bg-white border border-gray-200 hover:border-[#FF9501] rounded-xl space-y-3 shadow-sm hover:shadow-md transition-all flex flex-col justify-between group">
+                    <div>
+                      <div className="flex justify-between items-center pb-2 border-b border-gray-100">
+                        <span className="px-2.5 py-0.5 bg-[#FF9501] text-white text-[10px] font-extrabold uppercase rounded shadow-2xs">
+                          Day {day.day_number}
+                        </span>
+                        <div className="flex items-center gap-1.5 text-xs font-bold text-gray-700 bg-gray-50 px-2.5 py-1 rounded-lg border border-gray-200">
+                          <Calendar className="h-3.5 w-3.5 text-[#FF9501]" />
+                          <span>{day.day_date || "TBD"}</span>
+                        </div>
+                      </div>
 
-              <div className="p-4 bg-blue-50/40 border border-blue-200 rounded-xl space-y-2">
-                <div className="flex justify-between items-center">
-                  <span className="px-2 py-0.5 bg-blue-600 text-white text-[10px] font-bold uppercase rounded">Day 2</span>
-                  <span className="text-xs font-bold text-gray-500">Sept 11, 2025</span>
-                </div>
-                <h4 className="font-bold text-gray-900 text-sm mt-1">HR, Data Systems & External Control</h4>
-                <p className="text-xs text-gray-600 leading-relaxed">
-                  Audit of HRMO (Clause 7.2), Registrar & MIS (Clause 9.1), Document Controller (Clause 7.5), Library, and BAC Procurement (Clause 8.4).
-                </p>
-              </div>
+                      <h4 className="font-bold text-gray-900 text-sm mt-3 group-hover:text-[#FF9501] transition-colors">{day.title}</h4>
+                      <p className="text-xs text-gray-600 leading-relaxed mt-1.5">{day.scope}</p>
+                    </div>
 
-              <div className="p-4 bg-emerald-50/40 border border-emerald-200 rounded-xl space-y-2">
-                <div className="flex justify-between items-center">
-                  <span className="px-2 py-0.5 bg-[#006837] text-white text-[10px] font-bold uppercase rounded">Day 3</span>
-                  <span className="text-xs font-bold text-gray-500">Sept 12, 2025</span>
-                </div>
-                <h4 className="font-bold text-gray-900 text-sm mt-1">Consolidation & Closing Meeting</h4>
-                <p className="text-xs text-gray-600 leading-relaxed">
-                  Internal data cross-referencing, synthesis of observations, drafting formal audit findings report, and official Closing Ceremony & Certificate Awarding.
-                </p>
+                    {userRole === "ADMIN" && (
+                      <div className="pt-2 border-t border-gray-100 flex items-center justify-end gap-1.5">
+                        <button
+                          onClick={() => { setEditingIqaDay(day); setShowEditIqaDayModal(true); }}
+                          className="p-1.5 text-gray-400 hover:text-[#FF9501] transition-colors rounded cursor-pointer" title="Edit Day"
+                        >
+                          <Edit className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => { setDeletingIqaDay(day); setShowDeleteIqaDayModal(true); }}
+                          className="p-1.5 text-gray-400 hover:text-red-500 transition-colors rounded cursor-pointer" title="Delete Day"
+                        >
+                          <Archive className="h-4 w-4" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))}
               </div>
-            </div>
+            )}
           </div>
         </TabsContent>
 
@@ -1848,6 +2177,612 @@ export function AccreditationSupport() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* --- ADMIN ADD ISO REQUIREMENT MODAL --- */}
+      {showAddIsoReqModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in">
+          <div className="bg-white rounded-2xl max-w-lg w-full shadow-2xl overflow-hidden border-t-4 border-t-[#FF9501]">
+            <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-[#F9FAFB]">
+              <div>
+                <h2 className="text-xl font-bold text-[#1F2937]">Add ISO 9001:2015 Clause Requirement</h2>
+                <p className="text-xs text-gray-500 mt-0.5">Configure a new quality audit checklist item for {selectedProgram}</p>
+              </div>
+              <button onClick={() => setShowAddIsoReqModal(false)} className="p-2 hover:bg-gray-200 rounded-full transition-colors cursor-pointer text-gray-500">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleAddIsoRequirement} className="p-6 space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-[#1F2937] mb-1.5 uppercase tracking-wider">
+                    ISO Clause <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={newIsoReq.iso_clause}
+                    onChange={(e) => setNewIsoReq({ ...newIsoReq, iso_clause: e.target.value })}
+                    className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-gray-200 rounded-xl text-sm font-medium text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#FF9501]"
+                  >
+                    <option value="Clause 6.1">Clause 6.1 (Risks & Opportunities)</option>
+                    <option value="Clause 7.1">Clause 7.1 (Resources & Facilities)</option>
+                    <option value="Clause 7.2">Clause 7.2 (Faculty Competence)</option>
+                    <option value="Clause 7.5">Clause 7.5 (Documented Info)</option>
+                    <option value="Clause 8.1 & 8.5">Clause 8.1 & 8.5 (Curriculum)</option>
+                    <option value="Clause 8.4">Clause 8.4 (External Providers)</option>
+                    <option value="Clause 8.6 & 10.2">Clause 8.6 & 10.2 (Nonconformity)</option>
+                    <option value="Clause 9.1 & 9.1.2">Clause 9.1 & 9.1.2 (Evaluation)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-[#1F2937] mb-1.5 uppercase tracking-wider">
+                    Risk Level <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={newIsoReq.risk_level}
+                    onChange={(e) => setNewIsoReq({ ...newIsoReq, risk_level: e.target.value })}
+                    className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-gray-200 rounded-xl text-sm font-medium text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#FF9501]"
+                  >
+                    <option value="High">High Risk</option>
+                    <option value="Medium">Medium Risk</option>
+                    <option value="Low">Low Risk</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-[#1F2937] mb-1.5 uppercase tracking-wider">
+                  Auditee Office <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={newIsoReq.auditee_office}
+                  onChange={(e) => setNewIsoReq({ ...newIsoReq, auditee_office: e.target.value })}
+                  className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-gray-200 rounded-xl text-sm font-medium text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#FF9501]"
+                >
+                  <option value="Director of Instruction (DOI) & SAO">Director of Instruction (DOI) & SAO</option>
+                  <option value="Human Resources Management Office (HRMO)">Human Resources Management Office (HRMO)</option>
+                  <option value="Document Controller & Registrar">Document Controller & Registrar</option>
+                  <option value="College Deans & Program Chairs">College Deans & Program Chairs</option>
+                  <option value="BAC / Procurement & Supply">BAC / Procurement & Supply</option>
+                  <option value="Property Custodian & Finance">Property Custodian & Finance</option>
+                  <option value="Registrar & MIS">Registrar & MIS</option>
+                  <option value="Quality Assurance & Deans">Quality Assurance & Deans</option>
+                  <option value="Library Services">Library Services</option>
+                  <option value="Student Affairs Office (SAO)">Student Affairs Office (SAO)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-[#1F2937] mb-1.5 uppercase tracking-wider">
+                  Requirement Title <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={newIsoReq.title}
+                  onChange={(e) => setNewIsoReq({ ...newIsoReq, title: e.target.value })}
+                  placeholder="e.g. Risk Assessment Matrix & Attrition Plan"
+                  required
+                  className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-gray-200 rounded-xl text-sm font-medium text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#FF9501]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-[#1F2937] mb-1.5 uppercase tracking-wider">
+                  Audit Scope & Description <span className="text-red-500">*</span>
+                </label>
+                <textarea
+                  value={newIsoReq.description}
+                  onChange={(e) => setNewIsoReq({ ...newIsoReq, description: e.target.value })}
+                  placeholder="Describe specific audit focus, required documentation, and verification criteria..."
+                  rows={3}
+                  required
+                  className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-gray-200 rounded-xl text-sm font-medium text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#FF9501] resize-none"
+                />
+              </div>
+
+              <div className="pt-3 border-t border-gray-100 flex justify-end gap-3">
+                <button type="button" onClick={() => setShowAddIsoReqModal(false)} disabled={isAddingIsoReq} className="px-5 py-2.5 text-xs font-bold text-gray-500 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors uppercase tracking-widest cursor-pointer">
+                  Cancel
+                </button>
+                <button type="submit" disabled={isAddingIsoReq || !newIsoReq.title.trim()} className="px-5 py-2.5 text-xs font-bold text-white bg-[#FF9501] hover:bg-[#D97E00] rounded-xl transition-all shadow-md disabled:opacity-50 flex items-center gap-2 uppercase tracking-widest cursor-pointer">
+                  {isAddingIsoReq ? <><Loader2 className="h-4 w-4 animate-spin"/> Adding...</> : "Add ISO Clause"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* --- ADMIN EDIT ISO REQUIREMENT MODAL --- */}
+      {showEditIsoModal && editingIsoReq && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in">
+          <div className="bg-white rounded-2xl max-w-lg w-full shadow-2xl overflow-hidden border-t-4 border-t-[#FF9501]">
+            <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-[#F9FAFB]">
+              <div>
+                <h2 className="text-xl font-bold text-[#1F2937]">Edit ISO Clause Requirement</h2>
+                <p className="text-xs text-gray-500 mt-0.5">Modify clause details, auditee office, or risk classification</p>
+              </div>
+              <button onClick={() => setShowEditIsoModal(false)} className="p-2 hover:bg-gray-200 rounded-full transition-colors cursor-pointer text-gray-500">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleEditIsoRequirement} className="p-6 space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-[#1F2937] mb-1.5 uppercase tracking-wider">
+                    ISO Clause
+                  </label>
+                  <input
+                    type="text"
+                    value={editingIsoReq.iso_clause}
+                    onChange={(e) => setEditingIsoReq({ ...editingIsoReq, iso_clause: e.target.value })}
+                    required
+                    className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-gray-200 rounded-xl text-sm font-medium text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#FF9501]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-[#1F2937] mb-1.5 uppercase tracking-wider">
+                    Risk Level
+                  </label>
+                  <select
+                    value={editingIsoReq.risk_level}
+                    onChange={(e) => setEditingIsoReq({ ...editingIsoReq, risk_level: e.target.value })}
+                    className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-gray-200 rounded-xl text-sm font-medium text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#FF9501]"
+                  >
+                    <option value="High">High Risk</option>
+                    <option value="Medium">Medium Risk</option>
+                    <option value="Low">Low Risk</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-[#1F2937] mb-1.5 uppercase tracking-wider">
+                  Auditee Office
+                </label>
+                <select
+                  value={editingIsoReq.auditee_office}
+                  onChange={(e) => setEditingIsoReq({ ...editingIsoReq, auditee_office: e.target.value })}
+                  className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-gray-200 rounded-xl text-sm font-medium text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#FF9501]"
+                >
+                  <option value="Director of Instruction (DOI) & SAO">Director of Instruction (DOI) & SAO</option>
+                  <option value="Human Resources Management Office (HRMO)">Human Resources Management Office (HRMO)</option>
+                  <option value="Document Controller & Registrar">Document Controller & Registrar</option>
+                  <option value="College Deans & Program Chairs">College Deans & Program Chairs</option>
+                  <option value="BAC / Procurement & Supply">BAC / Procurement & Supply</option>
+                  <option value="Property Custodian & Finance">Property Custodian & Finance</option>
+                  <option value="Registrar & MIS">Registrar & MIS</option>
+                  <option value="Quality Assurance & Deans">Quality Assurance & Deans</option>
+                  <option value="Library Services">Library Services</option>
+                  <option value="Student Affairs Office (SAO)">Student Affairs Office (SAO)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-[#1F2937] mb-1.5 uppercase tracking-wider">
+                  Requirement Title
+                </label>
+                <input
+                  type="text"
+                  value={editingIsoReq.title}
+                  onChange={(e) => setEditingIsoReq({ ...editingIsoReq, title: e.target.value })}
+                  required
+                  className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-gray-200 rounded-xl text-sm font-medium text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#FF9501]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-[#1F2937] mb-1.5 uppercase tracking-wider">
+                  Audit Scope & Description
+                </label>
+                <textarea
+                  value={editingIsoReq.description}
+                  onChange={(e) => setEditingIsoReq({ ...editingIsoReq, description: e.target.value })}
+                  rows={3}
+                  required
+                  className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-gray-200 rounded-xl text-sm font-medium text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#FF9501] resize-none"
+                />
+              </div>
+
+              <div className="pt-3 border-t border-gray-100 flex justify-end gap-3">
+                <button type="button" onClick={() => setShowEditIsoModal(false)} disabled={isEditingIsoReq} className="px-5 py-2.5 text-xs font-bold text-gray-500 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors uppercase tracking-widest cursor-pointer">
+                  Cancel
+                </button>
+                <button type="submit" disabled={isEditingIsoReq || !editingIsoReq.title.trim()} className="px-5 py-2.5 text-xs font-bold text-white bg-[#FF9501] hover:bg-[#D97E00] rounded-xl transition-all shadow-md disabled:opacity-50 flex items-center gap-2 uppercase tracking-widest cursor-pointer">
+                  {isEditingIsoReq ? <><Loader2 className="h-4 w-4 animate-spin"/> Saving...</> : "Save Changes"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* --- DELETE ISO REQUIREMENT CONFIRMATION MODAL --- */}
+      {showDeleteIsoReqModal && isoReqToDelete && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in">
+          <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl overflow-hidden border-t-4 border-t-red-600">
+            <div className="p-6 border-b border-red-50 bg-red-50 flex items-center gap-3">
+              <Archive className="h-6 w-6 text-red-600" />
+              <h2 className="text-xl font-bold text-red-700">Delete ISO Clause Requirement</h2>
+            </div>
+            <div className="p-6 space-y-4">
+              <p className="text-sm text-gray-600 leading-relaxed font-medium">
+                Are you sure you want to delete <span className="font-bold text-gray-900">"{isoReqToDelete.iso_clause}: {isoReqToDelete.title}"</span>?
+              </p>
+              <p className="text-xs text-gray-500 leading-relaxed italic">
+                This action will remove the clause requirement and all associated evidence uploads for {selectedProgram}.
+              </p>
+            </div>
+            <div className="p-6 border-t border-gray-100 bg-[#F9FAFB] flex justify-end gap-3">
+              <button onClick={() => setShowDeleteIsoReqModal(false)} disabled={isDeleting} className="px-5 py-2.5 text-xs font-bold text-gray-500 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors uppercase tracking-widest cursor-pointer">
+                Cancel
+              </button>
+              <button onClick={executeDeleteIsoRequirement} disabled={isDeleting} className="px-5 py-2.5 text-xs font-bold text-white rounded-xl bg-red-600 hover:bg-red-700 transition-all disabled:opacity-50 flex justify-center items-center gap-2 uppercase tracking-widest shadow-md cursor-pointer">
+                {isDeleting ? <><Loader2 className="h-4 w-4 animate-spin"/> Deleting...</> : "Yes, Delete Requirement"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- EDIT 3-DAY IQA AUDIT PROGRAM SCHEDULE MODAL --- */}
+      {showEditIqaModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in">
+          <div className="bg-white rounded-2xl max-w-2xl w-full shadow-2xl overflow-hidden border-t-4 border-t-[#FF9501] max-h-[90vh] flex flex-col">
+            <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-[#F9FAFB] shrink-0">
+              <div>
+                <h2 className="text-xl font-bold text-[#1F2937]">Edit 3-Day IQA Audit Program Schedule</h2>
+                <p className="text-xs text-gray-500 mt-0.5">Update annual audit cycle dates and focus areas for {selectedProgram}</p>
+              </div>
+              <button onClick={() => setShowEditIqaModal(false)} className="p-2 hover:bg-gray-200 rounded-full transition-colors cursor-pointer text-gray-500">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveIqaSchedule} className="p-6 space-y-4 overflow-y-auto flex-1">
+              <div>
+                <label className="block text-xs font-semibold text-[#1F2937] mb-1.5 uppercase tracking-wider">
+                  Academic Year / Audit Cycle Title <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={iqaFormData.academic_year}
+                  onChange={(e) => setIqaFormData({ ...iqaFormData, academic_year: e.target.value })}
+                  placeholder="e.g. IQA Audit Cycle 2026-2027"
+                  required
+                  className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-gray-200 rounded-xl text-sm font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#FF9501]"
+                />
+              </div>
+
+              {/* Day 1 Inputs */}
+              <div className="p-4 bg-orange-50/50 rounded-xl border border-orange-200 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-[#D97E00] uppercase tracking-wider">Day 1 Schedule</span>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-600 mb-1">Day 1 Date</label>
+                    <input
+                      type="text"
+                      value={iqaFormData.day1_date}
+                      onChange={(e) => setIqaFormData({ ...iqaFormData, day1_date: e.target.value })}
+                      placeholder="e.g. Sept 10, 2026"
+                      required
+                      className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs font-semibold"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-600 mb-1">Day 1 Title</label>
+                    <input
+                      type="text"
+                      value={iqaFormData.day1_title}
+                      onChange={(e) => setIqaFormData({ ...iqaFormData, day1_title: e.target.value })}
+                      placeholder="Title / Phase Name"
+                      required
+                      className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs font-semibold"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-600 mb-1">Day 1 Scope & Focus</label>
+                  <textarea
+                    value={iqaFormData.day1_scope}
+                    onChange={(e) => setIqaFormData({ ...iqaFormData, day1_scope: e.target.value })}
+                    rows={2}
+                    required
+                    className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs font-medium resize-none"
+                  />
+                </div>
+              </div>
+
+              {/* Day 2 Inputs */}
+              <div className="p-4 bg-blue-50/50 rounded-xl border border-blue-200 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-blue-700 uppercase tracking-wider">Day 2 Schedule</span>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-600 mb-1">Day 2 Date</label>
+                    <input
+                      type="text"
+                      value={iqaFormData.day2_date}
+                      onChange={(e) => setIqaFormData({ ...iqaFormData, day2_date: e.target.value })}
+                      placeholder="e.g. Sept 11, 2026"
+                      required
+                      className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs font-semibold"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-600 mb-1">Day 2 Title</label>
+                    <input
+                      type="text"
+                      value={iqaFormData.day2_title}
+                      onChange={(e) => setIqaFormData({ ...iqaFormData, day2_title: e.target.value })}
+                      placeholder="Title / Phase Name"
+                      required
+                      className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs font-semibold"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-600 mb-1">Day 2 Scope & Focus</label>
+                  <textarea
+                    value={iqaFormData.day2_scope}
+                    onChange={(e) => setIqaFormData({ ...iqaFormData, day2_scope: e.target.value })}
+                    rows={2}
+                    required
+                    className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs font-medium resize-none"
+                  />
+                </div>
+              </div>
+
+              {/* Day 3 Inputs */}
+              <div className="p-4 bg-emerald-50/50 rounded-xl border border-emerald-200 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-[#006837] uppercase tracking-wider">Day 3 Schedule</span>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-600 mb-1">Day 3 Date</label>
+                    <input
+                      type="text"
+                      value={iqaFormData.day3_date}
+                      onChange={(e) => setIqaFormData({ ...iqaFormData, day3_date: e.target.value })}
+                      placeholder="e.g. Sept 12, 2026"
+                      required
+                      className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs font-semibold"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-600 mb-1">Day 3 Title</label>
+                    <input
+                      type="text"
+                      value={iqaFormData.day3_title}
+                      onChange={(e) => setIqaFormData({ ...iqaFormData, day3_title: e.target.value })}
+                      placeholder="Title / Phase Name"
+                      required
+                      className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs font-semibold"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-600 mb-1">Day 3 Scope & Focus</label>
+                  <textarea
+                    value={iqaFormData.day3_scope}
+                    onChange={(e) => setIqaFormData({ ...iqaFormData, day3_scope: e.target.value })}
+                    rows={2}
+                    required
+                    className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs font-medium resize-none"
+                  />
+                </div>
+              </div>
+
+              <div className="pt-3 border-t border-gray-100 flex justify-end gap-3 shrink-0">
+                <button type="button" onClick={() => setShowEditIqaModal(false)} disabled={isSavingIqa} className="px-5 py-2.5 text-xs font-bold text-gray-500 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors uppercase tracking-widest cursor-pointer">
+                  Cancel
+                </button>
+                <button type="submit" disabled={isSavingIqa || !iqaFormData.academic_year.trim()} className="px-5 py-2.5 text-xs font-bold text-white bg-[#FF9501] hover:bg-[#D97E00] rounded-xl transition-all shadow-md disabled:opacity-50 flex items-center gap-2 uppercase tracking-widest cursor-pointer">
+                  {isSavingIqa ? <><Loader2 className="h-4 w-4 animate-spin"/> Saving...</> : "Save Annual Schedule"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+      {/* --- ADD DYNAMIC IQA AUDIT DAY MODAL --- */}
+      {showAddIqaDayModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in">
+          <div className="bg-white rounded-2xl max-w-lg w-full shadow-2xl overflow-hidden border-t-4 border-t-[#FF9501]">
+            <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-[#F9FAFB]">
+              <div>
+                <h2 className="text-xl font-bold text-[#1F2937]">Add IQA Audit Day</h2>
+                <p className="text-xs text-gray-500 mt-0.5">Configure a new audit phase date and scope for CTU Argao Campus QMS</p>
+              </div>
+              <button onClick={() => setShowAddIqaDayModal(false)} className="p-2 hover:bg-gray-200 rounded-full transition-colors cursor-pointer text-gray-500">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleAddIqaDaySubmit} className="p-6 space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-[#1F2937] mb-1.5 uppercase tracking-wider">
+                    Day Number <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={iqaDayForm.day_number}
+                    onChange={(e) => setIqaDayForm({ ...iqaDayForm, day_number: parseInt(e.target.value) || 1 })}
+                    required
+                    className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-gray-200 rounded-xl text-sm font-semibold text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#FF9501]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-[#1F2937] mb-1.5 uppercase tracking-wider">
+                    Audit Date (Calendar Picker) <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    value={iqaDayForm.day_date}
+                    onChange={(e) => setIqaDayForm({ ...iqaDayForm, day_date: e.target.value })}
+                    required
+                    className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-gray-200 rounded-xl text-sm font-semibold text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#FF9501] cursor-pointer"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-[#1F2937] mb-1.5 uppercase tracking-wider">
+                  Phase Title <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={iqaDayForm.title}
+                  onChange={(e) => setIqaDayForm({ ...iqaDayForm, title: e.target.value })}
+                  placeholder="e.g. Context, Risk & Resource Audit"
+                  required
+                  className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-gray-200 rounded-xl text-sm font-medium text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#FF9501]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-[#1F2937] mb-1.5 uppercase tracking-wider">
+                  Audit Focus & Scope <span className="text-red-500">*</span>
+                </label>
+                <textarea
+                  value={iqaDayForm.scope}
+                  onChange={(e) => setIqaDayForm({ ...iqaDayForm, scope: e.target.value })}
+                  placeholder="Describe specific offices to be audited, target clauses, and verification criteria..."
+                  rows={3}
+                  required
+                  className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-gray-200 rounded-xl text-sm font-medium text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#FF9501] resize-none"
+                />
+              </div>
+
+              <div className="pt-3 border-t border-gray-100 flex justify-end gap-3">
+                <button type="button" onClick={() => setShowAddIqaDayModal(false)} disabled={isSavingIqaDay} className="px-5 py-2.5 text-xs font-bold text-gray-500 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors uppercase tracking-widest cursor-pointer">
+                  Cancel
+                </button>
+                <button type="submit" disabled={isSavingIqaDay || !iqaDayForm.title.trim() || !iqaDayForm.day_date.trim()} className="px-5 py-2.5 text-xs font-bold text-white bg-[#FF9501] hover:bg-[#D97E00] rounded-xl transition-all shadow-md disabled:opacity-50 flex items-center gap-2 uppercase tracking-widest cursor-pointer">
+                  {isSavingIqaDay ? <><Loader2 className="h-4 w-4 animate-spin"/> Adding...</> : "Add Audit Day"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* --- EDIT DYNAMIC IQA AUDIT DAY MODAL --- */}
+      {showEditIqaDayModal && editingIqaDay && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in">
+          <div className="bg-white rounded-2xl max-w-lg w-full shadow-2xl overflow-hidden border-t-4 border-t-[#FF9501]">
+            <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-[#F9FAFB]">
+              <div>
+                <h2 className="text-xl font-bold text-[#1F2937]">Edit IQA Audit Day</h2>
+                <p className="text-xs text-gray-500 mt-0.5">Modify date, phase title, or audit focus scope</p>
+              </div>
+              <button onClick={() => setShowEditIqaDayModal(false)} className="p-2 hover:bg-gray-200 rounded-full transition-colors cursor-pointer text-gray-500">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleEditIqaDaySubmit} className="p-6 space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-[#1F2937] mb-1.5 uppercase tracking-wider">
+                    Day Number <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={editingIqaDay.day_number}
+                    onChange={(e) => setEditingIqaDay({ ...editingIqaDay, day_number: parseInt(e.target.value) || 1 })}
+                    required
+                    className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-gray-200 rounded-xl text-sm font-semibold text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#FF9501]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-[#1F2937] mb-1.5 uppercase tracking-wider">
+                    Audit Date (Calendar Picker) <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    value={editingIqaDay.day_date}
+                    onChange={(e) => setEditingIqaDay({ ...editingIqaDay, day_date: e.target.value })}
+                    required
+                    className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-gray-200 rounded-xl text-sm font-semibold text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#FF9501] cursor-pointer"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-[#1F2937] mb-1.5 uppercase tracking-wider">
+                  Phase Title <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={editingIqaDay.title}
+                  onChange={(e) => setEditingIqaDay({ ...editingIqaDay, title: e.target.value })}
+                  required
+                  className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-gray-200 rounded-xl text-sm font-medium text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#FF9501]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-[#1F2937] mb-1.5 uppercase tracking-wider">
+                  Audit Focus & Scope <span className="text-red-500">*</span>
+                </label>
+                <textarea
+                  value={editingIqaDay.scope}
+                  onChange={(e) => setEditingIqaDay({ ...editingIqaDay, scope: e.target.value })}
+                  rows={3}
+                  required
+                  className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-gray-200 rounded-xl text-sm font-medium text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#FF9501] resize-none"
+                />
+              </div>
+
+              <div className="pt-3 border-t border-gray-100 flex justify-end gap-3">
+                <button type="button" onClick={() => setShowEditIqaDayModal(false)} disabled={isSavingIqaDay} className="px-5 py-2.5 text-xs font-bold text-gray-500 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors uppercase tracking-widest cursor-pointer">
+                  Cancel
+                </button>
+                <button type="submit" disabled={isSavingIqaDay || !editingIqaDay.title.trim() || !editingIqaDay.day_date.trim()} className="px-5 py-2.5 text-xs font-bold text-white bg-[#FF9501] hover:bg-[#D97E00] rounded-xl transition-all shadow-md disabled:opacity-50 flex items-center gap-2 uppercase tracking-widest cursor-pointer">
+                  {isSavingIqaDay ? <><Loader2 className="h-4 w-4 animate-spin"/> Saving...</> : "Save Changes"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* --- DELETE DYNAMIC IQA AUDIT DAY CONFIRMATION MODAL --- */}
+      {showDeleteIqaDayModal && deletingIqaDay && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in">
+          <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl overflow-hidden border-t-4 border-t-red-600">
+            <div className="p-6 border-b border-red-50 bg-red-50 flex items-center gap-3">
+              <Archive className="h-6 w-6 text-red-600" />
+              <h2 className="text-xl font-bold text-red-700">Delete IQA Audit Day</h2>
+            </div>
+            <div className="p-6 space-y-4">
+              <p className="text-sm text-gray-600 leading-relaxed font-medium">
+                Are you sure you want to delete <span className="font-bold text-gray-900">"Day {deletingIqaDay.day_number}: {deletingIqaDay.title}"</span>?
+              </p>
+            </div>
+            <div className="p-6 border-t border-gray-100 bg-[#F9FAFB] flex justify-end gap-3">
+              <button onClick={() => setShowDeleteIqaDayModal(false)} disabled={isDeleting} className="px-5 py-2.5 text-xs font-bold text-gray-500 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors uppercase tracking-widest cursor-pointer">
+                Cancel
+              </button>
+              <button onClick={executeDeleteIqaDay} disabled={isDeleting} className="px-5 py-2.5 text-xs font-bold text-white rounded-xl bg-red-600 hover:bg-red-700 transition-all disabled:opacity-50 flex justify-center items-center gap-2 uppercase tracking-widest shadow-md cursor-pointer">
+                {isDeleting ? <><Loader2 className="h-4 w-4 animate-spin"/> Deleting...</> : "Yes, Delete Day"}
+              </button>
+            </div>
           </div>
         </div>
       )}

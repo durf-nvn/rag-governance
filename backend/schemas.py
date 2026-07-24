@@ -189,4 +189,56 @@ class ISORequirementResponse(BaseModel):
 
 class ISOStatusUpdate(BaseModel):
     status: str # Compliant, Pending, Not Compliant
+
+
+class IQAScheduleUpdate(BaseModel):
+    academic_year: str
+    day1_date: str
+    day1_title: str
+    day1_scope: str
+    day2_date: str
+    day2_title: str
+    day2_scope: str
+    day3_date: str
+    day3_title: str
+    day3_scope: str
+
+class IQAScheduleResponse(BaseModel):
+    id: uuid.UUID
+    program: str
+    academic_year: str
+    day1_date: str
+    day1_title: str
+    day1_scope: str
+    day2_date: str
+    day2_title: str
+    day2_scope: str
+    day3_date: str
+    day3_title: str
+    day3_scope: str
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class IQADayScheduleCreate(BaseModel):
+    day_number: int
+    day_date: str
+    title: str
+    scope: str
+
+class IQADayScheduleResponse(BaseModel):
+    id: uuid.UUID
+    program: str
+    day_number: int
+    day_date: str
+    title: str
+    scope: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
 

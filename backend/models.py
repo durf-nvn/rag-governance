@@ -155,4 +155,34 @@ class ISOEvidence(Base):
     upload_date = Column(DateTime, default=datetime.utcnow)
 
     requirement = relationship("ISORequirement", back_populates="evidences")
+
+
+class IQASchedule(Base):
+    __tablename__ = "iqa_schedules"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    program = Column(String(50), nullable=False, unique=True)
+    academic_year = Column(String(50), default="IQA Audit Cycle 2025-2026")
+    day1_date = Column(String(100), default="Sept 10, 2025")
+    day1_title = Column(String(255), default="Context, Risk & Resource Audit")
+    day1_scope = Column(Text, default="On-site clause audit of Director of Instruction (DOI), College Deans, Financial Management, Property Custodian & SAO. Audit of Clauses 6.1, 7.1 & 8.5.")
+    day2_date = Column(String(100), default="Sept 11, 2025")
+    day2_title = Column(String(255), default="HR, Data Systems & External Control")
+    day2_scope = Column(Text, default="Audit of HRMO (Clause 7.2), Registrar & MIS (Clause 9.1), Document Controller (Clause 7.5), Library, and BAC Procurement (Clause 8.4).")
+    day3_date = Column(String(100), default="Sept 12, 2025")
+    day3_title = Column(String(255), default="Consolidation & Closing Meeting")
+    day3_scope = Column(Text, default="Internal data cross-referencing, synthesis of observations, drafting formal audit findings report, and official Closing Ceremony & Certificate Awarding.")
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class IQADaySchedule(Base):
+    __tablename__ = "iqa_day_schedules"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    program = Column(String(50), default="GLOBAL")
+    day_number = Column(Integer, nullable=False)
+    day_date = Column(String(50), nullable=False)
+    title = Column(String(255), nullable=False)
+    scope = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
 

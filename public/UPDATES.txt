@@ -5,7 +5,82 @@
 Last Updated: July 24, 2026
 
 --------------------------------------------------------------------------------
-[2026-07-24] ISO 9001:2015 QUALITY MANAGEMENT SYSTEM (QMS) & IQA INTEGRATION
+[2026-07-24] DYNAMIC IQA AUDIT DAYS CRUD & INTERACTIVE CALENDAR DATE PICKER
+--------------------------------------------------------------------------------
+• Dynamic IQA Audit Days Management (AccreditationSupport.tsx & backend/main.py):
+  - Made the "CTU Argao Internal Quality Audit (IQA) Program Schedule" fully dynamic with complete CRUD operations.
+  - Admins can now manually add, edit, or delete any number of audit days (Day 1, Day 2, Day 3, Day 4, etc.).
+  - Added backend SQLAlchemy model `IQADaySchedule` and REST endpoints (`GET /iso/schedule-days`, `POST /iso/schedule-days`, `PUT /iso/schedule-days/{id}`, `DELETE /iso/schedule-days/{id}`).
+
+• Interactive Calendar / Datetime Date Picker (AccreditationSupport.tsx):
+  - Integrated native HTML5 `<input type="date">` calendar pickers into the "Add Audit Day" and "Edit Audit Day" modals.
+  - Users and Admins can click on the calendar picker to select audit dates interactively instead of manual text entry.
+
+• DISABLED PROGRAM EVALUATION CONTEXT DROPDOWN FOR ISO STANDARDS
+--------------------------------------------------------------------------------
+• Locked Program Selector during ISO Audit (AccreditationSupport.tsx):
+  - Automatically locks and disables the "Program Evaluation Context" dropdown when the user clicks on the "ISO Standards" tab.
+  - Displays a lock icon and "CTU Argao Institutional Campus-Wide [Global]" badge to signal that ISO 9001:2015 is an institutional campus-wide QMS and does not depend on degree program selections.
+  - The degree program dropdown automatically re-enables when switching back to AACCUP or CHED tabs.
+
+• UNIFIED INSTITUTIONAL CAMPUS-WIDE ISO 9001:2015 QMS ARCHITECTURE
+--------------------------------------------------------------------------------
+• Campus-Wide QMS Scope (AccreditationSupport.tsx & backend/main.py):
+  - Updated ISO 9001:2015 Quality Management System (QMS) from per-program scope to a UNIFIED, INSTITUTIONAL CAMPUS-WIDE QMS scope for CTU Argao Campus.
+  - While AACCUP Accreditation and CHED Monitoring remain degree program-specific (BSIT, BEED, BSED_MATH, BSIE), ISO 9001:2015 QMS is now unified campus-wide.
+  - All ISO clause requirements, compliance metrics (%), auditee offices, and 3-Day IQA audit schedule reflect the single campus-wide ISO QMS.
+  - ISO evidence files are ingested under "GLOBAL" program scope so they are visible to all authorized campus users in Knowledge Repository.
+
+• FUTURE-PROOF ISO 9001:2015 CLAUSE CRUD & DYNAMIC ANNUAL IQA SCHEDULE
+--------------------------------------------------------------------------------
+• Full ISO Clause Management & CRUD (AccreditationSupport.tsx & backend/main.py):
+  - Made ISO Clauses completely dynamic and future-proof to support evolving ISO standards over time.
+  - Admins can now:
+    1. Create Custom ISO Clauses (+ Add ISO Clause Modal).
+    2. Edit Existing ISO Clauses (Edit Modal for clause code, title, description, auditee office dropdown, risk level).
+    3. Delete / Archive Obsolete ISO Clauses (Confirmation Modal).
+
+• Dynamic Annual 3-Day IQA Audit Program Schedule (backend/models.py & AccreditationSupport.tsx):
+  - Created IQASchedule database model and REST API endpoints (GET /iso/schedule/{program}, PUT /iso/schedule/{program}).
+  - Admins can edit annual audit cycle details for upcoming academic years:
+    1. Academic Year / Audit Cycle Title (e.g. "IQA Audit Cycle 2026-2027")
+    2. Day 1 Date, Title, and Focus Scope
+    3. Day 2 Date, Title, and Focus Scope
+    4. Day 3 Date, Title, and Focus Scope
+
+• ISO AUDITEE OFFICE DROPDOWN & 100% COMPLIANCE CELEBRATION BANNER
+--------------------------------------------------------------------------------
+• Auditee Office Select Dropdown (AccreditationSupport.tsx):
+  - Converted Auditee Office filter into a sleek, selectable dropdown menu featuring all 8 CTU Argao offices:
+    1. Director of Instruction (DOI) & SAO
+    2. Human Resources Management Office (HRMO)
+    3. Document Controller & Registrar
+    4. College Deans & Program Chairs
+    5. BAC / Procurement & Supply
+    6. Property Custodian & Finance
+    7. Registrar & MIS
+    8. Quality Assurance & Deans
+  - Added Auditee Office Select Dropdown to the Admin "Add ISO Requirement" Modal.
+
+• 100% ISO 9001:2015 Compliance Celebration Banner & Export (AccreditationSupport.tsx):
+  - When all ISO clauses reach 100% compliance, the system renders a prominent emerald celebration banner:
+    "🏆 100% Fully Compliant — Quality Management System (QMS) Verified for [Program]! All IQA clauses have been audited and verified. CTU Argao Campus QMS Ready for External Audit!"
+  - Added a "Download ISO Audit Report" action button inside the celebration banner.
+
+• KNOWLEDGE REPOSITORY ACCREDITATION EVIDENCE & PROGRAM-RESTRICTED FILTERING
+--------------------------------------------------------------------------------
+• Backend Document Endpoint Update (backend/main.py):
+  - Updated /documents endpoint to return program metadata (e.g. BSIT, BEED, BSED_MATH, BSIE, GLOBAL) for all uploaded documents and evidence files.
+
+• Knowledge Repository Access Control & UI Enhancements (KnowledgeRepository.tsx):
+  - Enabled display of all evidence documents uploaded in Accreditation Support (AACCUP, CHED, and ISO Standards).
+  - Enforced Role & Program Security Boundaries:
+    - Students: Accreditation Evidence documents are strictly hidden for confidentiality.
+    - Faculty Members: Program-restricted filtering automatically restricts view of Accreditation Evidence to documents matching the faculty's assigned department (e.g. BSIT faculty see BSIT evidence & global policies).
+    - Admin Accounts: Full visibility across all degree programs with program filter dropdown.
+  - Added Program Filter Select Dropdown (All Programs, BSIT, BEED, BSED_MATH, BSIE, Global) and Program Badges ([BSIT], [BEED], [GLOBAL]) in document table rows.
+
+• ISO 9001:2015 QUALITY MANAGEMENT SYSTEM (QMS) & IQA INTEGRATION
 --------------------------------------------------------------------------------
 • Extracted ISO 9001:2015 IQA Program & Clause Matrix from public/iso program final.pdf:
   - Clause 6.1: Actions to Address Risks & Opportunities (Director of Instruction & SAO)
