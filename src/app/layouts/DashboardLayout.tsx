@@ -66,9 +66,9 @@ export function DashboardLayout() {
 
   const getRoleBadge = () => {
     switch (userProfile.role) {
-      case "ADMIN":   return { icon: Shield,        color: "bg-[#FF9501]", label: "Administrator" };
-      case "FACULTY": return { icon: BookOpen,      color: "bg-[#FF9501]", label: "Faculty"       };
-      default:        return { icon: GraduationCap, color: "bg-[#FF9501]", label: "Student"       };
+      case "ADMIN":   return { icon: Shield,        color: "bg-[#dd7230]", label: "Administrator" };
+      case "FACULTY": return { icon: BookOpen,      color: "bg-[#dd7230]", label: "Faculty"       };
+      default:        return { icon: GraduationCap, color: "bg-[#dd7230]", label: "Student"       };
     }
   };
 
@@ -86,7 +86,7 @@ export function DashboardLayout() {
       <nav className="bg-white border-b border-[#E5E7EB] fixed top-0 left-0 right-0 z-30 shadow-sm">
         <div className="px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-[#FF9501] rounded-lg flex items-center justify-center">
+            <div className="w-10 h-10 bg-[#dd7230] rounded-lg flex items-center justify-center">
               <GraduationCap className="h-6 w-6 text-white" />
             </div>
             <div>
@@ -176,8 +176,8 @@ export function DashboardLayout() {
                     to={item.path}
                     className={`flex items-center gap-3 px-3 py-2.5 mb-1 rounded-lg transition-all cursor-pointer ${
                       isActive
-                        ? "bg-[#FF9501] text-white"
-                        : "text-[#6B7280] hover:bg-[#FFF4E5] hover:text-[#D97E00]"
+                        ? "bg-[#dd7230] text-white"
+                        : "text-[#6B7280] hover:bg-[#FFF4E5] hover:text-[#dd7230]"
                     }`}
                     title={sidebarCollapsed ? item.label : undefined}
                   >
@@ -230,7 +230,7 @@ export function DashboardLayout() {
         {isAIChatOpen && (
           <div className="w-[350px] sm:w-[380px] h-[520px] bg-white rounded-2xl shadow-2xl border border-[#E5E7EB] flex flex-col overflow-hidden animate-in slide-in-from-bottom-6 duration-300">
             
-            <div className="p-4 bg-[#FF9501] text-white flex justify-between items-center shadow-md shrink-0">
+            <div className="p-4 bg-[#dd7230] text-white flex justify-between items-center shadow-md shrink-0">
               <div className="flex items-center gap-2">
                 <Sparkles className="h-4 w-4 animate-pulse text-white" />
                 <span className="font-bold text-sm tracking-wide">AskPolicy Assistant</span>
@@ -251,7 +251,7 @@ export function DashboardLayout() {
 
         <button
           onClick={() => setIsAIChatOpen(!isAIChatOpen)}
-          className={`w-14 h-14 rounded-full flex items-center justify-center text-white shadow-2xl transition-all duration-300 hover:scale-105 active:scale-95 cursor-pointer bg-gradient-to-br from-[#FF9501] to-[#D97E00] ${
+          className={`w-14 h-14 rounded-full flex items-center justify-center text-white shadow-[0_8px_20px_rgba(0,0,0,0.35)] transition-all duration-300 hover:scale-105 active:scale-95 cursor-pointer bg-gradient-to-br from-[#FF9501] to-[#D97E00] ${
             isAIChatOpen ? "rotate-90 bg-gray-800" : ""
           }`}
         >

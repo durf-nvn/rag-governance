@@ -149,7 +149,7 @@ export function GradeEvaluation() {
           <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
             <div className="p-4 bg-gray-50/80 border-b border-gray-100">
               <h3 className="font-bold text-gray-800 text-sm flex items-center gap-2">
-                <Upload className="h-4 w-4 text-[#FF9501]" /> Document Upload
+                <Upload className="h-4 w-4 text-[#dd7230]" /> Document Upload
               </h3>
             </div>
             
@@ -161,7 +161,7 @@ export function GradeEvaluation() {
                 onClick={() => !selectedFile && fileInputRef.current?.click()}
                 className={`border-2 border-dashed rounded-xl p-8 text-center transition-all ${
                   selectedFile ? "border-transparent bg-transparent p-0" : 
-                  isDragging ? "border-[#FF9501] bg-[#FFF4E5] cursor-pointer" : "border-gray-200 hover:border-[#FF9501] bg-gray-50 hover:bg-gray-50/50 cursor-pointer"
+                  isDragging ? "border-[#FF9501] bg-[#FFF4E5] cursor-pointer" : "border-gray-200 hover:border-[#dd7230] bg-gray-50 hover:bg-gray-50/50 cursor-pointer"
                 }`}
               >
                 {/* IMPROVED FILE DISPLAY WITH CLOSE ICON */}
@@ -195,7 +195,7 @@ export function GradeEvaluation() {
               <button
                 onClick={submitForEvaluation}
                 disabled={!selectedFile || isEvaluating}
-                className="w-full mt-6 py-3.5 bg-[#FF9501] text-white rounded-xl hover:bg-[#D97E00] transition-all disabled:opacity-50 disabled:hover:bg-[#FF9501] flex justify-center items-center gap-2 font-bold shadow-md active:scale-[0.98]"
+                className="w-full mt-6 py-3.5 bg-[#dd7230] text-white rounded-xl hover:bg-[##dd7230] transition-all disabled:opacity-50 disabled:hover:bg-[#FF9501] flex justify-center items-center gap-2 font-bold shadow-md active:scale-[0.98]"
               >
                 {isEvaluating ? <><Loader2 className="h-5 w-5 animate-spin" /> Analyzing Grades...</> : "Evaluate Performance"}
               </button>
@@ -230,7 +230,7 @@ export function GradeEvaluation() {
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
                   <div>
                     <h3 className="font-extrabold text-gray-900 text-2xl flex items-center gap-2 mb-1">
-                      <TrendingUp className="h-6 w-6 text-[#FF9501]" /> Academic Evaluation
+                      <TrendingUp className="h-6 w-6 text-[#dd7230]" /> Academic Evaluation
                     </h3>
                     <p className="text-sm text-gray-500 font-medium">Official CTU Ruleset Applied</p>
                   </div>
@@ -244,7 +244,7 @@ export function GradeEvaluation() {
                 <div className="flex flex-col md:flex-row items-center justify-between p-8 bg-gray-50/80 border border-gray-100 rounded-2xl mb-8">
                   <div className="text-center md:text-left mb-4 md:mb-0">
                     <h4 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Total Cumulative GWA</h4>
-                    <p className="text-6xl font-black text-[#FF9501] tracking-tight">{cumulativeData.gwa}</p>
+                    <p className="text-6xl font-black text-[#dd7230] tracking-tight">{cumulativeData.gwa}</p>
                   </div>
                   <div className="hidden md:block w-px h-16 bg-gray-200 mx-8"></div>
                   <div className="text-center md:text-left max-w-[280px]">

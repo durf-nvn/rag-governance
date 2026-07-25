@@ -377,14 +377,14 @@ export function KnowledgeRepository() {
               <input
                 type="text"
                 placeholder="Search by document name, category, office, or date..."
-                className="w-full pl-11 pr-4 py-2.5 bg-[#F9FAFB] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#FF9501] transition-colors"
+                className="w-full pl-11 pr-4 py-2.5 bg-[#F9FAFB] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#dd7230] transition-colors"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
             </div>
             <div className="flex flex-col sm:flex-row gap-4">
               <select
-                className="sm:w-48 px-4 py-2.5 bg-[#F9FAFB] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#FF9501] text-[#374151] cursor-pointer hover:bg-gray-50 transition-colors"
+                className="sm:w-48 px-4 py-2.5 bg-[#F9FAFB] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#dd7230] text-[#374151] cursor-pointer hover:bg-gray-50 transition-colors"
                 value={selectedCategory}
                 onChange={(e) => setSelectedCategory(e.target.value)}
               >
@@ -399,7 +399,7 @@ export function KnowledgeRepository() {
               </select>
               
               <select
-                className="sm:w-48 px-4 py-2.5 bg-[#F9FAFB] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#FF9501] text-[#374151] cursor-pointer hover:bg-gray-50 transition-colors"
+                className="sm:w-48 px-4 py-2.5 bg-[] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#dd7230] text-[#374151] cursor-pointer hover:bg-gray-50 transition-colors"
                 value={selectedOffice}
                 onChange={(e) => setSelectedOffice(e.target.value)}
               >
@@ -417,7 +417,7 @@ export function KnowledgeRepository() {
       <div className="flex-1 h-auto bg-white rounded-lg border border-[#E5E7EB] shadow-sm flex flex-col min-h-0 overflow-hidden">
         <div className="flex-1 h-auto overflow-auto">
           <table className="w-full whitespace-nowrap relative table-fixed">
-            <thead className="bg-[#FF9501] text-white sticky top-0 z-20 shadow-md outline outline-1 outline-[#FF9501]">
+            <thead className="bg-[#dd7230] text-white sticky top-0 z-20 shadow-md outline outline-1 outline-[#FF9501]">
               <tr>
                 <th className="w-[28%] px-6 py-3.5 text-left text-xs font-semibold uppercase tracking-wider">Document Name</th>
                 <th className="w-[16%] px-6 py-3.5 text-left text-xs font-semibold uppercase tracking-wider">Category</th>
@@ -456,7 +456,7 @@ export function KnowledgeRepository() {
                       <span className={`px-2.5 py-1 inline-flex text-xs leading-5 font-semibold rounded-full border ${
                         doc.status === "Archived" 
                           ? "bg-gray-100 text-gray-600 border-gray-200" 
-                          : "bg-orange-50 text-[#D97E00] border-[#FF9501]/20"
+                          : "bg-green-50 text-[#228B22] border-[#228B22]/20"
                       }`}>
                         {doc.status || "Active"}
                       </span>

@@ -158,7 +158,7 @@ export function AskPolicy() {
 
               {message.type === "ai" && (
                 <div className="flex items-center gap-2 mb-1.5 flex-shrink-0">
-                  <div className="w-6 h-6 bg-[#FF9501] rounded-md flex items-center justify-center">
+                  <div className="w-6 h-6 bg-[#dd7230] rounded-md flex items-center justify-center">
                     <Sparkles className="h-3 w-3 text-white" />
                   </div>
                   <span className="text-xs font-bold text-[#1F2937]">AI Assistant</span>

@@ -242,7 +242,7 @@ export function NotificationSidebar({
       >
 
         {/* ══ Header ══════════════════════════════════════════════ */}
-        <div className="flex-shrink-0 bg-gradient-to-br from-[#CE0000] to-[#a80000] px-5 pt-5 pb-4">
+        <div className="flex-shrink-0 bg-gradient-to-br from-[#dd7230] to-[#dd7230] px-5 pt-5 pb-4">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
               {/* Bell with ping indicator */}

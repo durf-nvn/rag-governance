@@ -49,37 +49,37 @@ export function LandingPage() {
       icon: Database,
       title: "Knowledge Repository",
       description: "Store and manage all institutional policies, procedures, and documents in one secure, searchable location.",
-      color: "#FF9501"
+      color: "#DD7230"
     },
     {
       icon: MessageSquare,
       title: "AI Policy Q&A",
       description: "Ask questions in natural language and receive instant, accurate answers with source citations from documents.",
-      color: "#FF9501"
+      color: "#DD7230"
     },
     {
       icon: Award,
       title: "Accreditation Support",
       description: "Streamline accreditation processes with evidence locators, compliance checklists, and gap identification.",
-      color: "#10B981"
+      color: "#DD7230"
     },
     {
       icon: FileSearch,
       title: "Governance Reference",
       description: "Quick access to CHED memoranda, university policies, and regulatory frameworks with advanced search.",
-      color: "#FF9501"
+      color: "#DD7230"
     },
     {
       icon: Shield,
       title: "Audit Trail",
       description: "Complete tracking of all system activities including queries, document access, and version changes.",
-      color: "#FF9501"
+      color: "#DD7230"
     },
     {
       icon: Users,
       title: "Role-Based Access",
       description: "Secure access control with different permissions for administrators, faculty, and students.",
-      color: "#10B981"
+      color: "#DD7230"
     }
   ];
 
@@ -121,13 +121,13 @@ export function LandingPage() {
           <div className="flex items-center gap-4">
             <Link 
               to="/login" 
-              className="px-6 py-2.5 text-sm font-medium text-[#D97E00] hover:text-[#FF9501] transition-colors"
+              className="px-9 py-4.5 text-mefium font-medium text-[#dd7230] hover:text-[#dd7230] transition-colors"
             >
               Sign In
             </Link>
             <Link 
               to="/signup" 
-              className="px-6 py-2.5 text-sm font-medium bg-[#FF9501] text-white rounded-full hover:bg-[#D97E00] transition-all shadow-sm hover:shadow-md"
+              className="px-8 py-3.5 text-medium font-medium bg-[#dd7230] text-white rounded-full hover:bg-[#dd7230] transition-all shadow-sm hover:shadow-md"
             >
               Sign Up
             </Link>
@@ -145,7 +145,7 @@ export function LandingPage() {
                 <h1 className="text-5xl md:text-6xl lg:text-7xl font-bold text-[#1F2937] leading-tight tracking-tight">
                   RAG-Powered
                   <br />
-                  <span className="text-[#FF9501]">Knowledge</span>
+                  <span className="text-[#dd7230]">Knowledge</span>
                   <br />
                   System
                 </h1>
@@ -170,14 +170,14 @@ export function LandingPage() {
               <div className="flex flex-col sm:flex-row gap-4 pt-4">
                 <Link 
                   to="/signup" 
-                  className="group inline-flex items-center justify-center gap-2 px-8 py-4 bg-[#FF9501] text-white rounded-2xl hover:bg-[#D97E00] transition-all font-medium shadow-lg hover:shadow-xl"
+                  className="group inline-flex items-center justify-center gap-2 px-8 py-4 bg-[#dd7230] text-white rounded-2xl  transition-all font-medium shadow-lg hover:shadow-xl"
                 >
                   Get Started
                   <ArrowRight className="h-5 w-5 group-hover:translate-x-1 transition-transform" />
                 </Link>
                 <Link 
                   to="/login" 
-                  className="inline-flex items-center justify-center px-8 py-4 bg-white border-2 border-[#E5E7EB] text-[#1F2937] rounded-2xl hover:border-[#FF9501] hover:text-[#FF9501] transition-all font-medium"
+                  className="inline-flex items-center justify-center px-8 py-4 bg-white border-2 border-[#E5E7EB] text-[#1F2937] rounded-2xl hover:border-[#dd7230] hover:text-[#dd7230] transition-all font-medium"
                 >
                   Sign in to System
                 </Link>
@@ -210,7 +210,7 @@ export function LandingPage() {
                 <div className="absolute -bottom-8 -left-8 bg-white rounded-2xl shadow-xl p-6 border border-[#E5E7EB]">
                   <div className="flex items-center gap-4">
                     <div className="w-12 h-12 bg-[#FFF4E5] rounded-xl flex items-center justify-center">
-                      <Database className="h-6 w-6 text-[#FF9501]" />
+                      <Database className="h-6 w-6 text-[#dd7230]" />
                     </div>
                     <div>
                       <div className="text-2xl font-bold text-[#1F2937]">
@@ -280,7 +280,7 @@ export function LandingPage() {
       {/* Stats Section */}
       <section className="py-24 bg-white">
         <div className="container mx-auto px-8">
-          <div className="bg-gradient-to-br from-[#FF9501] to-[#D97E00] rounded-[3rem] p-16">
+          <div className="bg-gradient-to-br from-[#dd7230] to-[#dd7230] rounded-[3rem] p-16">
             <div className="text-center mb-12">
               <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">
                 Trusted by CTU Community
@@ -327,7 +327,7 @@ export function LandingPage() {
             <div className="pt-4">
               <Link 
                 to="/signup" 
-                className="group inline-flex items-center justify-center gap-2 px-10 py-5 bg-[#FF9501] text-white rounded-2xl hover:bg-[#D97E00] transition-all font-medium text-lg shadow-xl hover:shadow-2xl"
+                className="group inline-flex items-center justify-center gap-2 px-10 py-5 bg-[#dd7230] text-white rounded-2xl hover:bg-[#dd7230] transition-all font-medium text-lg shadow-xl hover:shadow-2xl"
               >
                 Get Started Today
                 <ArrowRight className="h-5 w-5 group-hover:translate-x-1 transition-transform" />
