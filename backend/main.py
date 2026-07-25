@@ -7,9 +7,9 @@ from typing import List, Optional
 
 # Third-party imports
 from dotenv import load_dotenv
-from fastapi import FastAPI, Depends, HTTPException, status, File, UploadFile, Form, Body
+from fastapi import FastAPI, Depends, HTTPException, status, File, UploadFile, Form, Body, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.security import OAuth2PasswordRequestForm
+from fastapi.security import OAuth2PasswordRequestForm, OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, EmailStr
 from groq import Groq
@@ -18,6 +18,84 @@ import PyPDF2
 import groq
 import time
 import re
+from rate_limiter import limiter
+from sanitizer import sanitize_user_input, check_prompt_injection
+import traceback
+import numpy as np
+from PIL import Image as PILImage
+
+# Lazy-load PaddleOCR to avoid blocking at startup
+_ocr_instance = None
+
+def get_ocr():
+    global _ocr_instance
+    if _ocr_instance is None:
+        from paddleocr import PaddleOCR
+        _ocr_instance = PaddleOCR(use_angle_cls=True, lang='en')
+    return _ocr_instance
+
+def run_ocr(ocr_instance, img_array):
+    """Run OCR and extract text lines. Compatible with PaddleOCR 2.x."""
+    extracted = ""
+    result = ocr_instance.ocr(img_array, cls=True)
+    if result and result[0]:
+        for line in result[0]:
+            if line and len(line) >= 2:
+                extracted += line[1][0] + "\n"
+    return extracted
+
+# Minimum characters per page from PyPDF2 before we OCR that page.
+# Pages with tables/images embedded as images usually yield < 50 chars.
+OCR_FALLBACK_THRESHOLD = 50
+
+def extract_pdf_text(contents: bytes) -> str:
+    """
+    Extract text from a PDF with per-page OCR fallback.
+
+    Strategy:
+    - For each page, try PyPDF2 first (fast).
+    - If a page yields fewer than OCR_FALLBACK_THRESHOLD characters,
+      it likely contains an embedded image/table — render the page
+      as an image and run PaddleOCR on it instead.
+    - This correctly handles:
+        1. Normal text PDFs      → PyPDF2 only (fast)
+        2. Fully scanned PDFs    → OCR every page
+        3. Mixed PDFs (e.g. Student Handbook with image tables)
+                                 → PyPDF2 for text pages, OCR for image pages
+    """
+    import fitz
+
+    extracted_text = ""
+    pdf_reader    = PyPDF2.PdfReader(io.BytesIO(contents))
+    pdf_document  = fitz.open(stream=contents, filetype="pdf")
+    ocr_instance  = None  # lazy-init only if needed
+
+    for page_num, page in enumerate(pdf_reader.pages):
+        page_text = page.extract_text() or ""
+
+        if len(page_text.strip()) >= OCR_FALLBACK_THRESHOLD:
+            # Enough text from PyPDF2 — use it directly
+            extracted_text += page_text + "\n"
+        else:
+            # Too little text → page is likely an image/table scan → use OCR
+            if ocr_instance is None:
+                ocr_instance = get_ocr()
+
+            fitz_page = pdf_document.load_page(page_num)
+            pix       = fitz_page.get_pixmap(dpi=150)
+            img_array = np.frombuffer(pix.samples, dtype=np.uint8).reshape(
+                pix.height, pix.width, pix.n
+            )
+            if pix.n == 4:  # RGBA → RGB
+                img_array = img_array[:, :, :3]
+
+            ocr_text = run_ocr(ocr_instance, img_array)
+            # Prefer OCR result; if OCR also yields nothing, keep PyPDF2 text
+            extracted_text += (ocr_text if ocr_text.strip() else page_text) + "\n"
+
+    pdf_document.close()
+    return extracted_text
+
 
 def supabase_query_with_retry(query_fn, retries=3, delay=1):
     """Retry a Supabase query on connection drops."""
@@ -251,13 +329,130 @@ app = FastAPI(
     description="Backend for the RAG-Powered Quality Assurance System"
 )
 
+# ─────────────────────────────────────────────────────────────────────────────
+# SECURITY HARDENING: CORS & HEADERS MIDDLEWARE
+# ─────────────────────────────────────────────────────────────────────────────
+allowed_origins_env = os.getenv("ALLOWED_ORIGINS")
+if allowed_origins_env:
+    allowed_origins = [origin.strip() for origin in allowed_origins_env.split(",") if origin.strip()]
+else:
+    allowed_origins = [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000"
+    ]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    """Applies Security Headers to defeat Clickjacking, MIME sniffing, and XSS attacks."""
+    response = await call_next(request)
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    return response
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# AUTHENTICATION DEPENDENCIES (JWT VALIDATION)
+# ─────────────────────────────────────────────────────────────────────────────
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login", auto_error=False)
+
+def _extract_token_from_request(request: Request, bearer_token: Optional[str] = None) -> Optional[str]:
+    """Helper to extract token from Bearer header OR HttpOnly cookie."""
+    if bearer_token:
+        return bearer_token
+    auth_header = request.headers.get("Authorization")
+    if auth_header and auth_header.startswith("Bearer "):
+        return auth_header.split(" ")[1]
+    cookie_token = request.cookies.get("access_token")
+    if cookie_token:
+        return cookie_token.replace("Bearer ", "") if cookie_token.startswith("Bearer ") else cookie_token
+    return None
+
+def get_current_user(
+    request: Request,
+    token: Optional[str] = Depends(oauth2_scheme),
+    db: Session = Depends(get_db)
+) -> models.User:
+    """Verifies incoming JWT access token from Header or HttpOnly Cookie."""
+    extracted_token = _extract_token_from_request(request, token)
+    if not extracted_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required. Missing Bearer access token or auth cookie.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    try:
+        payload = utils.decode_access_token(extracted_token)
+        email: str = payload.get("sub")
+        if not email:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token claims.",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Access token has expired or is invalid.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    user = db.query(models.User).filter(models.User.email == email).first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User account not found.")
+
+    if user.status != "Active":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User account is disabled.")
+
+    return user
+
+def get_optional_user(
+    request: Request,
+    token: Optional[str] = Depends(oauth2_scheme),
+    db: Session = Depends(get_db)
+) -> Optional[models.User]:
+    """Optional user resolution supporting both Header and Cookie auth."""
+    extracted_token = _extract_token_from_request(request, token)
+    if not extracted_token:
+        return None
+    try:
+        payload = utils.decode_access_token(extracted_token)
+        email = payload.get("sub")
+        if email:
+            return db.query(models.User).filter(models.User.email == email).first()
+    except Exception:
+        pass
+    return None
+
+def get_current_admin(current_user: models.User = Depends(get_current_user)) -> models.User:
+    """Enforces Admin role requirement for administrative routes."""
+    if current_user.role.upper() != "ADMIN":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access restricted. Administrator privileges required."
+        )
+    return current_user
+
+def get_current_faculty_or_admin(current_user: models.User = Depends(get_current_user)) -> models.User:
+    """Enforces Faculty or Admin role requirement."""
+    if current_user.role.upper() not in ["FACULTY", "ADMIN"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access restricted to Faculty and Administrator roles."
+        )
+    return current_user
+
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -277,7 +472,10 @@ def test_db_connection(db: Session = Depends(get_db)):
         return {"status": "Failed", "error": str(e)}
     
 @app.post("/auth/send-otp")
-def send_otp(req: SendOTPRequest, db: Session = Depends(get_db)):
+def send_otp(request: Request, req: SendOTPRequest, db: Session = Depends(get_db)):
+    # Rate Limit Enforcement: Max 3 OTP requests per 5 minutes per IP
+    limiter.check(request, key_name="send_otp", max_requests=3, window_seconds=300)
+
     # 1. Check if email is already taken
     existing_user = db.query(models.User).filter(models.User.email == req.email).first()
     if existing_user:
@@ -420,7 +618,15 @@ def register_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
 # ─────────────────────────────────────────────────────────────────────────────
 
 @app.post("/login", response_model=schemas.Token)
-def login_user(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+def login_user(
+    request: Request,
+    response: Response,
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    db: Session = Depends(get_db)
+):
+    # Anti-Brute-Force Rate Limiting: Max 5 login attempts per minute per IP
+    limiter.check(request, key_name="login_attempt", max_requests=5, window_seconds=60)
+
     user = db.query(models.User).filter(models.User.email == form_data.username).first()
 
     if not user or not utils.verify_password(form_data.password, user.hashed_password):
@@ -442,7 +648,17 @@ def login_user(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = D
             detail="Your Faculty account is currently pending Admin verification."
         )
 
-    access_token = utils.create_access_token(data={"sub": user.email})
+    access_token = utils.create_access_token(data={"sub": user.email, "role": user.role})
+
+    # Set HttpOnly, SameSite cookie so browser handles authentication securely without JS access
+    response.set_cookie(
+        key="access_token",
+        value=f"Bearer {access_token}",
+        httponly=True,
+        max_age=60 * 60 * 8, # 8 hours
+        samesite="lax",
+        secure=False  # Set to True when deploying under HTTPS
+    )
 
     # Audit log
     try:
@@ -468,6 +684,14 @@ def login_user(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = D
         "role":         user.role,
         "department":   user_dept,
     }
+
+
+@app.post("/logout")
+def logout_user(response: Response):
+    """Clears HttpOnly auth cookie on logout."""
+    response.delete_cookie(key="access_token", samesite="lax")
+    return {"message": "Successfully logged out."}
+
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -521,12 +745,19 @@ def update_password(request: UpdatePasswordRequest, db: Session = Depends(get_db
 # ─────────────────────────────────────────────────────────────────────────────
 
 @app.get("/users", response_model=List[schemas.UserResponse])
-def get_all_users(db: Session = Depends(get_db)):
+def get_all_users(
+    db: Session = Depends(get_db),
+    admin: models.User = Depends(get_current_admin)
+):
     return db.query(models.User).all()
 
 
 @app.put("/users/{user_id}/verify")
-def verify_user(user_id: str, db: Session = Depends(get_db)):
+def verify_user(
+    user_id: str,
+    db: Session = Depends(get_db),
+    admin: models.User = Depends(get_current_admin)
+):
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -549,7 +780,11 @@ def verify_user(user_id: str, db: Session = Depends(get_db)):
 
 
 @app.delete("/users/{user_id}")
-def delete_user(user_id: str, db: Session = Depends(get_db)):
+def delete_user(
+    user_id: str,
+    db: Session = Depends(get_db),
+    admin: models.User = Depends(get_current_admin)
+):
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -560,7 +795,11 @@ def delete_user(user_id: str, db: Session = Depends(get_db)):
 
 
 @app.put("/users/{user_id}/disable")
-def disable_user(user_id: str, db: Session = Depends(get_db)):
+def disable_user(
+    user_id: str,
+    db: Session = Depends(get_db),
+    admin: models.User = Depends(get_current_admin)
+):
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -582,7 +821,11 @@ def disable_user(user_id: str, db: Session = Depends(get_db)):
 
 
 @app.put("/users/{user_id}/enable")
-def enable_user(user_id: str, db: Session = Depends(get_db)):
+def enable_user(
+    user_id: str,
+    db: Session = Depends(get_db),
+    admin: models.User = Depends(get_current_admin)
+):
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -668,11 +911,12 @@ async def upload_document(
         filename_lower = file.filename.lower()
 
         if filename_lower.endswith(".pdf"):
-            pdf_reader = PyPDF2.PdfReader(io.BytesIO(contents))
-            for page in pdf_reader.pages:
-                text = page.extract_text()
-                if text:
-                    extracted_text += text + "\n"
+            extracted_text = extract_pdf_text(contents)
+        elif filename_lower.endswith((".png", ".jpg", ".jpeg")):
+            img = PILImage.open(io.BytesIO(contents)).convert("RGB")
+            img_array = np.array(img)
+            ocr = get_ocr()
+            extracted_text = run_ocr(ocr, img_array)
         elif filename_lower.endswith(".txt"):
             extracted_text = contents.decode("utf-8")
         elif filename_lower.endswith(".docx"):
@@ -680,10 +924,10 @@ async def upload_document(
             doc = docx.Document(io.BytesIO(contents))
             extracted_text = "\n".join([paragraph.text for paragraph in doc.paragraphs])
         else:
-            raise HTTPException(status_code=400, detail="Unsupported file format. Please upload PDF, DOCX, or TXT.")
+            raise HTTPException(status_code=400, detail="Unsupported file format. Please upload PDF, DOCX, TXT, or Image.")
 
         if not extracted_text.strip():
-            raise HTTPException(status_code=400, detail="Could not extract text from document.")
+            raise HTTPException(status_code=400, detail="Could not extract text from document or image.")
 
         safe_filename   = file.filename.replace(" ", "_")
         unique_filename = f"{int(time.time())}_{safe_filename}"
@@ -734,8 +978,9 @@ async def upload_document(
         }
 
     except Exception as e:
-        print(f"Error: {str(e)}")
-        raise HTTPException(status_code=500, detail="Internal Server Error during processing.")
+        print(f"Error in upload-document: {str(e)}")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
 
 
 @app.post("/upload-new-version")
@@ -768,11 +1013,12 @@ async def upload_new_version(
         filename_lower = file.filename.lower()
 
         if filename_lower.endswith(".pdf"):
-            pdf_reader = PyPDF2.PdfReader(io.BytesIO(contents))
-            for page in pdf_reader.pages:
-                text = page.extract_text()
-                if text:
-                    extracted_text += text + "\n"
+            extracted_text = extract_pdf_text(contents)
+        elif filename_lower.endswith((".png", ".jpg", ".jpeg")):
+            img = PILImage.open(io.BytesIO(contents)).convert("RGB")
+            img_array = np.array(img)
+            ocr = get_ocr()
+            extracted_text = run_ocr(ocr, img_array)
         elif filename_lower.endswith(".txt"):
             extracted_text = contents.decode("utf-8")
         elif filename_lower.endswith(".docx"):
@@ -862,6 +1108,7 @@ def get_documents():
                     "name":             name,
                     "category":         meta.get("category",         ""),
                     "office":           meta.get("office",           ""),
+                    "program":          meta.get("program",          "GLOBAL"),
                     "version":          meta.get("version",          "1.0"),
                     "effectivity_date": meta.get("effectivity_date", ""),
                     "status":           meta.get("status",           "Active"),
@@ -961,10 +1208,61 @@ def archive_document(doc_name: str, db: Session = Depends(get_db)):
 # ─────────────────────────────────────────────────────────────────────────────
 
 @app.post("/ask-policy")
-def ask_policy(request: QuestionRequest, db: Session = Depends(get_db)):
-    question = request.question
-    user_email = request.user_email
-    user_role = request.user_role
+def ask_policy(
+    req: Request,
+    request: QuestionRequest,
+    db: Session = Depends(get_db),
+    current_user: Optional[models.User] = Depends(get_optional_user)
+):
+    # RAG Query Rate Limiting: Max 15 questions per 1 minute per IP to prevent vector database scraping
+    limiter.check(req, key_name="ask_policy", max_requests=15, window_seconds=60)
+
+    raw_question = request.question or ""
+    
+    # SECURITY HARDENING: Sanitize input and detect prompt injection attempts
+    question = sanitize_user_input(raw_question)
+    is_injection, reason = check_prompt_injection(question)
+    if is_injection:
+        return {
+            "answer": (
+                "🛡️ **Security Guardrail Triggered**: Your query contains pattern signatures associated with "
+                "prompt manipulation, system instruction override, or role bypass attempts. "
+                "Please rephrase your question to ask directly about institutional policies."
+            ),
+            "sources": [],
+            "restricted": False
+        }
+
+    # SECURITY HARDENING: Use cryptographically verified identity from JWT token if logged in
+    if current_user:
+        user_email = current_user.email
+        user_role = current_user.role.upper()
+    else:
+        user_email = request.user_email
+        user_role = (request.user_role or "STUDENT").upper()
+
+    # ==========================================
+    # ROLE-BASED ACCESS CONFIGURATION
+    # ==========================================
+    # Define which document categories are restricted per role.
+    # STUDENT → cannot access Accreditation Evidence (confidential).
+    # FACULTY and ADMIN → full access to all categories.
+    STUDENT_RESTRICTED_CATEGORIES = ["Accreditation Evidence"]
+
+    excluded_categories = []
+    if user_role == "STUDENT":
+        excluded_categories = STUDENT_RESTRICTED_CATEGORIES
+
+    # Keywords that strongly indicate a query about restricted content.
+    # Used to detect when a student is asking about a restricted topic
+    # so we can return a clear explanation instead of a generic 'not found'.
+    RESTRICTED_TOPIC_KEYWORDS = [
+        "accreditation", "aaccup", "accredit", "self-survey",
+        "survey instrument", "accreditation evidence",
+        "area i", "area ii", "area iii", "area iv", "area v",
+        "area vi", "area vii", "area viii", "area ix", "area x",
+        "accreditation standard", "accreditor"
+    ]
 
     # ==========================================
     # 1. FETCH DYNAMIC SETTINGS
@@ -972,7 +1270,7 @@ def ask_policy(request: QuestionRequest, db: Session = Depends(get_db)):
     settings = db.query(models.SystemSettings).filter(models.SystemSettings.id == 1).first()
     
     # Fallbacks in case settings aren't set yet
-    ai_model = settings.ai_model if settings else "llama-3.1-8b-instant"
+    ai_model = settings.ai_model if settings else "qwen/qwen3-32b"
     ai_temp = settings.ai_temperature if settings else 0.3
     base_prompt = settings.ai_system_prompt if settings else "You are the friendly and professional AI Policy Assistant for Cebu Technological University (CTU) Argao Campus."
 
@@ -990,7 +1288,12 @@ def ask_policy(request: QuestionRequest, db: Session = Depends(get_db)):
         
         FORMATTING RULE:
         You must separate your main answer from the follow-up questions using exactly this string: |FOLLOWUPS|
-        Put exactly 3 logical follow-up questions they might ask about university policies on a new line. Do not number them.
+        Everything after |FOLLOWUPS| must be written from the STUDENT'S or USER'S point of view — questions
+        THEY might type next to the assistant (e.g. "What is the deadline for adding subjects?").
+        NEVER use this section to ask the user a clarifying question yourself. If you genuinely need more
+        information to answer well, put that clarifying question inside your main answer instead, and leave
+        the |FOLLOWUPS| section empty.
+        Put each follow-up question on a new line. Do not number them.
         """
         
         try:
@@ -1037,9 +1340,26 @@ def ask_policy(request: QuestionRequest, db: Session = Depends(get_db)):
         print(f"Failed to log query: {e}")
 
     # ==========================================
-    # 4. ORIGINAL RAG RETRIEVAL & FILTERING
+    # 4. ROLE-AWARE RAG RETRIEVAL
     # ==========================================
-    relevant_chunks = vector_store.search_knowledge(question)
+    # Pass excluded_categories so the vector search itself skips restricted
+    # documents — we don't waste retrieval slots and never leak context to the AI.
+    relevant_chunks = vector_store.search_knowledge(
+        question, excluded_categories=excluded_categories
+    )
+
+    # Early exit: student is asking about a restricted topic.
+    # Check this BEFORE the generic 'not found' so they get a clear reason.
+    if user_role == "STUDENT" and excluded_categories:
+        q_lower_check = question.strip().lower()
+        is_restricted_query = any(kw in q_lower_check for kw in RESTRICTED_TOPIC_KEYWORDS)
+        if is_restricted_query:
+            return {
+                "answer": "This information is restricted to faculty and administrators only. Accreditation documents are confidential and cannot be shared with students.",
+                "sources": [],
+                "follow_ups": [],
+                "restricted": True
+            }
 
     if not relevant_chunks:
         return {
@@ -1048,24 +1368,41 @@ def ask_policy(request: QuestionRequest, db: Session = Depends(get_db)):
             "follow_ups": []
         }
 
-    safe_chunks = []
-    for chunk in relevant_chunks:
-        chunk_meta = chunk.get('metadata', {})
-        if chunk_meta.get('status') == "Archived":
-            continue 
-        if user_role.upper() == "STUDENT" and chunk_meta.get('category') == "Accreditation Evidence":
-            continue 
-        safe_chunks.append(chunk)
-
+    # Final safety net: strip any restricted chunks that slipped through
+    # (should not happen after the retrieval-level filter, but belt-and-suspenders).
+    safe_chunks = [
+        chunk for chunk in relevant_chunks
+        if chunk.get('metadata', {}).get('status') != 'Archived'
+        and chunk.get('metadata', {}).get('category') not in excluded_categories
+    ]
     relevant_chunks = safe_chunks
     context_text = "\n\n".join([chunk['content'] for chunk in relevant_chunks])
 
     # ==========================================
-    # 5. DYNAMIC PROMPT WITH ORIGINAL FORMATTING
+    # 5. ROLE-AWARE SYSTEM PROMPT
     # ==========================================
+    role_context = {
+        "STUDENT": (
+            "The user is a STUDENT. Answer using publicly accessible institutional documents "
+            "such as student handbooks, academic policies, enrollment guidelines, and general "
+            "university procedures. Accreditation materials are confidential and must not be discussed."
+        ),
+        "FACULTY": (
+            "The user is a FACULTY MEMBER. You may reference all institutional documents including "
+            "faculty policies, research guidelines, curriculum documents, and accreditation-related materials."
+        ),
+        "ADMIN": (
+            "The user is an ADMINISTRATOR. You have full access to all institutional documents "
+            "including accreditation evidence, administrative policies, and confidential reports."
+        ),
+    }.get(user_role, "The user's role is unknown. Answer conservatively using only general public policies.")
+
     system_prompt = f"""{base_prompt}
     
     You are the official CTU Argao Campus AI Policy Assistant. Your task is to answer user queries strictly and exclusively using the provided text snippets from the verified institutional knowledge repository.
+
+    USER CONTEXT:
+    {role_context}
 
     YOUR PERSONALITY:
     - You are warm, welcoming, and helpful.
@@ -2507,3 +2844,655 @@ def delete_ched_evidence(evidence_id: str, db: Session = Depends(get_db)):
         pass
         
     return {"message": "Evidence deleted successfully."}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PAPER TRAIL (RECEIVING & RELEASING HISTORY) API ENDPOINTS
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _generate_tracking_number(db: Session) -> str:
+    """Generates a unique tracking number format: PT-YYYY-XXXX."""
+    import random
+    year = datetime.now().year
+    while True:
+        num = random.randint(1000, 9999)
+        tracking_no = f"PT-{year}-{num}"
+        existing = db.query(models.PaperTrailRecord).filter(models.PaperTrailRecord.tracking_number == tracking_no).first()
+        if not existing:
+            return tracking_no
+
+
+@app.post("/paper-trail", response_model=schemas.PaperTrailRecordResponse, status_code=status.HTTP_201_CREATED)
+def create_paper_trail_record(
+    payload: schemas.PaperTrailCreate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_faculty_or_admin)
+):
+    """Creates a new document paper trail record and logs initial release."""
+    tracking_no = _generate_tracking_number(db)
+    
+    sender_name = current_user.full_name or payload.sender_name
+    sender_email = current_user.email
+    sender_role = current_user.role.upper()
+
+    new_record = models.PaperTrailRecord(
+        tracking_number=tracking_no,
+        title=payload.title,
+        document_type=payload.document_type,
+        office=payload.office,
+        sender_name=sender_name,
+        sender_email=sender_email,
+        sender_role=sender_role,
+        recipient_name=payload.recipient_name,
+        recipient_email=payload.recipient_email,
+        recipient_role=payload.recipient_role.upper() if payload.recipient_role else None,
+        status="Pending Receiving",
+        remarks=payload.remarks,
+        file_url=payload.file_url
+    )
+    db.add(new_record)
+    db.commit()
+    db.refresh(new_record)
+
+    # Initial Log Entry
+    initial_log = models.PaperTrailLog(
+        record_id=new_record.id,
+        action="Document Released / Submitted",
+        status="Pending Receiving",
+        actor_name=sender_name,
+        actor_email=sender_email,
+        actor_role=sender_role,
+        notes=payload.remarks or f"Document '{payload.title}' released to {payload.office}."
+    )
+    db.add(initial_log)
+    db.commit()
+    db.refresh(new_record)
+
+    # Notifications
+    try:
+        if payload.recipient_email:
+            _send_notification(
+                user_email=payload.recipient_email,
+                n_type="info",
+                title=f"New Document Received: {tracking_no}",
+                message=f"{sender_name} released document '{payload.title}' to your office ({payload.office})."
+            )
+        _notify_all_admins(
+            db=db,
+            n_type="info",
+            title=f"Paper Trail Created: {tracking_no}",
+            message=f"Document '{payload.title}' ({payload.document_type}) released by {sender_name} to {payload.office}."
+        )
+    except Exception as exc:
+        print(f"[paper_trail] notification warning: {exc}")
+
+    return new_record
+
+
+@app.get("/paper-trail", response_model=List[schemas.PaperTrailRecordResponse])
+def get_paper_trail_records(
+    role: Optional[str] = None,
+    email: Optional[str] = None,
+    office: Optional[str] = None,
+    status_filter: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_faculty_or_admin)
+):
+    """Fetches paper trail records filtered by role/email/office/status."""
+    query = db.query(models.PaperTrailRecord)
+    
+    # If user is FACULTY (and not ADMIN), show documents they sent OR documents sent to them/their office
+    user_role = current_user.role.upper()
+    user_email = current_user.email
+    
+    if user_role == "FACULTY":
+        query = query.filter(
+            (models.PaperTrailRecord.sender_email == user_email) | 
+            (models.PaperTrailRecord.recipient_email == user_email) |
+            (models.PaperTrailRecord.sender_role == "FACULTY")
+        )
+    
+    if office and office != "all":
+        query = query.filter(models.PaperTrailRecord.office == office)
+        
+    if status_filter and status_filter != "all":
+        query = query.filter(models.PaperTrailRecord.status == status_filter)
+        
+    return query.order_by(models.PaperTrailRecord.updated_at.desc()).all()
+
+
+@app.get("/paper-trail/{record_id}", response_model=schemas.PaperTrailRecordResponse)
+def get_paper_trail_detail(
+    record_id: str,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_faculty_or_admin)
+):
+    """Fetches single paper trail record with full movement history."""
+    record = db.query(models.PaperTrailRecord).filter(models.PaperTrailRecord.id == record_id).first()
+    if not record:
+        raise HTTPException(status_code=404, detail="Paper trail record not found.")
+    return record
+
+
+@app.put("/paper-trail/{record_id}/status", response_model=schemas.PaperTrailRecordResponse)
+def update_paper_trail_status(
+    record_id: str,
+    payload: schemas.PaperTrailStatusUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_faculty_or_admin)
+):
+    """Updates document status (e.g. Received, Approved/Paper OK, Needs Revision, Released) & logs movement."""
+    record = db.query(models.PaperTrailRecord).filter(models.PaperTrailRecord.id == record_id).first()
+    if not record:
+        raise HTTPException(status_code=404, detail="Paper trail record not found.")
+
+    old_status = record.status
+    new_status = payload.status
+    record.status = new_status
+    record.updated_at = datetime.utcnow()
+
+    # Determine action narrative
+    action_map = {
+        "Received": "Document Received by Office",
+        "Under Review": "Under Office Review",
+        "Approved": "Verified & Approved (Paper OK)",
+        "Needs Revision": "Returned / Flagged for Revision",
+        "Released": "Released to Owner / Department"
+    }
+    action_text = action_map.get(new_status, f"Status changed to {new_status}")
+
+    # Append movement log
+    new_log = models.PaperTrailLog(
+        record_id=record.id,
+        action=action_text,
+        status=new_status,
+        actor_name=payload.actor_name,
+        actor_email=payload.actor_email,
+        actor_role=payload.actor_role.upper(),
+        notes=payload.notes or f"Status updated from {old_status} to {new_status} by {payload.actor_name}."
+    )
+    db.add(new_log)
+    db.commit()
+    db.refresh(record)
+
+    # Notifications to Sender and Recipient
+    notif_type_map = {
+        "Approved": "success",
+        "Needs Revision": "warning",
+        "Received": "info",
+        "Released": "info"
+    }
+    n_type = notif_type_map.get(new_status, "info")
+
+    try:
+        # Notify sender
+        _send_notification(
+            user_email=record.sender_email,
+            n_type=n_type,
+            title=f"Paper Trail Update [{record.tracking_number}]",
+            message=f"Document '{record.title}' status updated to '{new_status}' by {payload.actor_name}."
+        )
+        # Notify recipient if set and different from actor
+        if record.recipient_email and record.recipient_email != payload.actor_email:
+            _send_notification(
+                user_email=record.recipient_email,
+                n_type=n_type,
+                title=f"Paper Trail Update [{record.tracking_number}]",
+                message=f"Document '{record.title}' status updated to '{new_status}' by {payload.actor_name}."
+            )
+    except Exception as exc:
+        print(f"[update_paper_trail_status] notification error: {exc}")
+
+    return record
+
+
+@app.post("/paper-trail/upload")
+async def upload_paper_trail_attachment(file: UploadFile = File(...)):
+    """Uploads an optional file attachment for a paper trail record."""
+    try:
+        contents = await file.read()
+        safe_filename = file.filename.replace(" ", "_")
+        unique_filename = f"papertrail/{int(time.time())}_{safe_filename}"
+
+        supabase.storage.from_("documents").upload(
+            file=contents,
+            path=unique_filename,
+            file_options={"content-type": file.content_type or "application/pdf"}
+        )
+        public_url = supabase.storage.from_("documents").get_public_url(unique_filename)
+        return {"file_url": public_url, "filename": file.filename}
+    except Exception as exc:
+        print(f"[upload_paper_trail_attachment] error: {exc}")
+        raise HTTPException(status_code=500, detail="Failed to upload attachment.")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ISO 9001:2015 QUALITY MANAGEMENT SYSTEM (QMS) & IQA ENDPOINTS
+# ─────────────────────────────────────────────────────────────────────────────
+
+DEFAULT_ISO_CLAUSES = [
+    {
+        "iso_clause": "Clause 6.1",
+        "title": "Actions to Address Risks & Opportunities in Education",
+        "description": "Assessment of risk planning for student services (resource limitations, student attrition) and leveraging opportunities (new program development, technology integration).",
+        "auditee_office": "Director of Instruction (DOI) & SAO",
+        "risk_level": "High"
+    },
+    {
+        "iso_clause": "Clause 7.1",
+        "title": "Resource Management & Financial Adequacy",
+        "description": "Evaluation of financial processes, resource acquisition, storage, property custody, asset tracking, and budget allocation.",
+        "auditee_office": "Property Custodian & Finance",
+        "risk_level": "Medium"
+    },
+    {
+        "iso_clause": "Clause 7.2",
+        "title": "Faculty Competence & Professional Training",
+        "description": "Review of processes for determining faculty qualifications, ongoing professional development, loading distribution, and competency enhancement.",
+        "auditee_office": "Human Resources Management Office (HRMO)",
+        "risk_level": "High"
+    },
+    {
+        "iso_clause": "Clause 7.5",
+        "title": "Control of Documented Information & Records",
+        "description": "Verification of system for managing QMS policies, procedures, inventory assets, CMO compliance records, and nonconformity reports.",
+        "auditee_office": "Document Controller & Registrar",
+        "risk_level": "Medium"
+    },
+    {
+        "iso_clause": "Clause 8.1 & 8.5",
+        "title": "Curriculum Design, CMO Compliance & Instruction",
+        "description": "Assessment of systematic process for designing, developing, and revising academic curricula adhering to CHED Memorandum Orders and teaching standards.",
+        "auditee_office": "College Deans & Program Chairs",
+        "risk_level": "High"
+    },
+    {
+        "iso_clause": "Clause 8.4",
+        "title": "Control of Externally Provided Services",
+        "description": "Audit of external service providers, BAC procurement procedures, canteen/dormitory services, and supply management affecting student welfare.",
+        "auditee_office": "BAC / Procurement & Supply",
+        "risk_level": "Medium"
+    },
+    {
+        "iso_clause": "Clause 8.6 & 10.2",
+        "title": "Nonconforming Outputs & Corrective Actions",
+        "description": "Scrutiny of controls for nonconforming outputs, student assessment methodologies, evaluation, and implementing corrective actions for QMS improvement.",
+        "auditee_office": "Quality Assurance & Deans",
+        "risk_level": "High"
+    },
+    {
+        "iso_clause": "Clause 9.1 & 9.1.2",
+        "title": "Performance Evaluation & Student Satisfaction",
+        "description": "Enrolment data management, student record-keeping, student satisfaction monitoring, data integrity, and internal quality audit (IQA) reporting.",
+        "auditee_office": "Registrar & MIS",
+        "risk_level": "Medium"
+    }
+]
+
+
+@app.get("/iso/requirements/{program}", response_model=List[schemas.ISORequirementResponse])
+def get_iso_requirements(program: str, db: Session = Depends(get_db)):
+    """Retrieves or seeds ISO 9001:2015 clause checklists for the campus (Institutional QMS)."""
+    target_prog = "GLOBAL"
+    existing = db.query(models.ISORequirement).filter(models.ISORequirement.program == target_prog).all()
+    if not existing:
+        # Seed default 8 ISO Clauses from iso program final.pdf for campus-wide QMS
+        seeded_reqs = []
+        for item in DEFAULT_ISO_CLAUSES:
+            req = models.ISORequirement(
+                program=target_prog,
+                iso_clause=item["iso_clause"],
+                title=item["title"],
+                description=item["description"],
+                auditee_office=item["auditee_office"],
+                risk_level=item["risk_level"],
+                status="Not Compliant"
+            )
+            db.add(req)
+            seeded_reqs.append(req)
+        db.commit()
+        for r in seeded_reqs:
+            db.refresh(r)
+        return seeded_reqs
+    return existing
+
+
+@app.post("/iso/requirements", response_model=schemas.ISORequirementResponse, status_code=status.HTTP_201_CREATED)
+def create_iso_requirement(
+    payload: schemas.ISORequirementCreate,
+    db: Session = Depends(get_db),
+    admin: models.User = Depends(get_current_admin)
+):
+    """Admin creates a new ISO requirement item."""
+    new_req = models.ISORequirement(
+        program=payload.program,
+        iso_clause=payload.iso_clause,
+        title=payload.title,
+        description=payload.description,
+        auditee_office=payload.auditee_office,
+        risk_level=payload.risk_level or "Medium",
+        status="Not Compliant"
+    )
+    db.add(new_req)
+    db.commit()
+    db.refresh(new_req)
+    return new_req
+
+
+@app.put("/iso/requirements/{req_id}", response_model=schemas.ISORequirementResponse)
+def update_iso_requirement(
+    req_id: str,
+    payload: schemas.ISORequirementCreate,
+    db: Session = Depends(get_db),
+    admin: models.User = Depends(get_current_admin)
+):
+    """Admin updates an ISO requirement item."""
+    req = db.query(models.ISORequirement).filter(models.ISORequirement.id == req_id).first()
+    if not req:
+        raise HTTPException(status_code=404, detail="ISO requirement not found.")
+
+    req.iso_clause = payload.iso_clause
+    req.title = payload.title
+    req.description = payload.description
+    req.auditee_office = payload.auditee_office
+    req.risk_level = payload.risk_level or req.risk_level
+    db.commit()
+    db.refresh(req)
+    return req
+
+
+@app.delete("/iso/requirements/{req_id}")
+def delete_iso_requirement(
+    req_id: str,
+    db: Session = Depends(get_db),
+    admin: models.User = Depends(get_current_admin)
+):
+    """Admin deletes an ISO requirement item."""
+    req = db.query(models.ISORequirement).filter(models.ISORequirement.id == req_id).first()
+    if not req:
+        raise HTTPException(status_code=404, detail="ISO requirement not found.")
+    db.delete(req)
+    db.commit()
+    return {"message": "ISO requirement deleted successfully."}
+
+
+@app.post("/iso/upload-evidence")
+async def upload_iso_evidence(
+    file: UploadFile = File(...),
+    requirement_id: str = Form(...),
+    document_name: str = Form(...),
+    uploaded_by: str = Form(...),
+    program: str = Form(...),
+    db: Session = Depends(get_db)
+):
+    """Uploads an evidence file linked to an ISO clause requirement."""
+    req = db.query(models.ISORequirement).filter(models.ISORequirement.id == requirement_id).first()
+    if not req:
+        raise HTTPException(status_code=404, detail="ISO requirement not found.")
+
+    try:
+        contents = await file.read()
+        safe_filename = file.filename.replace(" ", "_")
+        unique_path = f"iso_evidence/{program}/{int(time.time())}_{safe_filename}"
+
+        supabase.storage.from_("documents").upload(
+            file=contents,
+            path=unique_path,
+            file_options={"content-type": file.content_type or "application/pdf"}
+        )
+        public_url = supabase.storage.from_("documents").get_public_url(unique_path)
+
+        new_evidence = models.ISOEvidence(
+            iso_requirement_id=req.id,
+            document_name=document_name,
+            file_url=public_url,
+            uploaded_by=uploaded_by
+        )
+        db.add(new_evidence)
+        
+        # Set status to Pending
+        req.status = "Pending"
+        db.commit()
+        db.refresh(req)
+
+        # RAG AI Vector Ingestion
+        try:
+            extracted_text = ""
+            fn_lower = file.filename.lower()
+            if fn_lower.endswith(".pdf"):
+                pdf_reader = PyPDF2.PdfReader(io.BytesIO(contents))
+                for page in pdf_reader.pages:
+                    txt = page.extract_text()
+                    if txt: extracted_text += txt + "\n"
+            elif fn_lower.endswith(".txt"):
+                extracted_text = contents.decode("utf-8")
+            elif fn_lower.endswith(".docx"):
+                import docx
+                d = docx.Document(io.BytesIO(contents))
+                extracted_text = "\n".join([p.text for p in d.paragraphs])
+
+            if extracted_text.strip():
+                vector_store.add_to_vector_db(extracted_text, {
+                    "name": document_name,
+                    "category": "Accreditation Evidence",
+                    "office": req.auditee_office,
+                    "program": "GLOBAL",
+                    "iso_clause": req.iso_clause,
+                    "uploaded_by": uploaded_by,
+                    "file_url": public_url
+                })
+        except Exception as vexc:
+            print(f"[upload_iso_evidence] vector store ingestion warning: {vexc}")
+
+        # Audit event
+        try:
+            supabase.table("system_events_logs").insert({
+                "user_email": uploaded_by,
+                "event_type": "ISO Evidence Upload",
+                "description": f"Uploaded evidence '{document_name}' for {req.iso_clause} ({program})"
+            }).execute()
+        except Exception:
+            pass
+
+        return {"message": "ISO evidence uploaded successfully!", "public_url": public_url}
+    except Exception as exc:
+        print(f"[upload_iso_evidence] error: {exc}")
+        raise HTTPException(status_code=500, detail="Failed to upload ISO evidence file.")
+
+
+@app.delete("/iso/evidence/{evidence_id}")
+def delete_iso_evidence(
+    evidence_id: str,
+    db: Session = Depends(get_db)
+):
+    """Deletes an ISO evidence file."""
+    ev = db.query(models.ISOEvidence).filter(models.ISOEvidence.id == evidence_id).first()
+    if not ev:
+        raise HTTPException(status_code=404, detail="ISO evidence not found.")
+
+    req = ev.requirement
+    db.delete(ev)
+    db.commit()
+
+    # Re-evaluate requirement status if no evidences remain
+    if req and len(req.evidences) == 0:
+        req.status = "Not Compliant"
+        db.commit()
+
+    return {"message": "ISO evidence removed successfully."}
+
+
+@app.put("/iso/requirements/{req_id}/status", response_model=schemas.ISORequirementResponse)
+def update_iso_status(
+    req_id: str,
+    payload: schemas.ISOStatusUpdate,
+    db: Session = Depends(get_db)
+):
+    """Updates ISO clause compliance status (e.g. Compliant, Pending, Not Compliant)."""
+    req = db.query(models.ISORequirement).filter(models.ISORequirement.id == req_id).first()
+    if not req:
+        raise HTTPException(status_code=404, detail="ISO requirement not found.")
+
+    req.status = payload.status
+    db.commit()
+    db.refresh(req)
+    return req
+
+
+@app.get("/iso/schedule/{program}", response_model=schemas.IQAScheduleResponse)
+def get_iqa_schedule(program: str, db: Session = Depends(get_db)):
+    """Retrieves or seeds the dynamic 3-Day IQA Audit Program Schedule for the campus (Institutional QMS)."""
+    target_prog = "GLOBAL"
+    sched = db.query(models.IQASchedule).filter(models.IQASchedule.program == target_prog).first()
+    if not sched:
+        sched = models.IQASchedule(
+            program=target_prog,
+            academic_year="IQA Audit Cycle 2025-2026",
+            day1_date="Sept 10, 2025",
+            day1_title="Context, Risk & Resource Audit",
+            day1_scope="On-site clause audit of Director of Instruction (DOI), College Deans, Financial Management, Property Custodian & SAO. Audit of Clauses 6.1, 7.1 & 8.5.",
+            day2_date="Sept 11, 2025",
+            day2_title="HR, Data Systems & External Control",
+            day2_scope="Audit of HRMO (Clause 7.2), Registrar & MIS (Clause 9.1), Document Controller (Clause 7.5), Library, and BAC Procurement (Clause 8.4).",
+            day3_date="Sept 12, 2025",
+            day3_title="Consolidation & Closing Meeting",
+            day3_scope="Internal data cross-referencing, synthesis of observations, drafting formal audit findings report, and official Closing Ceremony & Certificate Awarding."
+        )
+        db.add(sched)
+        db.commit()
+        db.refresh(sched)
+    return sched
+
+
+@app.put("/iso/schedule/{program}", response_model=schemas.IQAScheduleResponse)
+def update_iqa_schedule(
+    program: str,
+    payload: schemas.IQAScheduleUpdate,
+    db: Session = Depends(get_db),
+    admin: models.User = Depends(get_current_admin)
+):
+    """Admin updates the 3-Day IQA Audit Program Schedule dates and focus scope for campus QMS."""
+    target_prog = "GLOBAL"
+    sched = db.query(models.IQASchedule).filter(models.IQASchedule.program == target_prog).first()
+    if not sched:
+        sched = models.IQASchedule(program=target_prog)
+        db.add(sched)
+
+    sched.academic_year = payload.academic_year
+    sched.day1_date = payload.day1_date
+    sched.day1_title = payload.day1_title
+    sched.day1_scope = payload.day1_scope
+    sched.day2_date = payload.day2_date
+    sched.day2_title = payload.day2_title
+    sched.day2_scope = payload.day2_scope
+    sched.day3_date = payload.day3_date
+    sched.day3_title = payload.day3_title
+    sched.day3_scope = payload.day3_scope
+
+    db.commit()
+    db.refresh(sched)
+    return sched
+
+
+DEFAULT_IQA_DAYS = [
+    {
+        "day_number": 1,
+        "day_date": "2025-09-10",
+        "title": "Context, Risk & Resource Audit",
+        "scope": "On-site clause audit of Director of Instruction (DOI), College Deans, Financial Management, Property Custodian & SAO. Audit of Clauses 6.1, 7.1 & 8.5."
+    },
+    {
+        "day_number": 2,
+        "day_date": "2025-09-11",
+        "title": "HR, Data Systems & External Control",
+        "scope": "Audit of HRMO (Clause 7.2), Registrar & MIS (Clause 9.1), Document Controller (Clause 7.5), Library, and BAC Procurement (Clause 8.4)."
+    },
+    {
+        "day_number": 3,
+        "day_date": "2025-09-12",
+        "title": "Consolidation & Closing Meeting",
+        "scope": "Internal data cross-referencing, synthesis of observations, drafting formal audit findings report, and official Closing Ceremony & Certificate Awarding."
+    }
+]
+
+
+@app.get("/iso/schedule-days", response_model=List[schemas.IQADayScheduleResponse])
+def get_iqa_schedule_days(db: Session = Depends(get_db)):
+    """Retrieves or seeds dynamic IQA Audit Days for the campus QMS."""
+    days = db.query(models.IQADaySchedule).filter(models.IQADaySchedule.program == "GLOBAL").order_by(models.IQADaySchedule.day_number.asc()).all()
+    if not days:
+        seeded = []
+        for d in DEFAULT_IQA_DAYS:
+            item = models.IQADaySchedule(
+                program="GLOBAL",
+                day_number=d["day_number"],
+                day_date=d["day_date"],
+                title=d["title"],
+                scope=d["scope"]
+            )
+            db.add(item)
+            seeded.append(item)
+        db.commit()
+        for s in seeded: db.refresh(s)
+        return seeded
+    return days
+
+
+@app.post("/iso/schedule-days", response_model=schemas.IQADayScheduleResponse, status_code=status.HTTP_201_CREATED)
+def create_iqa_schedule_day(
+    payload: schemas.IQADayScheduleCreate,
+    db: Session = Depends(get_db),
+    admin: models.User = Depends(get_current_admin)
+):
+    """Admin creates a new dynamic IQA Audit Day."""
+    new_day = models.IQADaySchedule(
+        program="GLOBAL",
+        day_number=payload.day_number,
+        day_date=payload.day_date,
+        title=payload.title,
+        scope=payload.scope
+    )
+    db.add(new_day)
+    db.commit()
+    db.refresh(new_day)
+    return new_day
+
+
+@app.put("/iso/schedule-days/{day_id}", response_model=schemas.IQADayScheduleResponse)
+def update_iqa_schedule_day(
+    day_id: str,
+    payload: schemas.IQADayScheduleCreate,
+    db: Session = Depends(get_db),
+    admin: models.User = Depends(get_current_admin)
+):
+    """Admin updates an existing dynamic IQA Audit Day."""
+    item = db.query(models.IQADaySchedule).filter(models.IQADaySchedule.id == day_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="IQA Audit Day not found.")
+    
+    item.day_number = payload.day_number
+    item.day_date = payload.day_date
+    item.title = payload.title
+    item.scope = payload.scope
+
+    db.commit()
+    db.refresh(item)
+    return item
+
+
+@app.delete("/iso/schedule-days/{day_id}")
+def delete_iqa_schedule_day(
+    day_id: str,
+    db: Session = Depends(get_db),
+    admin: models.User = Depends(get_current_admin)
+):
+    """Admin deletes an IQA Audit Day."""
+    item = db.query(models.IQADaySchedule).filter(models.IQADaySchedule.id == day_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="IQA Audit Day not found.")
+    db.delete(item)
+    db.commit()
+    return {"message": "IQA Audit Day deleted successfully."}
+
+
+

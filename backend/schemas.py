@@ -94,3 +94,151 @@ class ChedRequirementResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+# --- NEW: PAPER TRAIL SCHEMAS ---
+class PaperTrailCreate(BaseModel):
+    title: str
+    document_type: str
+    office: str
+    sender_name: str
+    sender_email: str
+    sender_role: str = "FACULTY"
+    recipient_name: Optional[str] = None
+    recipient_email: Optional[str] = None
+    recipient_role: Optional[str] = None
+    remarks: Optional[str] = None
+    file_url: Optional[str] = None
+
+class PaperTrailStatusUpdate(BaseModel):
+    status: str # "Received", "Under Review", "Approved", "Needs Revision", "Released"
+    actor_name: str
+    actor_email: str
+    actor_role: str
+    notes: Optional[str] = None
+
+class PaperTrailLogResponse(BaseModel):
+    id: uuid.UUID
+    record_id: uuid.UUID
+    action: str
+    status: str
+    actor_name: str
+    actor_email: str
+    actor_role: str
+    notes: Optional[str] = None
+    timestamp: datetime
+
+    class Config:
+        from_attributes = True
+
+class PaperTrailRecordResponse(BaseModel):
+    id: uuid.UUID
+    tracking_number: str
+    title: str
+    document_type: str
+    office: str
+    sender_name: str
+    sender_email: str
+    sender_role: str
+    recipient_name: Optional[str] = None
+    recipient_email: Optional[str] = None
+    recipient_role: Optional[str] = None
+    status: str
+    remarks: Optional[str] = None
+    file_url: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+    logs: list[PaperTrailLogResponse] = []
+
+    class Config:
+        from_attributes = True
+
+
+class ISORequirementCreate(BaseModel):
+    program: str
+    iso_clause: str
+    title: str
+    description: str
+    auditee_office: str
+    risk_level: Optional[str] = "Medium"
+
+class ISOEvidenceResponse(BaseModel):
+    id: uuid.UUID
+    iso_requirement_id: uuid.UUID
+    document_name: str
+    file_url: str
+    uploaded_by: str
+    upload_date: datetime
+
+    class Config:
+        from_attributes = True
+
+class ISORequirementResponse(BaseModel):
+    id: uuid.UUID
+    program: str
+    iso_clause: str
+    title: str
+    description: str
+    auditee_office: str
+    risk_level: str
+    status: str
+    created_at: datetime
+    evidences: list[ISOEvidenceResponse] = []
+
+    class Config:
+        from_attributes = True
+
+class ISOStatusUpdate(BaseModel):
+    status: str # Compliant, Pending, Not Compliant
+
+
+class IQAScheduleUpdate(BaseModel):
+    academic_year: str
+    day1_date: str
+    day1_title: str
+    day1_scope: str
+    day2_date: str
+    day2_title: str
+    day2_scope: str
+    day3_date: str
+    day3_title: str
+    day3_scope: str
+
+class IQAScheduleResponse(BaseModel):
+    id: uuid.UUID
+    program: str
+    academic_year: str
+    day1_date: str
+    day1_title: str
+    day1_scope: str
+    day2_date: str
+    day2_title: str
+    day2_scope: str
+    day3_date: str
+    day3_title: str
+    day3_scope: str
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class IQADayScheduleCreate(BaseModel):
+    day_number: int
+    day_date: str
+    title: str
+    scope: str
+
+class IQADayScheduleResponse(BaseModel):
+    id: uuid.UUID
+    program: str
+    day_number: int
+    day_date: str
+    title: str
+    scope: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+

@@ -44,10 +44,13 @@ export function KnowledgeRepository() {
   const [isUpdatingVersion, setIsUpdatingVersion] = useState(false)
   const updateFileInputRef = useRef<HTMLInputElement>(null)
 
+  const userDept = sessionStorage.getItem('userDepartment') || 'BSIT'
+
   // Filters
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedCategory, setSelectedCategory] = useState("all")
   const [selectedOffice, setSelectedOffice] = useState("all")
+  const [selectedProgram, setSelectedProgram] = useState(currentRole === "FACULTY" ? userDept : "all")
 
   const [formData, setFormData] = useState({
     name: "",
@@ -86,12 +89,29 @@ export function KnowledgeRepository() {
   const accessBadge = getAccessBadge()
 
   const filteredDocuments = documents.filter((doc) => {
+    // 1. STUDENTS: Accreditation Evidence is completely hidden for security/confidentiality
     if (currentRole === "STUDENT" && doc.category === "Accreditation Evidence") {
       return false; 
     }
+
+    // 2. FACULTY: Program-Restricted filtering for Accreditation Evidence
+    if (currentRole === "FACULTY" && doc.category === "Accreditation Evidence") {
+      if (doc.program && doc.program !== "GLOBAL" && doc.program !== userDept) {
+        return false; // Faculty cannot view evidence from other departments
+      }
+    }
+
+    // 3. Status filter
     if (doc.status === "Archived" && !showArchived) {
       return false;
     }
+
+    // 4. Program Filter Dropdown
+    const matchesProgram = 
+      selectedProgram === "all" || 
+      !doc.program || 
+      doc.program === "GLOBAL" || 
+      doc.program === selectedProgram;
 
     const matchesCategory = selectedCategory === "all" || doc.category === selectedCategory;
     const matchesOffice = selectedOffice === "all" || doc.office === selectedOffice;
@@ -100,9 +120,10 @@ export function KnowledgeRepository() {
       doc.name.toLowerCase().includes(searchLower) ||
       doc.category.toLowerCase().includes(searchLower) ||
       doc.office.toLowerCase().includes(searchLower) ||
+      (doc.program && doc.program.toLowerCase().includes(searchLower)) ||
       (doc.effectivity_date && doc.effectivity_date.toLowerCase().includes(searchLower));
     
-    return matchesCategory && matchesOffice && matchesSearch;
+    return matchesCategory && matchesOffice && matchesProgram && matchesSearch;
   });
 
   const handleView = (doc: any) => {
@@ -377,14 +398,14 @@ export function KnowledgeRepository() {
               <input
                 type="text"
                 placeholder="Search by document name, category, office, or date..."
-                className="w-full pl-11 pr-4 py-2.5 bg-[#F9FAFB] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#dd7230] transition-colors"
+                className="w-full pl-11 pr-4 py-2.5 bg-[#F9FAFB] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#FF9501] transition-colors"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
             </div>
             <div className="flex flex-col sm:flex-row gap-4">
               <select
-                className="sm:w-48 px-4 py-2.5 bg-[#F9FAFB] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#dd7230] text-[#374151] cursor-pointer hover:bg-gray-50 transition-colors"
+                className="sm:w-44 px-4 py-2.5 bg-[#F9FAFB] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#FF9501] text-[#374151] cursor-pointer hover:bg-gray-50 transition-colors"
                 value={selectedCategory}
                 onChange={(e) => setSelectedCategory(e.target.value)}
               >
@@ -399,7 +420,7 @@ export function KnowledgeRepository() {
               </select>
               
               <select
-                className="sm:w-48 px-4 py-2.5 bg-[] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#dd7230] text-[#374151] cursor-pointer hover:bg-gray-50 transition-colors"
+                className="sm:w-44 px-4 py-2.5 bg-[#F9FAFB] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#FF9501] text-[#374151] cursor-pointer hover:bg-gray-50 transition-colors"
                 value={selectedOffice}
                 onChange={(e) => setSelectedOffice(e.target.value)}
               >
@@ -408,6 +429,25 @@ export function KnowledgeRepository() {
                 <option value="Student Affairs">Student Affairs</option>
                 <option value="Research Office">Research Office</option>
                 <option value="Quality Assurance">Quality Assurance</option>
+              </select>
+
+              <select
+                className="sm:w-44 px-4 py-2.5 bg-[#F9FAFB] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#FF9501] text-[#374151] cursor-pointer hover:bg-gray-50 transition-colors"
+                value={selectedProgram}
+                onChange={(e) => setSelectedProgram(e.target.value)}
+                disabled={currentRole === "FACULTY"}
+              >
+                <option value="all">All Programs</option>
+                <option value="BSIT">BSIT</option>
+                <option value="BEED">BEED</option>
+                <option value="BSED_MATH">BSEd Math</option>
+                <option value="BSED_ENGLISH">BSEd English</option>
+                <option value="BTLED_HE">BTLEd HE</option>
+                <option value="AB_ELS">AB ELS</option>
+                <option value="AB_LIT">AB Lit</option>
+                <option value="AB_PSYCH">AB Psych</option>
+                <option value="BSIE">BSIE</option>
+                <option value="GLOBAL">Global Campus</option>
               </select>
             </div>
           </div>
@@ -420,7 +460,7 @@ export function KnowledgeRepository() {
             <thead className="bg-[#dd7230] text-white sticky top-0 z-20 shadow-md outline outline-1 outline-[#FF9501]">
               <tr>
                 <th className="w-[28%] px-6 py-3.5 text-left text-xs font-semibold uppercase tracking-wider">Document Name</th>
-                <th className="w-[16%] px-6 py-3.5 text-left text-xs font-semibold uppercase tracking-wider">Category</th>
+                <th className="w-[16%] px-6 py-3.5 text-left text-xs font-semibold uppercase tracking-wider">Category & Program</th>
                 <th className="w-[16%] px-6 py-3.5 text-left text-xs font-semibold uppercase tracking-wider">Office</th>
                 <th className="w-[8%] px-6 py-3.5 text-left text-xs font-semibold uppercase tracking-wider">Version</th>
                 <th className="w-[12%] px-6 py-3.5 text-left text-xs font-semibold uppercase tracking-wider">Effectivity</th>
@@ -442,7 +482,18 @@ export function KnowledgeRepository() {
                       <div className="text-sm font-semibold text-[#1F2937] truncate" title={doc.name}>{doc.name}</div>
                       <div className="text-[11px] text-[#6B7280] mt-0.5 truncate">{doc.status === "Archived" ? "Historical Record" : "Active File"}</div>
                     </td>
-                    <td className="px-6 py-4 text-sm text-[#4B5563] truncate" title={doc.category}>{doc.category}</td>
+                    <td className="px-6 py-4 text-sm text-[#4B5563] truncate flex flex-col items-start gap-1" title={doc.category}>
+                      <span>{doc.category}</span>
+                      {doc.program && doc.program !== "GLOBAL" ? (
+                        <span className="px-2 py-0.5 text-[9px] font-bold uppercase bg-blue-50 text-blue-700 rounded border border-blue-200 shadow-2xs">
+                          {doc.program}
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 text-[9px] font-bold uppercase bg-gray-100 text-gray-600 rounded border border-gray-200 shadow-2xs">
+                          Global
+                        </span>
+                      )}
+                    </td>
                     <td className="px-6 py-4 text-sm text-[#4B5563] truncate" title={doc.office}>{doc.office}</td>
                     <td className="px-6 py-4">
                       <span className={`text-sm font-bold ${doc.status === "Archived" ? "text-gray-400" : "text-[#D97E00]"}`}>
@@ -560,12 +611,12 @@ export function KnowledgeRepository() {
                   ) : (
                     <div>
                       <UploadCloud className="h-8 w-8 mx-auto mb-2 text-[#9CA3AF]" />
-                      <p className="text-sm text-[#1F2937] font-medium">Click or drag new PDF, Word, or TXT</p>
+                      <p className="text-sm text-[#1F2937] font-medium">Click or drag new PDF, Word, TXT, or Image</p>
                     </div>
                   )}
                   <input 
                     type="file" 
-                    accept=".pdf,.docx,.txt"
+                    accept=".pdf,.docx,.txt,.png,.jpg,.jpeg"
                     className="hidden" 
                     ref={updateFileInputRef}
                     onChange={(e) => handleFileSelect(e, true)}
@@ -689,13 +740,13 @@ export function KnowledgeRepository() {
                     ) : (
                       <div>
                         <Upload className="h-10 w-10 mx-auto mb-3 text-[#9CA3AF]" />
-                        <p className="text-sm text-[#1F2937] mb-1 font-medium">Drag and drop your PDF, Word, or TXT here</p>
+                        <p className="text-sm text-[#1F2937] mb-1 font-medium">Drag and drop your PDF, Word, TXT, or Image here</p>
                         <p className="text-xs text-[#6B7280]">or click to browse from your computer</p>
                       </div>
                     )}
                     <input 
                       type="file" 
-                      accept=".pdf,.docx,.txt"
+                      accept=".pdf,.docx,.txt,.png,.jpg,.jpeg"
                       className="hidden" 
                       ref={fileInputRef}
                       onChange={(e) => handleFileSelect(e, false)}

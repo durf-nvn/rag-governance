@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from "react";
 import {
   LayoutDashboard, Database, MessageSquare, Award, FileText,
   Clock, Users, Settings, Search, Bell, ChevronLeft, ChevronRight,
-  GraduationCap, LogOut, Shield, BookOpen, Radio, ClipboardCheck, Sparkles, X
+  GraduationCap, LogOut, Shield, BookOpen, Radio, ClipboardCheck, Sparkles, X, FileCheck
 } from "lucide-react";
 import { useRole } from "../contexts/RoleContext";
 import { hasPermission } from "../utils/rolePermissions";
@@ -51,6 +51,7 @@ export function DashboardLayout() {
   const allMenuItems = [
     { path: "/app",                        label: "Dashboard",              icon: LayoutDashboard,  permission: "canAccessDashboard"             },
     { path: "/app/knowledge-repository",   label: "Knowledge Repository",   icon: Database,         permission: "canAccessKnowledgeRepository"    },
+    { path: "/app/paper-trail",            label: "Paper Trail",            icon: FileCheck,        permission: "canAccessPaperTrail"             },
     { path: "/app/accreditation-support",  label: "Accreditation Support",  icon: Award,            permission: "canAccessAccreditationSupport"   },
     { path: "/app/audit-trail",            label: "Audit Trail",            icon: Clock,            permission: "canAccessAuditTrail"             },
     { path: "/app/users-roles",            label: "Users & Roles",          icon: Users,            permission: "canAccessUsersRoles"             },
@@ -74,9 +75,16 @@ export function DashboardLayout() {
 
   const badge = getRoleBadge();
 
-  const handleLogout = () => {
-    sessionStorage.removeItem("token");
-    navigate("/login");
+  const handleLogout = async () => {
+    try {
+      const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000";
+      await axios.post(`${API_BASE}/logout`, {}, { withCredentials: true });
+    } catch (e) {
+      console.error("Logout warning:", e);
+    } finally {
+      sessionStorage.clear();
+      navigate("/login");
+    }
   };
 
   return (

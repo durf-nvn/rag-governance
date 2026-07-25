@@ -5,6 +5,7 @@ import { SignUpPage } from "./pages/SignUpPage";
 import { DashboardLayout } from "./layouts/DashboardLayout";
 import { DashboardRouter } from "./pages/DashboardRouter";
 import { KnowledgeRepository } from "./pages/KnowledgeRepository";
+import { PaperTrail } from "./pages/PaperTrail";
 import { AskPolicy } from "./pages/AskPolicy";
 import { AccreditationSupport } from "./pages/AccreditationSupport";
 import { GovernanceReference } from "./pages/GovernanceReference";
@@ -56,6 +57,14 @@ export const router = createBrowserRouter([
             element: (
               <ProtectedRoute permission="canAccessKnowledgeRepository">
                 <KnowledgeRepository />
+              </ProtectedRoute>
+            ),
+          },
+          {
+            path: "paper-trail",
+            element: (
+              <ProtectedRoute permission="canAccessPaperTrail">
+                <PaperTrail />
               </ProtectedRoute>
             ),
           },
