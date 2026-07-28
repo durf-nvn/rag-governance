@@ -107,21 +107,21 @@ export function FacultyDashboard() {
       label: "Institutional Documents",
       value: totalDocs,
       icon: BookOpen,
-      color: "#FF9501", // Base Amber
+      color: "#dd7230", // Base Amber
       subtitle: "Active in repository"
     },
     {
       label: "My AI Queries",
       value: myQueriesCount,
       icon: MessageSquare,
-      color: "#D97E00", // Medium Amber
+      color: "#dd7230", // Medium Amber
       subtitle: "Last 7 days"
     },
     {
       label: "My Document Access",
       value: myAccessCount,
       icon: FileText,
-      color: "#995900", // Dark Amber
+      color: "#dd7230", // Dark Amber
       subtitle: "Total views & downloads"
     },
     {
@@ -139,7 +139,7 @@ export function FacultyDashboard() {
   ];
   
   // UPDATED: Now using Base Amber and Gray instead of Green
-  const PIE_COLORS = ["#FF9501", "#E5E7EB"]; 
+  const PIE_COLORS = ["#dd7230", "#E5E7EB"]; 
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-10">
@@ -150,7 +150,7 @@ export function FacultyDashboard() {
           <h1 className="text-2xl font-semibold text-[#1F2937]">Faculty Dashboard</h1>
           <p className="text-sm text-[#6B7280] mt-1">Manage institutional knowledge and accreditation compliance</p>
         </div>
-        <div className="flex items-center gap-2 bg-[#FF9501] text-white px-4 py-2 rounded-lg shadow-sm">
+        <div className="flex items-center gap-2 bg-[#dd7230] text-white px-4 py-2 rounded-lg shadow-sm">
           <Award className="h-4 w-4" />
           <span className="text-sm font-bold uppercase tracking-wider">Faculty Portal</span>
         </div>
@@ -186,7 +186,7 @@ export function FacultyDashboard() {
         {/* Engagement Activity Chart */}
         <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm lg:col-span-2">
           <h2 className="text-lg font-bold text-gray-900 mb-6 flex items-center gap-2">
-            <TrendingUp className="h-5 w-5 text-[#FF9501]" />
+            <TrendingUp className="h-5 w-5 text-[#dd7230]" />
             My System Engagement (6 Months)
           </h2>
           {isLoading ? (
@@ -198,8 +198,8 @@ export function FacultyDashboard() {
                 <XAxis dataKey="month" tick={{ fill: '#6B7280', fontSize: 12 }} axisLine={false} tickLine={false} />
                 <YAxis tick={{ fill: '#6B7280', fontSize: 12 }} axisLine={false} tickLine={false} allowDecimals={false} />
                 <Tooltip cursor={{ fill: '#F9FAFB' }} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
-                <Bar dataKey="Views" fill="#FF9501" radius={[4, 4, 0, 0]} maxBarSize={40} />
-                <Bar dataKey="Queries" fill="#D97E00" radius={[4, 4, 0, 0]} maxBarSize={40} />
+                <Bar dataKey="Views" fill="#dd7230" radius={[4, 4, 0, 0]} maxBarSize={40} />
+                <Bar dataKey="Queries" fill="#dd7230" radius={[4, 4, 0, 0]} maxBarSize={40} />
               </BarChart>
             </ResponsiveContainer>
           )}
@@ -208,11 +208,11 @@ export function FacultyDashboard() {
         {/* Accreditation Readiness Widget (UPDATED TO AMBER) */}
         <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm flex flex-col items-center justify-center relative overflow-hidden">
           {/* Updated gradient border line */}
-          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-[#D97E00] to-[#FF9501]"></div>
+          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-[#dd7230] to-[#dd7230]"></div>
           
           <h2 className="text-lg font-bold text-gray-900 mb-2 w-full text-left flex items-center gap-2">
             {/* Updated Shield icon color */}
-            <ShieldCheck className="h-5 w-5 text-[#D97E00]" />
+            <ShieldCheck className="h-5 w-5 text-[#dd7230]" />
             {userDepartment} QA Readiness
           </h2>
           <p className="text-xs text-gray-500 mb-4 w-full text-left">Real-time accreditation compliance</p>
@@ -242,7 +242,7 @@ export function FacultyDashboard() {
               </ResponsiveContainer>
               <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
                 {/* Updated percentage text color */}
-                <span className="text-3xl font-bold text-[#D97E00]">{accreditationScore}%</span>
+                <span className="text-3xl font-bold text-[#dd7230]">{accreditationScore}%</span>
                 <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Compliant</span>
               </div>
             </div>
@@ -256,7 +256,7 @@ export function FacultyDashboard() {
         {/* Recent Activity List */}
         <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm flex flex-col h-full">
           <h2 className="text-lg font-bold text-gray-900 mb-6 flex items-center gap-2">
-            <Clock className="h-5 w-5 text-[#FF9501]" />
+            <Clock className="h-5 w-5 text-[#dd7230]" />
             My Recent Activity
           </h2>
           {isLoading ? (
@@ -270,7 +270,7 @@ export function FacultyDashboard() {
               {recentActivity.map((log, index) => (
                 <div key={index} className="flex items-center justify-between p-4 bg-[#F9FAFB] rounded-xl hover:bg-[#F3F4F6] transition-colors border border-gray-100">
                   <div className="flex items-center gap-3 overflow-hidden">
-                    <div className={`p-2 rounded-lg flex-shrink-0 ${log.action === 'Download' ? 'bg-[#FFF4E5] text-[#D97E00]' : 'bg-orange-50 text-[#FF9501]'}`}>
+                    <div className={`p-2 rounded-lg flex-shrink-0 ${log.action === 'Download' ? 'bg-[#FFF4E5] text-[#D97E00]' : 'bg-orange-50 text-[#dd7230]'}`}>
                       {log.action === 'Download' ? <UploadCloud className="h-4 w-4" /> : <FileText className="h-4 w-4" />}
                     </div>
                     <div className="truncate">
@@ -288,7 +288,7 @@ export function FacultyDashboard() {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <button 
             onClick={() => navigate('/app/accreditation-support')} 
-            className="bg-gradient-to-br from-[#FF9501] to-[#D97E00] rounded-xl p-6 text-left hover:shadow-lg transition-all group flex flex-col justify-between relative overflow-hidden active:scale-95 cursor-pointer"
+            className="bg-gradient-to-br from-[#dd7230] to-[#dd7230] rounded-xl p-6 text-left hover:shadow-lg transition-all group flex flex-col justify-between relative overflow-hidden active:scale-95 cursor-pointer"
           >
             <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center mb-6 shadow-inner">
               <UploadCloud className="h-6 w-6 text-white" />
@@ -302,7 +302,7 @@ export function FacultyDashboard() {
 
           <button 
             onClick={() => navigate('/app/knowledge-repository')} 
-            className="bg-gradient-to-br from-[#D97E00] to-[#995900] rounded-xl p-6 text-left hover:shadow-lg transition-all group flex flex-col justify-between relative overflow-hidden active:scale-95 cursor-pointer"
+            className="bg-gradient-to-br from-[#dd7230] to-[#dd7230] rounded-xl p-6 text-left hover:shadow-lg transition-all group flex flex-col justify-between relative overflow-hidden active:scale-95 cursor-pointer"
           >
             <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center mb-6 shadow-inner">
               <Search className="h-6 w-6 text-white" />

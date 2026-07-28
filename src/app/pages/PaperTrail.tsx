@@ -266,7 +266,7 @@ export function PaperTrail() {
           <div className="flex items-center gap-3">
             <button
               onClick={() => setShowCreateModal(true)}
-              className="flex items-center gap-2 px-4 py-2.5 bg-[#FF9501] text-white rounded-lg hover:bg-[#D97E00] transition-all cursor-pointer shadow-sm active:scale-95 text-sm font-semibold"
+              className="flex items-center gap-2 px-4 py-2.5 bg-[#dd7230] text-white rounded-lg hover:bg-[#dd7230] transition-all cursor-pointer shadow-sm active:scale-95 text-sm font-semibold"
             >
               <Plus className="h-4 w-4" />
               <span>Release / Submit Document</span>
@@ -333,7 +333,7 @@ export function PaperTrail() {
               <input
                 type="text"
                 placeholder="Search by Tracking #, Document Title, Sender, or Office..."
-                className="w-full pl-11 pr-4 py-2.5 bg-[#F9FAFB] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#FF9501]"
+                className="w-full pl-11 pr-4 py-2.5 bg-[#F9FAFB] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#dd7230]"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
@@ -341,7 +341,7 @@ export function PaperTrail() {
 
             <div className="flex flex-wrap sm:flex-nowrap gap-3">
               <select
-                className="w-full sm:w-44 px-3.5 py-2.5 bg-[#F9FAFB] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#FF9501] text-[#374151] cursor-pointer"
+                className="w-full sm:w-44 px-3.5 py-2.5 bg-[#F9FAFB] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#dd7230] text-[#374151] cursor-pointer"
                 value={selectedStatus}
                 onChange={(e) => setSelectedStatus(e.target.value)}
               >
@@ -355,7 +355,7 @@ export function PaperTrail() {
               </select>
 
               <select
-                className="w-full sm:w-44 px-3.5 py-2.5 bg-[#F9FAFB] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#FF9501] text-[#374151] cursor-pointer"
+                className="w-full sm:w-44 px-3.5 py-2.5 bg-[#F9FAFB] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#dd7230] text-[#374151] cursor-pointer"
                 value={selectedOffice}
                 onChange={(e) => setSelectedOffice(e.target.value)}
               >
@@ -369,7 +369,7 @@ export function PaperTrail() {
               </select>
 
               <select
-                className="w-full sm:w-44 px-3.5 py-2.5 bg-[#F9FAFB] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#FF9501] text-[#374151] cursor-pointer"
+                className="w-full sm:w-44 px-3.5 py-2.5 bg-[#F9FAFB] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#dd7230] text-[#374151] cursor-pointer"
                 value={selectedType}
                 onChange={(e) => setSelectedType(e.target.value)}
               >
@@ -404,7 +404,7 @@ export function PaperTrail() {
             </p>
             <button
               onClick={() => setShowCreateModal(true)}
-              className="mt-4 px-4 py-2 bg-[#FF9501] text-white text-xs font-semibold rounded-lg hover:bg-[#D97E00] transition-colors"
+              className="mt-4 px-4 py-2 bg-[#dd7230] text-white text-xs font-semibold rounded-lg hover:bg-[#dd7230] transition-colors"
             >
               Release Document
             </button>
@@ -412,7 +412,7 @@ export function PaperTrail() {
         ) : (
           <div className="flex-1 overflow-auto">
             <table className="w-full whitespace-nowrap text-left border-collapse">
-              <thead className="bg-[#FF9501] text-white sticky top-0 z-20 shadow-md">
+              <thead className="bg-[#dd7230] text-white sticky top-0 z-20 shadow-md">
                 <tr>
                   <th className="px-6 py-3.5 text-xs font-semibold uppercase tracking-wider">Tracking #</th>
                   <th className="px-6 py-3.5 text-xs font-semibold uppercase tracking-wider">Document Title & Type</th>
@@ -431,7 +431,7 @@ export function PaperTrail() {
                     <tr key={rec.id} className="hover:bg-[#F9FAFB] transition-colors">
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-2">
-                          <Tag className="h-3.5 w-3.5 text-[#FF9501]" />
+                          <Tag className="h-3.5 w-3.5 text-[#dd7230]" />
                           <span className="font-mono font-bold text-xs text-[#1F2937]">{rec.tracking_number}</span>
                         </div>
                       </td>
@@ -500,7 +500,7 @@ export function PaperTrail() {
                               setSelectedRecordForTimeline(rec);
                               setShowTimelineModal(true);
                             }}
-                            className="p-1.5 text-[#6B7280] hover:text-[#FF9501] hover:bg-[#FFF4E5] rounded-lg transition-colors cursor-pointer"
+                            className="p-1.5 text-[#6B7280] hover:text-[#dd7230] hover:bg-[#FFF4E5] rounded-lg transition-colors cursor-pointer"
                             title="View Timeline History"
                           >
                             <History className="h-4 w-4" />
@@ -512,7 +512,7 @@ export function PaperTrail() {
                               setSelectedRecordForReceipt(rec);
                               setShowReceiptModal(true);
                             }}
-                            className="p-1.5 text-[#6B7280] hover:text-[#FF9501] hover:bg-[#FFF4E5] rounded-lg transition-colors cursor-pointer"
+                            className="p-1.5 text-[#6B7280] hover:text-[#dd7230] hover:bg-[#FFF4E5] rounded-lg transition-colors cursor-pointer"
                             title="Print Transmittal Receipt"
                           >
                             <Printer className="h-4 w-4" />
@@ -526,7 +526,7 @@ export function PaperTrail() {
                               setStatusNotes("");
                               setShowStatusModal(true);
                             }}
-                            className="px-2.5 py-1 text-xs font-semibold bg-[#FFF4E5] text-[#D97E00] hover:bg-[#FF9501] hover:text-white border border-[#FF9501]/30 rounded-md transition-all cursor-pointer shadow-sm active:scale-95"
+                            className="px-2.5 py-1 text-xs font-semibold bg-[#FFF4E5] text-[#D97E00] hover:bg-[#dd7230] hover:text-white border border-[#FF9501]/30 rounded-md transition-all cursor-pointer shadow-sm active:scale-95"
                             title="Update Status"
                           >
                             Update Status
@@ -545,7 +545,7 @@ export function PaperTrail() {
       {/* CREATE & RELEASE DOCUMENT MODAL */}
       {showCreateModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl border-t-4 border-t-[#FF9501] max-w-xl w-full shadow-2xl overflow-hidden animate-in fade-in zoom-in-95">
+          <div className="bg-white rounded-xl border-t-4 border-t-[#dd7230] max-w-xl w-full shadow-2xl overflow-hidden animate-in fade-in zoom-in-95">
             <div className="p-6 border-b border-[#E5E7EB] flex justify-between items-center bg-[#F9FAFB]">
               <div>
                 <h2 className="text-xl font-semibold text-[#1F2937]">Release / Submit Document</h2>
@@ -570,7 +570,7 @@ export function PaperTrail() {
                   type="text"
                   required
                   placeholder="e.g. BSIT Course Syllabus for CS46 - SY 2026-2027"
-                  className="w-full px-3.5 py-2.5 bg-[#F9FAFB] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#FF9501]"
+                  className="w-full px-3.5 py-2.5 bg-[#F9FAFB] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#dd7230]"
                   value={formData.title}
                   onChange={(e) => setFormData({ ...formData, title: e.target.value })}
                 />
@@ -580,7 +580,7 @@ export function PaperTrail() {
                 <div>
                   <label className="block text-xs font-semibold text-[#1F2937] mb-1.5">Document Type</label>
                   <select
-                    className="w-full px-3.5 py-2.5 bg-[#F9FAFB] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#FF9501] cursor-pointer"
+                    className="w-full px-3.5 py-2.5 bg-[#F9FAFB] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#dd7230] cursor-pointer"
                     value={formData.document_type}
                     onChange={(e) => setFormData({ ...formData, document_type: e.target.value })}
                   >
@@ -598,7 +598,7 @@ export function PaperTrail() {
                 <div>
                   <label className="block text-xs font-semibold text-[#1F2937] mb-1.5">Target Office / Destination</label>
                   <select
-                    className="w-full px-3.5 py-2.5 bg-[#F9FAFB] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#FF9501] cursor-pointer"
+                    className="w-full px-3.5 py-2.5 bg-[#F9FAFB] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#dd7230] cursor-pointer"
                     value={formData.office}
                     onChange={(e) => setFormData({ ...formData, office: e.target.value })}
                   >
@@ -618,7 +618,7 @@ export function PaperTrail() {
                   <input
                     type="text"
                     placeholder="e.g. Dr. Maria Santos"
-                    className="w-full px-3.5 py-2.5 bg-[#F9FAFB] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#FF9501]"
+                    className="w-full px-3.5 py-2.5 bg-[#F9FAFB] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#dd7230]"
                     value={formData.recipient_name}
                     onChange={(e) => setFormData({ ...formData, recipient_name: e.target.value })}
                   />
@@ -629,7 +629,7 @@ export function PaperTrail() {
                   <input
                     type="email"
                     placeholder="recipient@ctu.edu.ph"
-                    className="w-full px-3.5 py-2.5 bg-[#F9FAFB] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#FF9501]"
+                    className="w-full px-3.5 py-2.5 bg-[#F9FAFB] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#dd7230]"
                     value={formData.recipient_email}
                     onChange={(e) => setFormData({ ...formData, recipient_email: e.target.value })}
                   />
@@ -641,7 +641,7 @@ export function PaperTrail() {
                 <textarea
                   rows={2}
                   placeholder="e.g. Submitted for Dean's signature and verification."
-                  className="w-full px-3.5 py-2.5 bg-[#F9FAFB] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#FF9501] resize-none"
+                  className="w-full px-3.5 py-2.5 bg-[#F9FAFB] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#dd7230] resize-none"
                   value={formData.remarks}
                   onChange={(e) => setFormData({ ...formData, remarks: e.target.value })}
                 />
@@ -651,7 +651,7 @@ export function PaperTrail() {
                 <label className="block text-xs font-semibold text-[#1F2937] mb-1.5">Attach Digital Copy (Optional)</label>
                 <div
                   onClick={() => fileInputRef.current?.click()}
-                  className="border-2 border-dashed border-[#E5E7EB] hover:border-[#FF9501] bg-[#F9FAFB] hover:bg-[#FFF4E5]/40 rounded-lg p-4 text-center cursor-pointer transition-colors"
+                  className="border-2 border-dashed border-[#dd7230] hover:border-[#FF9501] bg-[#F9FAFB] hover:bg-[#FFF4E5]/40 rounded-lg p-4 text-center cursor-pointer transition-colors"
                 >
                   {attachedFile ? (
                     <div className="flex items-center justify-center gap-2 text-sm font-semibold text-[#FF9501]">
@@ -681,7 +681,7 @@ export function PaperTrail() {
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="flex-1 px-4 py-2.5 text-sm font-semibold bg-[#FF9501] text-white rounded-lg hover:bg-[#D97E00] transition-colors flex justify-center items-center gap-2 cursor-pointer shadow-sm disabled:opacity-50"
+                  className="flex-1 px-4 py-2.5 text-sm font-semibold bg-[#dd7230] text-white rounded-lg hover:bg-[#dd7230] transition-colors flex justify-center items-center gap-2 cursor-pointer shadow-sm disabled:opacity-50"
                 >
                   {isSubmitting ? (
                     <>
@@ -702,11 +702,11 @@ export function PaperTrail() {
       {/* UPDATE STATUS MODAL */}
       {showStatusModal && selectedRecordForStatus && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl border-t-4 border-t-[#FF9501] max-w-md w-full shadow-2xl overflow-hidden animate-in fade-in zoom-in-95">
+          <div className="bg-white rounded-xl border-t-4 border-t-[#dd7230] max-w-md w-full shadow-2xl overflow-hidden animate-in fade-in zoom-in-95">
             <div className="p-5 border-b border-[#E5E7EB] flex justify-between items-center bg-[#F9FAFB]">
               <div>
                 <h2 className="text-lg font-semibold text-[#1F2937]">Update Paper Status</h2>
-                <p className="text-xs font-mono font-bold text-[#FF9501] mt-0.5">
+                <p className="text-xs font-mono font-bold text-[#dd7230] mt-0.5">
                   {selectedRecordForStatus.tracking_number}
                 </p>
               </div>
@@ -729,7 +729,7 @@ export function PaperTrail() {
               <div>
                 <label className="block text-xs font-semibold text-[#1F2937] mb-1.5">New Movement Status</label>
                 <select
-                  className="w-full px-3.5 py-2.5 bg-[#F9FAFB] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#FF9501] cursor-pointer"
+                  className="w-full px-3.5 py-2.5 bg-[#F9FAFB] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#dd7230] cursor-pointer"
                   value={newStatus}
                   onChange={(e) => setNewStatus(e.target.value)}
                 >
@@ -747,7 +747,7 @@ export function PaperTrail() {
                   rows={3}
                   required
                   placeholder="e.g. Received by Office Staff. Document verified as complete and accurate."
-                  className="w-full px-3.5 py-2.5 bg-[#F9FAFB] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#FF9501] resize-none"
+                  className="w-full px-3.5 py-2.5 bg-[#F9FAFB] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#dd7230] resize-none"
                   value={statusNotes}
                   onChange={(e) => setStatusNotes(e.target.value)}
                 />
@@ -764,7 +764,7 @@ export function PaperTrail() {
                 <button
                   type="submit"
                   disabled={isUpdatingStatus}
-                  className="flex-1 px-4 py-2.5 text-xs font-semibold bg-[#FF9501] text-white rounded-lg hover:bg-[#D97E00] flex justify-center items-center gap-2 cursor-pointer shadow-sm disabled:opacity-50"
+                  className="flex-1 px-4 py-2.5 text-xs font-semibold bg-[#dd7230] text-white rounded-lg hover:bg-[#dd7230] flex justify-center items-center gap-2 cursor-pointer shadow-sm disabled:opacity-50"
                 >
                   {isUpdatingStatus ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save Status & Log"}
                 </button>

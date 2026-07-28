@@ -865,10 +865,10 @@ export function AccreditationSupport() {
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="flex w-full overflow-x-auto bg-gray-100 p-1 gap-1 no-scrollbar">
-          <TabsTrigger value="aaccup" className="data-[state=active]:bg-[#FF9501] data-[state=active]:text-white cursor-pointer transition-all text-xs sm:text-sm whitespace-nowrap flex-1">AACCUP</TabsTrigger>
-          <TabsTrigger value="iso" className="data-[state=active]:bg-[#FF9501] data-[state=active]:text-white cursor-pointer transition-all text-xs sm:text-sm whitespace-nowrap flex-1"><span className="hidden sm:inline">ISO </span>Standards</TabsTrigger>
-          <TabsTrigger value="ched" className="data-[state=active]:bg-[#FF9501] data-[state=active]:text-white cursor-pointer transition-all text-xs sm:text-sm whitespace-nowrap flex-1"><span className="hidden sm:inline">CHED </span>Monitoring</TabsTrigger>
-          <TabsTrigger value="results" className="data-[state=active]:bg-[#FF9501] data-[state=active]:text-white cursor-pointer transition-all text-xs sm:text-sm whitespace-nowrap flex-1"><span className="hidden sm:inline">Accreditation </span>Results</TabsTrigger>
+          <TabsTrigger value="aaccup" className="data-[state=active]:bg-[#dd7230] data-[state=active]:text-white cursor-pointer transition-all text-xs sm:text-sm whitespace-nowrap flex-1">AACCUP</TabsTrigger>
+          <TabsTrigger value="iso" className="data-[state=active]:bg-[#dd7230] data-[state=active]:text-white cursor-pointer transition-all text-xs sm:text-sm whitespace-nowrap flex-1"><span className="hidden sm:inline">ISO </span>Standards</TabsTrigger>
+          <TabsTrigger value="ched" className="data-[state=active]:bg-[#dd7230] data-[state=active]:text-white cursor-pointer transition-all text-xs sm:text-sm whitespace-nowrap flex-1"><span className="hidden sm:inline">CHED </span>Monitoring</TabsTrigger>
+          <TabsTrigger value="results" className="data-[state=active]:bg-[#dd7230] data-[state=active]:text-white cursor-pointer transition-all text-xs sm:text-sm whitespace-nowrap flex-1"><span className="hidden sm:inline">Accreditation </span>Results</TabsTrigger>
         </TabsList>
 
         <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4 mt-6">
@@ -921,7 +921,7 @@ export function AccreditationSupport() {
             </div>
 
             {activeTab !== 'iso' && (
-              <div className="flex items-center gap-2 px-3 sm:px-5 py-2.5 sm:py-3 bg-gradient-to-r from-[#FF9501] to-[#D97E00] text-white rounded-lg shadow-md border border-[#FF9501]/50 w-full sm:w-auto justify-center">
+              <div className="flex items-center gap-2 px-3 sm:px-5 py-2.5 sm:py-3 bg-gradient-to-r from-[#dd7230] to-[#dd7230] text-white rounded-lg shadow-md border border-[#FF9501]/50 w-full sm:w-auto justify-center">
                 <Award className="h-4 w-4 sm:h-5 sm:w-5 drop-shadow-sm" />
                 <span className="font-bold tracking-wide text-shadow-sm uppercase text-xs">{currentData.level || "Level II"}</span>
               </div>
@@ -933,8 +933,8 @@ export function AccreditationSupport() {
           {!expandedArea ? (
             <>
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
-                <div className="bg-white rounded-xl shadow-sm p-4 sm:p-6 border-t-4 border-[#006837]">
-                  <h3 className="text-3xl sm:text-4xl font-bold text-[#006837] mb-1 sm:mb-2">{currentData.overall}%</h3>
+                <div className="bg-white rounded-xl shadow-sm p-4 sm:p-6 border-t-4 border-[#1D6FA3]">
+                  <h3 className="text-3xl sm:text-4xl font-bold text-[#1D6FA3] mb-1 sm:mb-2">{currentData.overall}%</h3>
                   <p className="text-gray-600 text-[10px] sm:text-xs font-semibold uppercase tracking-wider">Overall Compliance</p>
                 </div>
                 <div className="bg-white rounded-xl shadow-sm p-4 sm:p-6 border-t-4 border-red-500">
@@ -945,8 +945,8 @@ export function AccreditationSupport() {
                   <h3 className="text-3xl sm:text-4xl font-bold text-[#FF9501] mb-1 sm:mb-2">{currentData.evidence}</h3>
                   <p className="text-gray-600 text-[10px] sm:text-xs font-semibold uppercase tracking-wider">Approved Docs</p>
                 </div>
-                <div className="bg-white rounded-xl shadow-sm p-4 sm:p-6 border-t-4 border-[#995900]">
-                  <h3 className="text-3xl sm:text-4xl font-bold text-[#995900] mb-1 sm:mb-2">{currentData.areas.length}</h3>
+                <div className="bg-white rounded-xl shadow-sm p-4 sm:p-6 border-t-4 border-[#006837]">
+                  <h3 className="text-3xl sm:text-4xl font-bold text-[#006837] mb-1 sm:mb-2">{currentData.areas.length}</h3>
                   <p className="text-gray-600 text-[10px] sm:text-xs font-semibold uppercase tracking-wider">Active Areas</p>
                 </div>
               </div>
@@ -958,7 +958,7 @@ export function AccreditationSupport() {
                     <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
                     <input
                       type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Search areas..."
-                      className="w-full pl-10 pr-4 py-2.5 bg-[#F5F7FA] border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF9501] text-sm"
+                      className="w-full pl-10 pr-4 py-2.5 bg-[#F5F7FA] border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#dd7230] text-sm"
                     />
                   </div>
                 </div>
@@ -973,12 +973,12 @@ export function AccreditationSupport() {
                       <div 
                         key={area.id} 
                         onClick={() => handleViewDetails(area)}
-                        className="border border-gray-200 rounded-xl p-5 hover:border-[#FF9501] hover:shadow-lg transition-all duration-200 flex flex-col justify-between bg-white group cursor-pointer active:scale-[0.99]"
+                        className="border border-gray-200 rounded-xl p-5 hover:border-[#dd7230] hover:shadow-lg transition-all duration-200 flex flex-col justify-between bg-white group cursor-pointer active:scale-[0.99]"
                       >
                         <div>
                           <div className="flex items-start justify-between mb-4">
                             <div className="pr-4">
-                              <h3 className="text-lg font-bold text-gray-900 mb-1 leading-tight group-hover:text-[#FF9501] transition-colors">
+                              <h3 className="text-lg font-bold text-gray-900 mb-1 leading-tight group-hover:text-[#dd7230] transition-colors">
                                 {area.code}: {area.title}
                               </h3>
                               <div className="flex items-center gap-2 mt-2">
@@ -1021,7 +1021,7 @@ export function AccreditationSupport() {
               <div className="bg-white rounded-xl shadow-sm p-6 border-t-4 border-[#FF9501] border-x border-b border-gray-200">
                 <button 
                   onClick={() => setExpandedArea(null)}
-                  className="flex items-center gap-2 text-sm text-gray-500 hover:text-[#FF9501] font-bold mb-4 transition-colors cursor-pointer w-max uppercase tracking-wider"
+                  className="flex items-center gap-2 text-sm text-gray-500 hover:text-[#dd7230] font-bold mb-4 transition-colors cursor-pointer w-max uppercase tracking-wider"
                 >
                   <ArrowLeft className="h-4 w-4" /> Back to Area Overview
                 </button>
@@ -1035,7 +1035,7 @@ export function AccreditationSupport() {
                   </div>
                   <div className="text-right">
                     <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Area Compliance</p>
-                    <div className={`text-4xl font-bold ${expandedArea.compliance === 100 ? "text-[#006837]" : "text-[#FF9501]"}`}>
+                    <div className={`text-4xl font-bold ${expandedArea.compliance === 100 ? "text-[#006837]" : "text-[#dd7230]"}`}>
                       {expandedArea.compliance}%
                     </div>
                   </div>
@@ -1080,7 +1080,7 @@ export function AccreditationSupport() {
                       <h3 className="font-bold text-[#1F2937] text-sm uppercase tracking-wider">Uploaded Evidence</h3>
                       <button 
                         onClick={() => openUploadModal(expandedArea)}
-                        className="flex items-center gap-1.5 sm:gap-2 px-3 py-2 bg-[#FF9501] text-white rounded-lg hover:bg-[#D97E00] transition-all text-xs font-bold cursor-pointer shadow-sm active:scale-95"
+                        className="flex items-center gap-1.5 sm:gap-2 px-3 py-2 bg-[#dd7230] text-white rounded-lg hover:bg-[#dd7230] transition-all text-xs font-bold cursor-pointer shadow-sm active:scale-95"
                       >
                         <Upload className="h-3.5 w-3.5" /><span className="hidden sm:inline"> Upload File</span><span className="sm:hidden">Upload</span>
                       </button>
@@ -1172,7 +1172,7 @@ export function AccreditationSupport() {
             <div className="border-b border-gray-100 p-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-gray-50/50">
               <div>
                 <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-                  <FileCheck className="w-5 h-5 text-[#FF9501]" />
+                  <FileCheck className="w-5 h-5 text-[#dd7230]" />
                   CHED Program Compliance
                 </h2>
                 <p className="text-sm text-gray-500 mt-1">Monitoring of CMO requirements and mandatory submissions for {selectedProgram}.</p>
@@ -1180,7 +1180,7 @@ export function AccreditationSupport() {
               <div className="flex items-center gap-4">
                 <div className="text-right hidden sm:block">
                   <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Overall Compliance</p>
-                  <div className={`text-2xl font-bold ${chedCompliancePercentage === 100 ? "text-[#006837]" : "text-[#FF9501]"}`}>
+                  <div className={`text-2xl font-bold ${chedCompliancePercentage === 100 ? "text-[#006837]" : "text-[#dd7230]"}`}>
                     {chedCompliancePercentage}%
                   </div>
                 </div>
@@ -1378,12 +1378,12 @@ export function AccreditationSupport() {
           )}
 
           {/* ISO 9001:2015 Summary Header */}
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 border-t-4 border-t-[#FF9501] overflow-hidden">
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 border-t-4 border-t-[#dd7230] overflow-hidden">
             <div className="border-b border-gray-100 p-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-gray-50/50">
               <div>
                 <div className="flex items-start gap-2">
                     <h2 className="text-sm sm:text-lg font-bold text-gray-900 flex items-center gap-2">
-                      <Target className="w-4 h-4 sm:w-5 sm:h-5 text-[#FF9501] shrink-0" />
+                      <Target className="w-4 h-4 sm:w-5 sm:h-5 text-[#dd7230] shrink-0" />
                       <span className="hidden sm:inline">ISO 9001:2015 Quality Management System (QMS) & IQA Framework</span>
                       <span className="sm:hidden">ISO 9001:2015 QMS</span>
                     </h2>
@@ -1398,7 +1398,7 @@ export function AccreditationSupport() {
               <div className="flex items-center gap-4">
                 <div className="text-right hidden sm:block">
                   <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">ISO QMS Compliance</p>
-                  <div className={`text-2xl font-bold ${isoCompliancePercentage >= 85 ? "text-[#006837]" : "text-[#FF9501]"}`}>
+                  <div className={`text-2xl font-bold ${isoCompliancePercentage >= 85 ? "text-[#dd7230]" : "text-[#dd7230]"}`}>
                     {isoCompliancePercentage}%
                   </div>
                 </div>
@@ -1431,7 +1431,7 @@ export function AccreditationSupport() {
                   <h3 className="text-2xl font-bold text-[#1F2937] mt-0.5">{isoTotalCount} Clauses</h3>
                   <p className="text-[11px] text-[#6B7280]">Covering 8 Auditee Offices</p>
                 </div>
-                <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center text-[#FF9501] shadow-sm">
+                <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center text-[#dd7230] shadow-sm">
                   <FileBadge className="h-5 w-5" />
                 </div>
               </div>
@@ -1462,12 +1462,12 @@ export function AccreditationSupport() {
             {/* Auditee Office Dropdown Filter Bar */}
             <div className="px-6 py-4 bg-[#F9FAFB] border-b border-gray-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-                <Building className="h-4 w-4 text-[#FF9501] shrink-0" />
+                <Building className="h-4 w-4 text-[#dd7230] shrink-0" />
                 <label className="text-xs font-bold text-gray-700 uppercase tracking-wider whitespace-nowrap">Filter:</label>
                 <select
                   value={isoOfficeFilter}
                   onChange={(e) => setIsoOfficeFilter(e.target.value)}
-                  className="flex-1 sm:flex-none px-3 sm:px-4 py-2 bg-white border border-gray-300 rounded-lg text-xs font-bold text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#FF9501] shadow-sm cursor-pointer sm:min-w-[260px]"
+                  className="flex-1 sm:flex-none px-3 sm:px-4 py-2 bg-white border border-gray-300 rounded-lg text-xs font-bold text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#dd7230] shadow-sm cursor-pointer sm:min-w-[260px]"
                 >
                   <option value="all">All Auditee Offices (8 Offices)</option>
                   <option value="Director of Instruction (DOI) & SAO">Director of Instruction (DOI) & SAO</option>
@@ -1611,17 +1611,17 @@ export function AccreditationSupport() {
           </div>
 
           {/* Dynamic Internal Quality Audit (IQA) Program Schedule */}
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 border-t-4 border-t-[#FF9501] overflow-hidden p-6 space-y-4">
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 border-t-4 border-t-[#dd7230] overflow-hidden p-6 space-y-4">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-gray-100 pb-4">
               <div>
                 <h3 className="text-base font-bold text-gray-900 flex items-center gap-2">
-                  <Calendar className="h-5 w-5 text-[#FF9501]" />
+                  <Calendar className="h-5 w-5 text-[#dd7230]" />
                   CTU Argao Internal Quality Audit (IQA) Program Schedule
                 </h3>
                 <p className="text-xs text-gray-500 mt-0.5">Configured campus-wide audit dates and focus scope for CTU Argao (Institutional QMS)</p>
               </div>
               <div className="flex items-center gap-3">
-                <span className="px-3 py-1 bg-orange-50 text-[#D97E00] text-xs font-bold rounded-lg border border-[#FF9501]/20">
+                <span className="px-3 py-1 bg-orange-50 text-[#D97E00] text-xs font-bold rounded-lg border border-[#dd7230]/20">
                   {iqaSchedule?.academic_year || "IQA Audit Cycle 2025-2026"}
                 </span>
 
@@ -1691,12 +1691,12 @@ export function AccreditationSupport() {
                 <div className="border-b border-gray-100 p-6 bg-[#F9FAFB] flex justify-between items-center">
                   <div>
                     <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-                      <History className="w-5 h-5 text-[#FF9501]" />
+                      <History className="w-5 h-5 text-[#dd7230]" />
                       Accreditation Timeline
                     </h2>
                     <p className="text-sm text-gray-500 mt-1">Historical milestones for {selectedProgram}</p>
                   </div>
-                  <button className="flex items-center gap-1.5 sm:gap-2 text-[#D97E00] hover:text-[#995900] text-xs font-bold bg-[#FFF4E5] px-2.5 sm:px-3 py-1.5 rounded-lg transition-colors cursor-pointer">
+                  <button className="flex items-center gap-1.5 sm:gap-2 text-[#dd7230] hover:text-[#dd7230] text-xs font-bold bg-[#FFF4E5] px-2.5 sm:px-3 py-1.5 rounded-lg transition-colors cursor-pointer">
                     <Download className="w-3.5 h-3.5" /><span className="hidden sm:inline"> Export Report</span>
                   </button>
                 </div>
@@ -1718,12 +1718,12 @@ export function AccreditationSupport() {
                         </div>
                         <div className="flex-1 bg-white border border-gray-100 hover:border-[#FF9501]/30 hover:shadow-md transition-all p-4 rounded-xl group cursor-pointer">
                           <div className="flex justify-between items-start mb-1">
-                            <span className="text-xs font-bold text-[#FF9501] uppercase tracking-wider">{item.year}</span>
+                            <span className="text-xs font-bold text-[#dd7230] uppercase tracking-wider">{item.year}</span>
                             <span className={`text-[9px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full ${item.type === 'Active' ? 'bg-green-50 text-[#006837]' : 'bg-gray-100 text-gray-500'}`}>
                               {item.type}
                             </span>
                           </div>
-                          <h3 className="font-bold text-gray-900 text-sm group-hover:text-[#FF9501] transition-colors">{item.title}</h3>
+                          <h3 className="font-bold text-gray-900 text-sm group-hover:text-[#dd7230] transition-colors">{item.title}</h3>
                           <p className="text-xs text-gray-500 mt-1 flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5" /> {item.date}</p>
                         </div>
                       </div>
@@ -1739,7 +1739,7 @@ export function AccreditationSupport() {
               {/* Metrics Card */}
               <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
                 <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider flex items-center gap-2 mb-5">
-                  <TrendingUp className="w-4 h-4 text-[#FF9501]" /> Program Excellence
+                  <TrendingUp className="w-4 h-4 text-[#dd7230]" /> Program Excellence
                 </h3>
                 <div className="space-y-4">
                   {[
@@ -1761,7 +1761,7 @@ export function AccreditationSupport() {
               {/* Official Certificates */}
               <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
                 <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider flex items-center gap-2 mb-5">
-                  <FileBadge className="w-4 h-4 text-[#FF9501]" /> Official Certificates
+                  <FileBadge className="w-4 h-4 text-[#dd7230]" /> Official Certificates
                 </h3>
                 <div className="space-y-3">
                   <div className="p-4 bg-gradient-to-br from-[#FFF4E5] to-orange-50/30 rounded-xl border border-[#FF9501]/20 group cursor-pointer hover:shadow-md transition-all relative overflow-hidden">
@@ -1769,7 +1769,7 @@ export function AccreditationSupport() {
                     <div className="flex items-center gap-3 relative z-10">
                       <Award className="w-8 h-8 text-[#D97E00]" />
                       <div>
-                        <p className="text-xs font-bold text-gray-900 group-hover:text-[#FF9501] transition-colors">AACCUP Level III Certificate.pdf</p>
+                        <p className="text-xs font-bold text-gray-900 group-hover:text-[#dd7230] transition-colors">AACCUP Level III Certificate.pdf</p>
                         <p className="text-[10px] text-gray-500 mt-0.5">Issued: Oct 12, 2024 • 2.4 MB</p>
                       </div>
                     </div>
@@ -1779,14 +1779,14 @@ export function AccreditationSupport() {
                     <div className="flex items-center gap-3">
                       <FileCheck className="w-8 h-8 text-gray-400 group-hover:text-[#FF9501] transition-colors" />
                       <div>
-                        <p className="text-xs font-bold text-gray-900 group-hover:text-[#FF9501] transition-colors">CHED COPC Document.pdf</p>
+                        <p className="text-xs font-bold text-gray-900 group-hover:text-[#dd7230] transition-colors">CHED COPC Document.pdf</p>
                         <p className="text-[10px] text-gray-500 mt-0.5">Issued: Mar 05, 2019 • 1.1 MB</p>
                       </div>
                     </div>
                   </div>
                 </div>
                 
-                <button className="w-full mt-4 py-2 flex items-center justify-center gap-2 text-xs font-bold text-[#D97E00] hover:text-[#995900] bg-orange-50 rounded-lg transition-colors cursor-pointer">
+                <button className="w-full mt-4 py-2 flex items-center justify-center gap-2 text-xs font-bold text-[#dd7230] hover:text-[#dd7230] bg-orange-50 rounded-lg transition-colors cursor-pointer">
                   View Full Registry <ExternalLink className="w-3.5 h-3.5" />
                 </button>
               </div>
@@ -1803,7 +1803,7 @@ export function AccreditationSupport() {
             <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-[#F5F7FA]">
               <div>
                 <h2 className="text-xl font-bold text-[#1F2937]">Upload Accreditation Evidence</h2>
-                <p className="text-xs font-semibold text-[#D97E00] mt-1 uppercase tracking-wider">Tagging evidence for {selectedProgram}</p>
+                <p className="text-xs font-semibold text-[#dd7230] mt-1 uppercase tracking-wider">Tagging evidence for {selectedProgram}</p>
               </div>
               <button onClick={() => setShowUploadModal(false)} className="p-2 hover:bg-gray-200 rounded-full transition-colors cursor-pointer">
                 <X className="h-5 w-5 text-gray-500" />
@@ -1826,7 +1826,7 @@ export function AccreditationSupport() {
                 <label className="block text-xs font-bold text-gray-700 mb-2 uppercase tracking-wider">Document Name</label>
                 <input
                   type="text" required value={uploadForm.fileName} onChange={(e) => setUploadForm({...uploadForm, fileName: e.target.value})}
-                  className="w-full px-4 py-3 bg-[#F5F7FA] border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#FF9501] transition-all font-medium text-sm"
+                  className="w-full px-4 py-3 bg-[#F5F7FA] border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#dd7230] transition-all font-medium text-sm"
                   placeholder="e.g., Faculty Credentials Summary 2026.pdf"
                 />
               </div>
@@ -1835,7 +1835,7 @@ export function AccreditationSupport() {
                 <label className="block text-xs font-bold text-gray-700 mb-2 uppercase tracking-wider">Fulfills Requirement</label>
                 <select
                   required value={uploadForm.requirementTarget} onChange={(e) => setUploadForm({...uploadForm, requirementTarget: e.target.value})}
-                  className="w-full px-4 py-3 bg-[#F5F7FA] border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#FF9501] transition-all cursor-pointer font-medium text-sm"
+                  className="w-full px-4 py-3 bg-[#F5F7FA] border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#dd7230] transition-all cursor-pointer font-medium text-sm"
                 >
                   <option value="" disabled>Select the specific checklist requirement...</option>
                   {areaDetails.requirements.map((req: any) => (
@@ -1849,7 +1849,7 @@ export function AccreditationSupport() {
                 <div 
                   onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop} onClick={() => fileInputRef.current?.click()}
                   className={`border-2 border-dashed rounded-xl p-8 text-center transition-all cursor-pointer ${
-                    isDragging ? "border-[#FF9501] bg-[#FFF4E5]" : "border-gray-200 hover:border-[#FF9501] bg-gray-50 hover:bg-gray-100"
+                    isDragging ? "border-[#FF950] bg-[#FFF4E5]" : "border-gray-200 hover:border-[#dd7230] bg-gray-50 hover:bg-gray-100"
                   }`}
                 >
                   {selectedFile ? (
@@ -1873,7 +1873,7 @@ export function AccreditationSupport() {
                 <button type="button" onClick={() => setShowUploadModal(false)} className="flex-1 px-5 py-3 text-sm font-bold text-gray-500 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors cursor-pointer uppercase tracking-wider">
                   Cancel
                 </button>
-                <button type="submit" disabled={!uploadForm.fileName || !uploadForm.requirementTarget || !selectedFile || isUploading} className="flex-1 px-5 py-3 text-sm font-bold bg-[#FF9501] text-white rounded-xl hover:bg-[#D97E00] disabled:opacity-50 transition-all flex justify-center items-center gap-2 cursor-pointer active:scale-95 shadow-md uppercase tracking-wider">
+                <button type="submit" disabled={!uploadForm.fileName || !uploadForm.requirementTarget || !selectedFile || isUploading} className="flex-1 px-5 py-3 text-sm font-bold bg-[#dd7230] text-white rounded-xl hover:bg-[#dd7230] disabled:opacity-50 transition-all flex justify-center items-center gap-2 cursor-pointer active:scale-95 shadow-md uppercase tracking-wider">
                   {isUploading ? <><Loader2 className="h-4 w-4 animate-spin"/> Processing...</> : "Submit Evidence"}
                 </button>
               </div>

@@ -76,13 +76,13 @@ export function Settings() {
         
         {/* Navigation Tabs */}
         <div className="flex border-b border-gray-200 bg-[#F9FAFB] overflow-x-auto">
-          <button onClick={() => setActiveTab("profile")} className={`flex items-center gap-2 px-6 py-4 text-sm font-medium transition-all whitespace-nowrap cursor-pointer ${activeTab === "profile" ? "border-b-2 border-[#FF9501] text-[#FF9501] bg-white" : "text-gray-500 hover:text-gray-900 hover:bg-gray-50"}`}>
+          <button onClick={() => setActiveTab("profile")} className={`flex items-center gap-2 px-6 py-4 text-sm font-medium transition-all whitespace-nowrap cursor-pointer ${activeTab === "profile" ? "border-b-2 border-[#dd7230] text-[#dd7230] bg-white" : "text-gray-500 hover:text-gray-900 hover:bg-gray-50"}`}>
             <Building2 className="h-4 w-4" /> Institutional Profile
           </button>
-          <button onClick={() => setActiveTab("security")} className={`flex items-center gap-2 px-6 py-4 text-sm font-medium transition-all whitespace-nowrap cursor-pointer ${activeTab === "security" ? "border-b-2 border-[#FF9501] text-[#FF9501] bg-white" : "text-gray-500 hover:text-gray-900 hover:bg-gray-50"}`}>
+          <button onClick={() => setActiveTab("security")} className={`flex items-center gap-2 px-6 py-4 text-sm font-medium transition-all whitespace-nowrap cursor-pointer ${activeTab === "security" ? "border-b-2 border-[#dd7230] text-[#dd7230] bg-white" : "text-gray-500 hover:text-gray-900 hover:bg-gray-50"}`}>
             <ShieldCheck className="h-4 w-4" /> Security & Authentication
           </button>
-          <button onClick={() => setActiveTab("ai_engine")} className={`flex items-center gap-2 px-6 py-4 text-sm font-medium transition-all whitespace-nowrap cursor-pointer ${activeTab === "ai_engine" ? "border-b-2 border-[#FF9501] text-[#FF9501] bg-white" : "text-gray-500 hover:text-gray-900 hover:bg-gray-50"}`}>
+          <button onClick={() => setActiveTab("ai_engine")} className={`flex items-center gap-2 px-6 py-4 text-sm font-medium transition-all whitespace-nowrap cursor-pointer ${activeTab === "ai_engine" ? "border-b-2 border-[#dd7230] text-[#dd7230] bg-white" : "text-gray-500 hover:text-gray-900 hover:bg-gray-50"}`}>
             <Bot className="h-4 w-4" /> AI & RAG Engine
           </button>
         </div>
@@ -98,15 +98,15 @@ export function Settings() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="md:col-span-2">
                     <label className="block text-sm font-medium text-gray-700 mb-2">Platform Name</label>
-                    <input type="text" value={settings.platform_name} onChange={(e) => handleChange("platform_name", e.target.value)} className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#FF9501] text-gray-900" />
+                    <input type="text" value={settings.platform_name} onChange={(e) => handleChange("platform_name", e.target.value)} className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#dd7230] text-gray-900" />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Campus</label>
-                    <input type="text" value={settings.campus} onChange={(e) => handleChange("campus", e.target.value)} className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#FF9501] text-gray-900" />
+                    <input type="text" value={settings.campus} onChange={(e) => handleChange("campus", e.target.value)} className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#dd7230] text-gray-900" />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">System Administrator Email</label>
-                    <input type="email" value={settings.admin_email} onChange={(e) => handleChange("admin_email", e.target.value)} className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#FF9501] text-gray-900" />
+                    <input type="email" value={settings.admin_email} onChange={(e) => handleChange("admin_email", e.target.value)} className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#dd7230] text-gray-900" />
                   </div>
                 </div>
               </div>
@@ -159,11 +159,11 @@ export function Settings() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">JWT Expiration (Minutes)</label>
-                    <input type="number" value={settings.jwt_expiration} onChange={(e) => handleChange("jwt_expiration", Number(e.target.value))} className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#FF9501]" />
+                    <input type="number" value={settings.jwt_expiration} onChange={(e) => handleChange("jwt_expiration", Number(e.target.value))} className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#dd7230]" />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">OTP Expiration (Minutes)</label>
-                    <input type="number" value={settings.otp_expiration} onChange={(e) => handleChange("otp_expiration", Number(e.target.value))} className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#FF9501]" />
+                    <input type="number" value={settings.otp_expiration} onChange={(e) => handleChange("otp_expiration", Number(e.target.value))} className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#dd7230]" />
                   </div>
                 </div>
               </div>
@@ -179,7 +179,7 @@ export function Settings() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Active Model Endpoint</label>
-                    <select value={settings.ai_model} onChange={(e) => handleChange("ai_model", e.target.value)} className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#FF9501] cursor-pointer text-gray-900">
+                    <select value={settings.ai_model} onChange={(e) => handleChange("ai_model", e.target.value)} className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#dd7230] cursor-pointer text-gray-900">
                       <option value="llama-3.1-8b-instant">Groq: Llama-3.1-8b-instant (Fast)</option>
                       <option value="llama-3.3-70b-versatile">Groq: Llama-3.3-70b-versatile (Accurate)</option>
                     </select>
@@ -202,7 +202,7 @@ export function Settings() {
                     rows={6}
                     value={settings.ai_system_prompt}
                     onChange={(e) => handleChange("ai_system_prompt", e.target.value)}
-                    className="w-full px-4 py-3 bg-[#F5F7FA] border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#FF9501] transition-all resize-none text-sm font-mono text-gray-700 leading-relaxed"
+                    className="w-full px-4 py-3 bg-[#F5F7FA] border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#dd7230] transition-all resize-none text-sm font-mono text-gray-700 leading-relaxed"
                   />
                 </div>
               </div>
@@ -217,7 +217,7 @@ export function Settings() {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Max Chunks Retrieved (Top K)</label>
-                    <input type="number" value={settings.rag_max_chunks} onChange={(e) => handleChange("rag_max_chunks", Number(e.target.value))} className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#FF9501] text-gray-900" />
+                    <input type="number" value={settings.rag_max_chunks} onChange={(e) => handleChange("rag_max_chunks", Number(e.target.value))} className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#dd7230] text-gray-900" />
                   </div>
                 </div>
               </div>
@@ -231,7 +231,7 @@ export function Settings() {
           <button 
             onClick={handleSave}
             disabled={isSaving}
-            className="flex items-center gap-2 px-8 py-2.5 bg-[#FF9501] text-white font-medium rounded-xl hover:bg-[#D97E00] transition-colors cursor-pointer shadow-sm active:scale-95 disabled:opacity-50"
+            className="flex items-center gap-2 px-8 py-2.5 bg-[#dd7230] text-white font-medium rounded-xl hover:bg-[#dd7230] transition-colors cursor-pointer shadow-sm active:scale-95 disabled:opacity-50"
           >
             {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
             {isSaving ? "Saving Config..." : "Save System Settings"}

@@ -79,7 +79,7 @@ export function KnowledgeRepository() {
   const getAccessBadge = () => {
     if (canUpload && canEdit) {
       // Changed to the updated amber scheme tint
-      return { label: "Full Access", color: "bg-orange-50 text-[#D97E00] border-[#FF9501]/20", icon: CheckCircle }
+      return { label: "Full Access", color: "bg-orange-50 text-[#dd7230] border-[#dd7230]/20", icon: CheckCircle }
     } else {
       // Changed to a neutral amber tint
       return { label: "View Only", color: "bg-[#FFF4E5] text-[#995900] border-[#FF9501]/10", icon: Eye }
@@ -368,8 +368,8 @@ export function KnowledgeRepository() {
                 onClick={() => setShowArchived(!showArchived)}
                 className={`flex items-center justify-center w-40 gap-2 px-4 py-2 rounded-lg border transition-all cursor-pointer ${
                   showArchived 
-                    ? "bg-[#1F2937] text-white border-[#1F2937] hover:bg-gray-700" 
-                    : "bg-white text-gray-700 border-[#E5E7EB] hover:bg-[#F9FAFB]"
+                    ? "bg-[#1F2937] text-white border-[#dd7230] hover:bg-gray-700" 
+                    : "bg-white text-gray-700 border-[#dd7230] hover:bg-[#dd7230]"
                 }`}
               >
                 <Archive className="h-4 w-4 flex-shrink-0" />
@@ -382,7 +382,7 @@ export function KnowledgeRepository() {
             {canUpload && (
               <button
                 onClick={() => setShowUploadModal(true)}
-                className="flex items-center gap-2 px-4 py-2 bg-[#FF9501] text-white rounded-lg hover:bg-[#D97E00] transition-all cursor-pointer shadow-sm active:scale-95"
+                className="flex items-center gap-2 px-4 py-2 bg-[#dd7230] text-white rounded-lg hover:bg-[#dd7230] transition-all cursor-pointer shadow-sm active:scale-95"
               >
                 <Upload className="h-4 w-4" />
                 <span className="text-sm font-medium">Upload Document</span>
