@@ -19,4 +19,13 @@ export default defineConfig({
 
   // File types to support raw imports. Never add .css, .tsx, or .ts files to this.
   assetsInclude: ['**/*.svg', '**/*.csv'],
+
+  server: {
+    proxy: {
+      // Forwards any /api/* call from the React app to the local Express
+      // server (server.js) running on port 3001, so fetch("/api/generate-document")
+      // works exactly the same in dev as it would behind a real backend.
+      '/api': 'http://localhost:3001',
+    },
+  },
 })
