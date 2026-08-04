@@ -274,8 +274,8 @@ export function BroadcastAnnouncement() {
           className="w-full flex items-center justify-between p-5 bg-white hover:bg-gray-50 transition-colors cursor-pointer"
         >
           <div className="flex items-center gap-3">
-            <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${isCreateOpen ? "bg-[#FF9501]" : "bg-[#FFF4E5]"}`}>
-              <Radio className={`h-5 w-5 ${isCreateOpen ? "text-white" : "text-[#FF9501]"}`} />
+            <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${isCreateOpen ? "bg-[#dd7230]" : "bg-[#FFF4E5]"}`}>
+              <Radio className={`h-5 w-5 ${isCreateOpen ? "text-white" : "text-[#dd7230]"}`} />
             </div>
             <div className="text-left">
               <h2 className="text-lg font-bold text-[#1F2937]">Create New Broadcast</h2>
@@ -294,7 +294,7 @@ export function BroadcastAnnouncement() {
                 <label className="block text-sm font-medium mb-2 text-[#1F2937]">Announcement Title *</label>
                 <input
                   type="text" value={title} onChange={(e) => setTitle(e.target.value)}
-                  className="w-full px-4 py-3 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#FF9501] transition-all"
+                  className="w-full px-4 py-3 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#dd7230] transition-all"
                   placeholder="Enter announcement title"
                 />
               </div>
@@ -302,7 +302,7 @@ export function BroadcastAnnouncement() {
                 <label className="block text-sm font-medium mb-2 text-[#1F2937]">Message Content *</label>
                 <textarea
                   value={content} onChange={(e) => setContent(e.target.value)} rows={5}
-                  className="w-full px-4 py-3 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#FF9501] transition-all resize-none"
+                  className="w-full px-4 py-3 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#dd7230] transition-all resize-none"
                   placeholder="Type your announcement message here..."
                 />
               </div>
@@ -314,12 +314,12 @@ export function BroadcastAnnouncement() {
                       key={option.value}
                       onClick={() => handleRecipientToggle(option.value, selectedRecipients, setSelectedRecipients)}
                       className={`p-5 rounded-lg border-2 transition-all text-left cursor-pointer ${
-                        selectedRecipients.includes(option.value) ? "border-[#FF9501] bg-[#FFF4E5]/50" : "border-[#E5E7EB] hover:border-[#FF9501]/50"
+                        selectedRecipients.includes(option.value) ? "border-[#dd7230] bg-[#FFF4E5]/50" : "border-[#E5E7EB] hover:border-[#dd7230]/50"
                       }`}
                     >
                       <div className="flex items-center gap-3 mb-2">
-                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${selectedRecipients.includes(option.value) ? "bg-[#FF9501]" : "bg-[#F5F7FA]"}`}>
-                          <Users className={`h-5 w-5 ${selectedRecipients.includes(option.value) ? "text-white" : "text-[#FF9501]"}`} />
+                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${selectedRecipients.includes(option.value) ? "bg-[#dd7230]" : "bg-[#F5F7FA]"}`}>
+                          <Users className={`h-5 w-5 ${selectedRecipients.includes(option.value) ? "text-white" : "text-[#dd7230]"}`} />
                         </div>
                         <h3 className="text-sm font-semibold text-[#1F2937]">{option.label}</h3>
                       </div>
@@ -334,7 +334,7 @@ export function BroadcastAnnouncement() {
                   <Calendar className="h-5 w-5 text-[#6B7280]" />
                   <input
                     type="datetime-local" value={scheduleDate} onChange={(e) => setScheduleDate(e.target.value)}
-                    className="flex-1 px-4 py-3 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#FF9501] transition-all cursor-pointer"
+                    className="flex-1 px-4 py-3 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#dd7230] transition-all cursor-pointer"
                   />
                 </div>
                 <p className="text-xs text-[#6B7280] mt-2">Leave empty to send immediately</p>
@@ -342,7 +342,7 @@ export function BroadcastAnnouncement() {
               <div className="flex gap-3 pt-4 border-t border-[#E5E7EB]">
                 <button
                   onClick={() => handleSendAnnouncement("Sent")} disabled={isLoading}
-                  className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-[#FF9501] text-white rounded-lg hover:bg-[#D97E00] transition-colors font-medium disabled:opacity-50 cursor-pointer shadow-sm active:scale-95"
+                  className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-[#dd7230] text-white rounded-lg hover:bg-[#dd7230] transition-colors font-medium disabled:opacity-50 cursor-pointer shadow-sm active:scale-95"
                 >
                   {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
                   {scheduleDate ? "Schedule Announcement" : "Send Broadcast Now"}
@@ -406,14 +406,14 @@ export function BroadcastAnnouncement() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
               <input
                 type="text" placeholder="Search broadcasts..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-4 py-2 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-[#FF9501]"
+                className="w-full pl-9 pr-4 py-2 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-[#dd7230]"
               />
             </div>
             <div className="relative w-full sm:w-auto">
               <Filter className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
               <select
                 value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as any)}
-                className="w-full sm:w-auto pl-9 pr-8 py-2 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-[#FF9501] cursor-pointer appearance-none"
+                className="w-full sm:w-auto pl-9 pr-8 py-2 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-[#dd7230] cursor-pointer appearance-none"
               >
                 <option value="All">All Statuses</option>
                 <option value="Sent">Sent</option>
@@ -440,12 +440,12 @@ export function BroadcastAnnouncement() {
                   if (announcement.status === "Sent") setViewingAnnouncement(announcement);
                   else setEditingAnnouncement(announcement);
                 }}
-                className="border border-[#E5E7EB] rounded-lg p-5 hover:shadow-md hover:border-[#FF9501]/30 transition-all bg-white cursor-pointer group"
+                className="border border-[#E5E7EB] rounded-lg p-5 hover:shadow-md hover:border-[#dd7230]/30 transition-all bg-white cursor-pointer group"
               >
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
                     <div className="flex items-center gap-3 mb-1.5">
-                      <h3 className="text-[#1F2937] font-bold text-base group-hover:text-[#FF9501] transition-colors">{announcement.title}</h3>
+                      <h3 className="text-[#1F2937] font-bold text-base group-hover:text-[#dd7230] transition-colors">{announcement.title}</h3>
                       <span className={`px-2.5 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider ${
                         announcement.status === "Sent" ? "bg-green-100 text-green-700"
                         : announcement.status === "Scheduled" ? "bg-yellow-100 text-yellow-700"

@@ -169,7 +169,7 @@ export function LoginPage() {
                   required
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  className="w-full pl-12 pr-4 py-4 bg-[#F5F7FA] border border-[#E5E7EB] rounded-xl text-base text-[#1F2937] focus:outline-none focus:ring-2 focus:ring-[#FF9501] focus:border-transparent transition-shadow"
+                  className="w-full pl-12 pr-4 py-4 bg-[#F5F7FA] border border-[#E5E7EB] rounded-xl text-base text-[#1F2937] focus:outline-none focus:ring-2 focus:ring-[#dd7230] focus:border-transparent transition-shadow"
                   placeholder="your.email@ctu.edu.ph"
                 />
               </div>
@@ -187,7 +187,7 @@ export function LoginPage() {
                   required
                   value={formData.password}
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  className="w-full pl-12 pr-12 py-4 bg-[#F5F7FA] border border-[#E5E7EB] rounded-xl text-base text-[#1F2937] focus:outline-none focus:ring-2 focus:ring-[#FF9501] focus:border-transparent transition-shadow"
+                  className="w-full pl-12 pr-12 py-4 bg-[#F5F7FA] border border-[#E5E7EB] rounded-xl text-base text-[#1F2937] focus:outline-none focus:ring-2 focus:ring-[#dd7230] focus:border-transparent transition-shadow"
                   placeholder="••••••••"
                 />
                 <button
@@ -284,7 +284,7 @@ export function LoginPage() {
                     required
                     value={resetEmail}
                     onChange={(e) => setResetEmail(e.target.value)}
-                    className="w-full pl-12 pr-4 py-4 bg-[#F5F7FA] border border-[#E5E7EB] rounded-xl text-base focus:outline-none focus:ring-2 focus:ring-[#FF9501] transition-shadow"
+                    className="w-full pl-12 pr-4 py-4 bg-[#F5F7FA] border border-[#E5E7EB] rounded-xl text-base focus:outline-none focus:ring-2 focus:ring-[#dd7230] transition-shadow"
                     placeholder="your.email@ctu.edu.ph"
                   />
                 </div>

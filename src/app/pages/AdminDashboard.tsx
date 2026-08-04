@@ -34,11 +34,11 @@ export function AdminDashboard() {
           users: userCountsRes.data.all || 0
         });
 
-        setUserDistribution([
-          { role: "Admin", count: userCountsRes.data.all - userCountsRes.data.students - userCountsRes.data.faculty },
-          { role: "Faculty", count: userCountsRes.data.faculty },
-          { role: "Student", count: userCountsRes.data.students }
-        ]);
+          setUserDistribution([
+      { role: "Admin", count: userCountsRes.data.all - userCountsRes.data.students - userCountsRes.data.faculty, color: "#dd7230" },
+      { role: "Faculty", count: userCountsRes.data.faculty, color: "#1D6FA3" },
+      { role: "Student", count: userCountsRes.data.students, color: "#006837" }
+    ]);
 
         const catCounts: Record<string, number> = {};
         docsRes.data.forEach((doc: any) => {
@@ -113,28 +113,28 @@ export function AdminDashboard() {
       label: "Total Documents",
       value: globalStats.documents,
       icon: FileText,
-      color: "#FF9501", // Base Amber
+      color: "#dd7230", // Base Amber
       subtitle: "active in repository"
     },
     {
       label: "AI Queries",
       value: globalStats.queries,
       icon: MessageSquare,
-      color: "#D97E00", // Medium Amber
+      color: "#dd7230", // Medium Amber
       subtitle: "all-time interactions"
     },
     {
       label: "Accreditation",
       value: "85%",
       icon: CheckCircle,
-      color: "#995900", // Dark Amber
+      color: "#dd7230", // Dark Amber
       subtitle: "avg. campus compliance"
     },
     {
       label: "Active Users",
       value: globalStats.users,
       icon: Users,
-      color: "#D97E00",
+      color: "#dd7230 ",
       subtitle: "registered accounts"
     }
   ];
@@ -166,7 +166,7 @@ export function AdminDashboard() {
           <h1 className="text-2xl font-semibold text-[#1F2937]">Admin Dashboard</h1>
           <p className="text-sm text-[#6B7280] mt-1">Complete system overview and management controls</p>
         </div>
-        <div className="flex items-center gap-2 bg-[#FF9501] text-white px-4 py-2 rounded-lg shadow-sm">
+        <div className="flex items-center gap-2 bg-[#dd7230] text-white px-4 py-2 rounded-lg shadow-sm">
           <Shield className="h-4 w-4" />
           <span className="text-sm font-bold tracking-wider uppercase">System Administrator</span>
         </div>
@@ -205,7 +205,7 @@ export function AdminDashboard() {
       {/* System Alerts */}
       <div className="bg-white rounded-xl border border-[#E5E7EB] p-6 shadow-sm">
         <div className="flex items-center gap-2 mb-4">
-          <AlertCircle className="h-5 w-5 text-[#FF9501]" />
+          <AlertCircle className="h-5 w-5 text-[#dd7230]" />
           <h2 className="text-lg font-bold text-[#1F2937]">System Health & Alerts</h2>
         </div>
         <div className="space-y-3">
@@ -244,7 +244,7 @@ export function AdminDashboard() {
         {/* Activity Trend Chart */}
         <div className="bg-white rounded-xl border border-[#E5E7EB] p-6 shadow-sm h-[400px] flex flex-col">
           <h2 className="text-lg font-bold text-[#1F2937] mb-6 flex items-center gap-2 flex-shrink-0">
-            <TrendingUp className="h-5 w-5 text-[#FF9501]" /> Activity Trends (6 Months)
+            <TrendingUp className="h-5 w-5 text-[#dd7230]" /> Activity Trends (6 Months)
           </h2>
           <div className="flex-1 min-h-0">
             <ResponsiveContainer width="100%" height="100%">
@@ -264,7 +264,7 @@ export function AdminDashboard() {
         {/* Document Taxonomy Chart */}
         <div className="bg-white rounded-xl border border-[#E5E7EB] p-6 shadow-sm h-[400px] flex flex-col">
           <h2 className="text-lg font-bold text-[#1F2937] mb-6 flex items-center gap-2 flex-shrink-0">
-            <FileText className="h-5 w-5 text-[#FF9501]" /> Document Taxonomy
+            <FileText className="h-5 w-5 text-[#dd7230]" /> Document Taxonomy
           </h2>
           <div className="flex-1 min-h-0">
             {documentDistribution.length === 0 ? (
@@ -295,27 +295,32 @@ export function AdminDashboard() {
         </div>
 
         {/* User Distribution */}
-        <div className="bg-white rounded-xl border border-[#E5E7EB] p-6 shadow-sm h-[400px] flex flex-col">
-          <h2 className="text-lg font-bold text-[#1F2937] mb-6 flex items-center gap-2 flex-shrink-0">
-            <Users className="h-5 w-5 text-[#FF9501]" /> Active Demographics
-          </h2>
-          <div className="flex-1 min-h-0">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={userDistribution}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" vertical={false} />
-                <XAxis dataKey="role" tick={{ fill: '#6B7280', fontSize: 12, fontWeight: 500 }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fill: '#6B7280', fontSize: 12, fontWeight: 500 }} axisLine={false} tickLine={false} allowDecimals={false} />
-                <Tooltip cursor={{ fill: '#F9FAFB' }} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
-                <Bar dataKey="count" fill="#FF9501" radius={[6, 6, 0, 0]} barSize={50} name="Total Users" />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
+       {/* User Distribution */}
+<div className="bg-white rounded-xl border border-[#E5E7EB] p-6 shadow-sm h-[400px] flex flex-col">
+  <h2 className="text-lg font-bold text-[#1F2937] mb-6 flex items-center gap-2 flex-shrink-0">
+    <Users className="h-5 w-5 text-[#dd7230]" /> Active Demographics
+  </h2>
+  <div className="flex-1 min-h-0">
+    <ResponsiveContainer width="100%" height="100%">
+      <BarChart data={userDistribution}>
+        <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" vertical={false} />
+        <XAxis dataKey="role" tick={{ fill: '#6B7280', fontSize: 12, fontWeight: 500 }} axisLine={false} tickLine={false} />
+        <YAxis tick={{ fill: '#6B7280', fontSize: 12, fontWeight: 500 }} axisLine={false} tickLine={false} allowDecimals={false} />
+        <Tooltip cursor={{ fill: '#F9FAFB' }} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+        <Bar dataKey="count" radius={[6, 6, 0, 0]} barSize={50} name="Total Users">
+          {userDistribution.map((entry, index) => (
+            <Cell key={`cell-${index}`} fill={entry.color} />
+          ))}
+        </Bar>
+      </BarChart>
+    </ResponsiveContainer>
+  </div>
+</div>
 
         {/* Recent Activity Trail */}
         <div className="bg-white rounded-xl border border-[#E5E7EB] p-6 shadow-sm h-[400px] flex flex-col">
           <h2 className="text-lg font-bold text-[#1F2937] mb-6 flex items-center gap-2 flex-shrink-0">
-            <Clock className="h-5 w-5 text-[#CE0000]" /> Recent Audit Trail
+            <Clock className="h-5 w-5 text-[#dd7230]" /> Recent Audit Trail
           </h2>
           <div className="space-y-3 flex-1 overflow-y-auto pr-2 min-h-0 custom-scrollbar">
             {recentActivities.length === 0 ? (
@@ -328,7 +333,7 @@ export function AdminDashboard() {
                 >
                   <div className="flex-1 overflow-hidden pr-4">
                     <div className="flex items-center gap-2 mb-1">
-                      <span className="px-2.5 py-1 bg-[#FF9501]/10 text-[#FF9501] text-[10px] uppercase tracking-wider rounded-md font-bold whitespace-nowrap">
+                      <span className="px-2.5 py-1 bg-[#006837]/10 text-[#006837] text-[10px] uppercase tracking-wider rounded-md font-bold whitespace-nowrap">
                         {activity.action}
                       </span>
                       <span className="text-sm text-gray-500 font-medium whitespace-nowrap">{activity.time}</span>

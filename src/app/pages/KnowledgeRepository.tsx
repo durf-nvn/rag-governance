@@ -368,8 +368,8 @@ export function KnowledgeRepository() {
                 onClick={() => setShowArchived(!showArchived)}
                 className={`flex items-center justify-center w-40 gap-2 px-4 py-2 rounded-lg border transition-all cursor-pointer ${
                   showArchived 
-                    ? "bg-[#1F2937] text-white border-[#dd7230] hover:bg-gray-700" 
-                    : "bg-white text-gray-700 border-[#dd7230] hover:bg-[#dd7230]"
+                    ? "bg-[#1F2937] text-white border-[#1F2937] hover:bg-gray-700" 
+                    : "bg-white text-gray-700 border-[] hover:bg-[]"
                 }`}
               >
                 <Archive className="h-4 w-4 flex-shrink-0" />
@@ -665,7 +665,7 @@ export function KnowledgeRepository() {
                     name="name"
                     value={formData.name}
                     onChange={handleInputChange}
-                    className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#FF9501]"
+                    className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#dd7230]"
                     placeholder="Enter document name"
                   />
                 </div>
@@ -673,7 +673,7 @@ export function KnowledgeRepository() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-[#1F2937] mb-2">Category</label>
-                    <select name="category" value={formData.category} onChange={handleInputChange} className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#FF9501] cursor-pointer">
+                    <select name="category" value={formData.category} onChange={handleInputChange} className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#dd7230] cursor-pointer">
                       <option>Policy</option>
                       <option>Procedure / Guideline</option>
                       <option>Memorandum</option>
@@ -686,7 +686,7 @@ export function KnowledgeRepository() {
 
                   <div>
                     <label className="block text-sm font-medium text-[#1F2937] mb-2">Office</label>
-                    <select name="office" value={formData.office} onChange={handleInputChange} className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#FF9501] cursor-pointer">
+                    <select name="office" value={formData.office} onChange={handleInputChange} className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#dd7230] cursor-pointer">
                       <option>Academic Affairs</option>
                       <option>Student Affairs</option>
                       <option>Research Office</option>
@@ -703,7 +703,7 @@ export function KnowledgeRepository() {
                       name="version"
                       value={formData.version}
                       onChange={handleInputChange}
-                      className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#FF9501]"
+                      className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#dd7230]"
                       placeholder="e.g., v1.0, v2.5"
                     />
                   </div>
@@ -715,7 +715,7 @@ export function KnowledgeRepository() {
                       name="effectivityDate"
                       value={formData.effectivityDate}
                       onChange={handleInputChange}
-                      className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#FF9501] cursor-pointer"
+                      className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#dd7230] cursor-pointer"
                     />
                   </div>
                 </div>
@@ -728,12 +728,12 @@ export function KnowledgeRepository() {
                     onDrop={(e) => handleDrop(e, false)}
                     onClick={() => fileInputRef.current?.click()}
                     className={`border-2 border-dashed rounded-lg p-8 text-center transition-all cursor-pointer ${
-                      isDragging ? "border-[#FF9501] bg-[#FFF4E5]" : "border-[#E5E7EB] hover:border-[#FF9501] hover:bg-[#F9FAFB]"
+                      isDragging ? "border-[#FF9501] bg-[#FFF4E5]" : "border-[#E5E7EB] hover:border-[#dd7230] hover:bg-[#F9FAFB]"
                     }`}
                   >
                     {selectedFile ? (
                       <div className="flex flex-col items-center">
-                        <FileText className="h-12 w-12 text-[#FF9501] mb-3" />
+                        <FileText className="h-12 w-12 text-[#dd7230] mb-3" />
                         <p className="text-sm font-semibold text-[#1F2937]">{selectedFile.name}</p>
                         <p className="text-xs text-[#6B7280] mt-1">{(selectedFile.size / 1024 / 1024).toFixed(2)} MB</p>
                       </div>
@@ -769,7 +769,7 @@ export function KnowledgeRepository() {
               <button
                 onClick={handleUploadSubmit}
                 disabled={!selectedFile || isUploading}
-                className="px-5 py-2.5 text-sm font-semibold bg-[#FF9501] text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-[#D97E00] transition-colors flex items-center gap-2 cursor-pointer"
+                className="px-5 py-2.5 text-sm font-semibold bg-[#dd7230] text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-[#dd7230] transition-colors flex items-center gap-2 cursor-pointer"
               >
                 {isUploading ? <><Loader2 className="h-4 w-4 animate-spin"/> Uploading...</> : "Upload Document"}
               </button>
@@ -797,14 +797,14 @@ export function KnowledgeRepository() {
                   name="name"
                   value={formData.name}
                   onChange={handleInputChange}
-                  className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#FF9501]"
+                  className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#dd7230]"
                 />
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-[#1F2937] mb-2">Category</label>
-                  <select name="category" value={formData.category} onChange={handleInputChange} className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#FF9501] cursor-pointer">
+                  <select name="category" value={formData.category} onChange={handleInputChange} className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#dd7230] cursor-pointer">
                     <option>Policy</option>
                     <option>Procedure / Guideline</option>
                     <option>Memorandum</option>
@@ -816,7 +816,7 @@ export function KnowledgeRepository() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-[#1F2937] mb-2">Office</label>
-                  <select name="office" value={formData.office} onChange={handleInputChange} className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#FF9501] cursor-pointer">
+                  <select name="office" value={formData.office} onChange={handleInputChange} className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-[#E5E7EB] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#dd7230] cursor-pointer">
                     <option>Academic Affairs</option>
                     <option>Student Affairs</option>
                     <option>Research Office</option>

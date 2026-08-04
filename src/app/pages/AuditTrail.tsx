@@ -136,7 +136,7 @@ export function AuditTrail() {
         </div>
         <button 
           onClick={() => setShowExportModal(true)}
-          className="flex items-center gap-2 px-5 py-2.5 bg-[#FF9501] text-white font-medium rounded-lg hover:bg-[#D97E00] transition-colors shadow-sm cursor-pointer active:scale-95"
+          className="flex items-center gap-2 px-5 py-2.5 bg-[#dd7230] text-white font-medium rounded-lg hover:bg-[#dd7230] transition-colors shadow-sm cursor-pointer active:scale-95"
         >
           <FileSpreadsheet className="h-4 w-4" />
           Export Report
@@ -145,13 +145,13 @@ export function AuditTrail() {
 
       {/* Statistics - Monochromatic Amber Scaling */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <div className="bg-white rounded-lg shadow-sm p-6 border-t-4 border-[#FF9501]">
-          <h3 className="text-3xl font-bold text-[#FF9501] mb-2">{queryLogs.length}</h3>
+        <div className="bg-white rounded-lg shadow-sm p-6 border-t-4 border-[#1D6FA3]">
+          <h3 className="text-3xl font-bold text-[#1D6FA3] mb-2">{queryLogs.length}</h3>
           <p className="text-gray-700 font-medium">Total AI Queries</p>
           <p className="text-sm text-gray-500 mt-1">Recorded interactions</p>
         </div>
-        <div className="bg-white rounded-lg shadow-sm p-6 border-t-4 border-[#D97E00]">
-          <h3 className="text-3xl font-bold text-[#D97E00] mb-2">{accessLogs.length}</h3>
+        <div className="bg-white rounded-lg shadow-sm p-6 border-t-4 border-[#006837]">
+          <h3 className="text-3xl font-bold text-[#006837] mb-2">{accessLogs.length}</h3>
           <p className="text-gray-700 font-medium">Document Accesses</p>
           <p className="text-sm text-gray-500 mt-1">Tracked views & downloads</p>
         </div>
@@ -176,7 +176,7 @@ export function AuditTrail() {
               <button
                 onClick={() => setActiveTab("queries")}
                 className={`px-4 py-2 rounded-md text-sm font-medium whitespace-nowrap transition-all cursor-pointer ${
-                  activeTab === "queries" ? "bg-white text-[#D97E00] shadow-sm" : "text-gray-600 hover:text-gray-900"
+                  activeTab === "queries" ? "bg-white text-[#dd7230] shadow-sm" : "text-gray-600 hover:text-gray-900"
                 }`}
               >
                 AI Query Logs
@@ -184,7 +184,7 @@ export function AuditTrail() {
               <button
                 onClick={() => setActiveTab("access")}
                 className={`px-4 py-2 rounded-md text-sm font-medium whitespace-nowrap transition-all cursor-pointer ${
-                  activeTab === "access" ? "bg-white text-[#D97E00] shadow-sm" : "text-gray-600 hover:text-gray-900"
+                  activeTab === "access" ? "bg-white text-[#dd7230] shadow-sm" : "text-gray-600 hover:text-gray-900"
                 }`}
               >
                 Document Access
@@ -192,7 +192,7 @@ export function AuditTrail() {
               <button
                 onClick={() => setActiveTab("versions")}
                 className={`px-4 py-2 rounded-md text-sm font-medium whitespace-nowrap transition-all cursor-pointer ${
-                  activeTab === "versions" ? "bg-white text-[#D97E00] shadow-sm" : "text-gray-600 hover:text-gray-900"
+                  activeTab === "versions" ? "bg-white text-[#dd7230] shadow-sm" : "text-gray-600 hover:text-gray-900"
                 }`}
               >
                 Version History
@@ -200,7 +200,7 @@ export function AuditTrail() {
               <button
                 onClick={() => setActiveTab("system")}
                 className={`px-4 py-2 rounded-md text-sm font-medium whitespace-nowrap transition-all cursor-pointer ${
-                  activeTab === "system" ? "bg-white text-[#D97E00] shadow-sm" : "text-gray-600 hover:text-gray-900"
+                  activeTab === "system" ? "bg-white text-[#dd7230] shadow-sm" : "text-gray-600 hover:text-gray-900"
                 }`}
               >
                 System Events
@@ -215,7 +215,7 @@ export function AuditTrail() {
                   placeholder="Search logs..." 
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-9 pr-10 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#FF9501] transition-colors" 
+                  className="w-full pl-9 pr-10 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#dd7230] transition-colors" 
                 />
                 {searchQuery && (
                   <button
@@ -428,7 +428,7 @@ export function AuditTrail() {
           <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl overflow-hidden">
             <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-[#F5F7FA]">
               <div className="flex items-center gap-2">
-                <Download className="h-5 w-5 text-[#FF9501]" />
+                <Download className="h-5 w-5 text-[#dd7230]" />
                 <h2 className="text-xl font-bold text-[#1F2937]">Export Audit Report</h2>
               </div>
               <button onClick={() => setShowExportModal(false)} className="p-2 hover:bg-gray-200 rounded-full transition-colors cursor-pointer">
@@ -442,7 +442,7 @@ export function AuditTrail() {
                 <select 
                   value={exportType}
                   onChange={(e) => setExportType(e.target.value as TabType)}
-                  className="w-full px-4 py-3 bg-[#F5F7FA] border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#FF9501] cursor-pointer"
+                  className="w-full px-4 py-3 bg-[#F5F7FA] border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#dd7230] cursor-pointer"
                 >
                   <option value="queries">AI Query Logs</option>
                   <option value="access">Document Access Logs</option>
@@ -460,7 +460,7 @@ export function AuditTrail() {
                       type="date" 
                       value={exportDates.start}
                       onChange={(e) => setExportDates({...exportDates, start: e.target.value})}
-                      className="w-full pl-9 pr-3 py-3 bg-[#F5F7FA] border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#FF9501] text-sm cursor-pointer"
+                      className="w-full pl-9 pr-3 py-3 bg-[#F5F7FA] border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#dd7230] text-sm cursor-pointer"
                     />
                   </div>
                 </div>
@@ -472,7 +472,7 @@ export function AuditTrail() {
                       type="date" 
                       value={exportDates.end}
                       onChange={(e) => setExportDates({...exportDates, end: e.target.value})}
-                      className="w-full pl-9 pr-3 py-3 bg-[#F5F7FA] border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#FF9501] text-sm cursor-pointer"
+                      className="w-full pl-9 pr-3 py-3 bg-[#F5F7FA] border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#dd7230] text-sm cursor-pointer"
                     />
                   </div>
                 </div>
@@ -489,7 +489,7 @@ export function AuditTrail() {
               </button>
               <button 
                 onClick={handleExport} 
-                className="px-6 py-2.5 text-sm font-bold text-white rounded-xl bg-[#FF9501] hover:bg-[#D97E00] transition-colors flex items-center gap-2 cursor-pointer active:scale-95 shadow-sm"
+                className="px-6 py-2.5 text-sm font-bold text-white rounded-xl bg-[#dd7230] hover:bg-[#dd7230] transition-colors flex items-center gap-2 cursor-pointer active:scale-95 shadow-sm"
               >
                 <FileSpreadsheet className="h-4 w-4" />
                 Download CSV
