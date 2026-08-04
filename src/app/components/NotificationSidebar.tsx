@@ -245,7 +245,7 @@ export function NotificationSidebar({
       >
 
         {/* ══ Header (CTU Warm Amber Brand Gradient) ════════════════════ */}
-        <div className="flex-shrink-0 bg-gradient-to-br from-[#FF9501] to-[#D97E00] px-5 pt-5 pb-4 shadow-md">
+        <div className="flex-shrink-0 bg-gradient-to-br from-[#dd7230] to-[#dd7230] px-5 pt-5 pb-4 shadow-md">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
               {/* Bell with indicator */}
@@ -419,7 +419,7 @@ export function NotificationSidebar({
             {" · "}
             <button
               onClick={refresh}
-              className="text-[#D97E00] font-semibold hover:underline transition-colors cursor-pointer"
+              className="text-[#dd7230] font-semibold hover:underline transition-colors cursor-pointer"
             >
               refresh
             </button>

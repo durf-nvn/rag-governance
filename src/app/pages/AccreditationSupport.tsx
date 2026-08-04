@@ -757,10 +757,10 @@ export function AccreditationSupport() {
         <div className="bg-white rounded-xl shadow-sm border border-[#E5E7EB] overflow-hidden mb-6 transition-all duration-300">
           <button
             onClick={() => setIsAdminQueueOpen(!isAdminQueueOpen)}
-            className="w-full flex items-center justify-between p-5 bg-gradient-to-r from-[#FFF4E5] to-white hover:from-[#FFB84D]/20 transition-colors cursor-pointer"
+          className="w-full flex items-center justify-between p-5 bg-white hover:bg-[#FFF4E5]/20 transition-colors cursor-pointer"
           >
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-[#FF9501]">
+              <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-[#dd7230]">
                 <ShieldAlert className="h-5 w-5 text-white" />
               </div>
               <div className="text-left">
@@ -776,7 +776,7 @@ export function AccreditationSupport() {
                   {allPendingReviews.length} PENDING
                 </span>
               )}
-              <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center border border-gray-200 shadow-sm">
+              <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center border border-gray-200 shadow-sm">
                 {isAdminQueueOpen ? <ChevronUp className="h-5 w-5 text-gray-500" /> : <ChevronDown className="h-5 w-5 text-gray-500" />}
               </div>
             </div>
@@ -1187,7 +1187,7 @@ export function AccreditationSupport() {
                 {userRole === "ADMIN" && (
                   <button 
                     onClick={() => setShowAddChedReqModal(true)}
-                    className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 bg-[#FF9501] text-white rounded-lg hover:bg-[#D97E00] transition-all text-xs font-bold cursor-pointer shadow-sm active:scale-95"
+                    className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 bg-[#dd7230] text-white rounded-lg hover:bg-[#dd7230] transition-all text-xs font-bold cursor-pointer shadow-sm active:scale-95"
                   >
                     <Plus className="h-3.5 w-3.5" /><span className="hidden sm:inline"> Add Requirement</span><span className="sm:hidden">Add</span>
                   </button>
@@ -1208,7 +1208,7 @@ export function AccreditationSupport() {
                   <h3 className="text-lg font-bold text-gray-900">No Checklist Found</h3>
                   <p className="text-sm text-gray-500 mt-1 mb-4">There are no CHED requirements configured for {selectedProgram}.</p>
                   {userRole === "ADMIN" && (
-                    <button onClick={() => setShowAddChedReqModal(true)} className="px-5 py-2 bg-orange-50 text-[#FF9501] text-sm font-bold rounded-lg border border-[#FF9501]/30 hover:bg-orange-100 transition-colors">
+                    <button onClick={() => setShowAddChedReqModal(true)} className="px-5 py-2 bg-orange-50 text-[#dd7230] text-sm font-bold rounded-lg border border-[#dd7230]/30 hover:bg-orange-100 transition-colors">
                       Configure First Requirement
                     </button>
                   )}
@@ -1406,7 +1406,7 @@ export function AccreditationSupport() {
                 {userRole === "ADMIN" && (
                   <button
                     onClick={() => setShowAddIsoReqModal(true)}
-                    className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 bg-[#FF9501] text-white rounded-lg hover:bg-[#D97E00] transition-all text-xs font-bold cursor-pointer shadow-sm active:scale-95"
+                    className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 bg-[#dd7230] text-white rounded-lg hover:bg-[#dd7230] transition-all text-xs font-bold cursor-pointer shadow-sm active:scale-95"
                   >
                     <Plus className="h-3.5 w-3.5" /><span className="hidden sm:inline"> Add ISO Clause</span><span className="sm:hidden">Add</span>
                   </button>
@@ -1499,14 +1499,14 @@ export function AccreditationSupport() {
                   {isoRequirements
                     .filter((req) => isoOfficeFilter === "all" || req.auditee_office === isoOfficeFilter)
                     .map((req, idx) => (
-                      <div key={idx} className="bg-white border border-gray-200 hover:border-[#FF9501] rounded-xl p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between group">
+                      <div key={idx} className="bg-white border border-gray-200 hover:border-[#dd7230] rounded-xl p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between group">
                         <div>
                           <div className="flex items-start justify-between gap-3 mb-2">
                             <div>
                               <span className="px-2.5 py-1 bg-orange-100 text-[#D97E00] text-[10px] font-bold uppercase rounded tracking-wider border border-[#FF9501]/30">
                                 {req.iso_clause}
                               </span>
-                              <h3 className="font-bold text-gray-900 text-base mt-2 group-hover:text-[#FF9501] transition-colors">{req.title}</h3>
+                              <h3 className="font-bold text-gray-900 text-base mt-2 group-hover:text-[#dd7230] transition-colors">{req.title}</h3>
                             </div>
                             <div>
                               {req.status === "Compliant" ? (
@@ -1571,7 +1571,7 @@ export function AccreditationSupport() {
                         <div className="mt-5 pt-3 border-t border-gray-100 flex items-center justify-between gap-2">
                           <button
                             onClick={() => { setSelectedIsoReq(req); setUploadForm({ fileName: "", requirementTarget: "" }); setSelectedFile(null); setShowIsoUploadModal(true); }}
-                            className="flex items-center gap-1.5 px-3 py-1.5 bg-[#FF9501] text-white text-xs font-bold rounded hover:bg-[#D97E00] transition-colors shadow-sm cursor-pointer"
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-[#dd7230] text-white text-xs font-bold rounded hover:bg-[#dd7230] transition-colors shadow-sm cursor-pointer"
                           >
                             <Upload className="h-3.5 w-3.5" /> Upload Evidence
                           </button>
@@ -1628,7 +1628,7 @@ export function AccreditationSupport() {
                 {userRole === "ADMIN" && (
                   <button
                     onClick={() => { setIqaDayForm({ day_number: iqaDays.length + 1, day_date: "", title: "", scope: "" }); setShowAddIqaDayModal(true); }}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-[#FF9501] text-white text-xs font-bold rounded-lg hover:bg-[#D97E00] transition-all cursor-pointer shadow-sm active:scale-95"
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-[#dd7230] text-white text-xs font-bold rounded-lg hover:bg-[#dd7230] transition-all cursor-pointer shadow-sm active:scale-95"
                   >
                     <Plus className="h-3.5 w-3.5" /><span className="hidden sm:inline"> Add Audit Day</span><span className="sm:hidden">Add</span>
                   </button>
@@ -1643,19 +1643,19 @@ export function AccreditationSupport() {
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
                 {iqaDays.map((day, idx) => (
-                  <div key={day.id || idx} className="p-5 bg-white border border-gray-200 hover:border-[#FF9501] rounded-xl space-y-3 shadow-sm hover:shadow-md transition-all flex flex-col justify-between group">
+                  <div key={day.id || idx} className="p-5 bg-white border border-gray-200 hover:border-[#dd7230] rounded-xl space-y-3 shadow-sm hover:shadow-md transition-all flex flex-col justify-between group">
                     <div>
                       <div className="flex justify-between items-center pb-2 border-b border-gray-100">
-                        <span className="px-2.5 py-0.5 bg-[#FF9501] text-white text-[10px] font-extrabold uppercase rounded shadow-2xs">
+                        <span className="px-2.5 py-0.5 bg-[#dd7230] text-white text-[10px] font-extrabold uppercase rounded shadow-2xs">
                           Day {day.day_number}
                         </span>
                         <div className="flex items-center gap-1.5 text-xs font-bold text-gray-700 bg-gray-50 px-2.5 py-1 rounded-lg border border-gray-200">
-                          <Calendar className="h-3.5 w-3.5 text-[#FF9501]" />
+                          <Calendar className="h-3.5 w-3.5 text-[#dd7230]" />
                           <span>{day.day_date || "TBD"}</span>
                         </div>
                       </div>
 
-                      <h4 className="font-bold text-gray-900 text-sm mt-3 group-hover:text-[#FF9501] transition-colors">{day.title}</h4>
+                      <h4 className="font-bold text-gray-900 text-sm mt-3 group-hover:text-[#dd7230] transition-colors">{day.title}</h4>
                       <p className="text-xs text-gray-600 leading-relaxed mt-1.5">{day.scope}</p>
                     </div>
 
@@ -1663,7 +1663,7 @@ export function AccreditationSupport() {
                       <div className="pt-2 border-t border-gray-100 flex items-center justify-end gap-1.5">
                         <button
                           onClick={() => { setEditingIqaDay(day); setShowEditIqaDayModal(true); }}
-                          className="p-1.5 text-gray-400 hover:text-[#FF9501] transition-colors rounded cursor-pointer" title="Edit Day"
+                          className="p-1.5 text-gray-400 hover:text-[#dd7230] transition-colors rounded cursor-pointer" title="Edit Day"
                         >
                           <Edit className="h-4 w-4" />
                         </button>
@@ -1786,7 +1786,7 @@ export function AccreditationSupport() {
                   </div>
                 </div>
                 
-                <button className="w-full mt-4 py-2 flex items-center justify-center gap-2 text-xs font-bold text-[#dd7230] hover:text-[#dd7230] bg-orange-50 rounded-lg transition-colors cursor-pointer">
+                <button className="w-full mt-4 py-2 flex items-center justify-center gap-2 text-xs font-bold text-[] hover:text-[#dd7230] bg-orange-50 rounded-lg transition-colors cursor-pointer">
                   View Full Registry <ExternalLink className="w-3.5 h-3.5" />
                 </button>
               </div>
@@ -1968,7 +1968,7 @@ export function AccreditationSupport() {
                 <label className="block text-xs font-bold text-gray-700 mb-2 uppercase tracking-wider">CMO Reference</label>
                 <input
                   type="text" required value={newChedReq.cmo_name} onChange={(e) => setNewChedReq({...newChedReq, cmo_name: e.target.value})}
-                  className="w-full px-4 py-3 bg-[#F5F7FA] border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#FF9501] transition-all font-medium text-sm"
+                  className="w-full px-4 py-3 bg-[#F5F7FA] border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#dd7230] transition-all font-medium text-sm"
                   placeholder="e.g., CMO 25 series of 2015"
                 />
               </div>
@@ -1977,7 +1977,7 @@ export function AccreditationSupport() {
                 <label className="block text-xs font-bold text-gray-700 mb-2 uppercase tracking-wider">Requirement Description</label>
                 <textarea
                   required value={newChedReq.description} onChange={(e) => setNewChedReq({...newChedReq, description: e.target.value})} rows={3}
-                  className="w-full px-4 py-3 bg-[#F5F7FA] border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#FF9501] transition-all font-medium text-sm resize-none"
+                  className="w-full px-4 py-3 bg-[#F5F7FA] border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#dd7230] transition-all font-medium text-sm resize-none"
                   placeholder="e.g., The Dean must hold a Master's degree in Information Technology."
                 />
               </div>
@@ -1986,7 +1986,7 @@ export function AccreditationSupport() {
                 <button type="button" onClick={() => setShowAddChedReqModal(false)} className="flex-1 px-5 py-3 text-sm font-bold text-gray-500 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors cursor-pointer uppercase tracking-wider">
                   Cancel
                 </button>
-                <button type="submit" disabled={!newChedReq.cmo_name || !newChedReq.description || isAddingReq} className="flex-1 px-5 py-3 text-sm font-bold bg-[#FF9501] text-white rounded-xl hover:bg-[#D97E00] disabled:opacity-50 transition-all flex justify-center items-center gap-2 cursor-pointer active:scale-95 shadow-md uppercase tracking-wider">
+                <button type="submit" disabled={!newChedReq.cmo_name || !newChedReq.description || isAddingReq} className="flex-1 px-5 py-3 text-sm font-bold bg-[#dd7230] text-white rounded-xl hover:bg-[#dd7230] disabled:opacity-50 transition-all flex justify-center items-center gap-2 cursor-pointer active:scale-95 shadow-md uppercase tracking-wider">
                   {isAddingReq ? <><Loader2 className="h-4 w-4 animate-spin"/> Saving...</> : "Add to Checklist"}
                 </button>
               </div>
@@ -2162,11 +2162,11 @@ export function AccreditationSupport() {
       {/* --- ISO UPLOAD EVIDENCE MODAL --- */}
       {showIsoUploadModal && selectedIsoReq && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in">
-          <div className="bg-white rounded-2xl max-w-lg w-full shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 border-t-4 border-t-[#FF9501]">
+          <div className="bg-white rounded-2xl max-w-lg w-full shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 border-t-4 border-t-[#dd7230]">
             <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-[#F9FAFB]">
               <div>
                 <h2 className="text-xl font-bold text-[#1F2937]">Upload ISO Clause Evidence</h2>
-                <p className="text-xs font-semibold text-[#FF9501] mt-1">{selectedIsoReq.iso_clause}: {selectedIsoReq.title}</p>
+                <p className="text-xs font-semibold text-[#dd7230] mt-1">{selectedIsoReq.iso_clause}: {selectedIsoReq.title}</p>
               </div>
               <button onClick={() => setShowIsoUploadModal(false)} className="p-2 hover:bg-gray-200 rounded-full transition-colors cursor-pointer text-gray-500">
                 <X className="h-5 w-5" />
@@ -2194,7 +2194,7 @@ export function AccreditationSupport() {
                   onChange={(e) => setUploadForm({ ...uploadForm, fileName: e.target.value })}
                   placeholder="e.g. Risk Assessment Matrix 2025.pdf"
                   required
-                  className="w-full px-4 py-3 bg-[#F5F7FA] border border-gray-200 rounded-xl text-sm font-medium text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#FF9501] transition-all"
+                  className="w-full px-4 py-3 bg-[#F5F7FA] border border-gray-200 rounded-xl text-sm font-medium text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#dd7230] transition-all"
                 />
               </div>
 
@@ -2208,11 +2208,11 @@ export function AccreditationSupport() {
                   onDrop={handleDrop}
                   onClick={() => fileInputRef.current?.click()}
                   className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-all ${
-                    isDragging ? "border-[#FF9501] bg-orange-50" : "border-gray-300 hover:border-[#FF9501] bg-[#F5F7FA]"
+                    isDragging ? "border-[] bg-orange-50" : "border-gray-300 hover:border-[#dd7230] bg-[#F5F7FA]"
                   }`}
                 >
                   <input ref={fileInputRef} type="file" onChange={handleFileSelect} className="hidden" accept=".pdf,.png,.jpg,.jpeg,.doc,.docx" />
-                  <Upload className="h-8 w-8 text-[#FF9501] mx-auto mb-2" />
+                  <Upload className="h-8 w-8 text-[#dd7230] mx-auto mb-2" />
                   {selectedFile ? (
                     <div>
                       <p className="text-sm font-bold text-gray-900">{selectedFile.name}</p>
@@ -2231,7 +2231,7 @@ export function AccreditationSupport() {
                 <button type="button" onClick={() => setShowIsoUploadModal(false)} disabled={isUploading} className="px-5 py-2.5 text-xs font-bold text-gray-500 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors uppercase tracking-widest cursor-pointer">
                   Cancel
                 </button>
-                <button type="submit" disabled={isUploading || !selectedFile || !uploadForm.fileName.trim()} className="px-5 py-2.5 text-xs font-bold text-white bg-[#FF9501] hover:bg-[#D97E00] rounded-xl transition-all shadow-md disabled:opacity-50 flex items-center gap-2 uppercase tracking-widest cursor-pointer">
+                <button type="submit" disabled={isUploading || !selectedFile || !uploadForm.fileName.trim()} className="px-5 py-2.5 text-xs font-bold text-white bg-[#dd7230] hover:bg-[#dd7230] rounded-xl transition-all shadow-md disabled:opacity-50 flex items-center gap-2 uppercase tracking-widest cursor-pointer">
                   {isUploading ? <><Loader2 className="h-4 w-4 animate-spin"/> Uploading...</> : "Submit Evidence"}
                 </button>
               </div>
@@ -2656,7 +2656,7 @@ export function AccreditationSupport() {
       {/* --- ADD DYNAMIC IQA AUDIT DAY MODAL --- */}
       {showAddIqaDayModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in">
-          <div className="bg-white rounded-2xl max-w-lg w-full shadow-2xl overflow-hidden border-t-4 border-t-[#FF9501]">
+          <div className="bg-white rounded-2xl max-w-lg w-full shadow-2xl overflow-hidden border-t-4 border-t-[#dd7230]">
             <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-[#F9FAFB]">
               <div>
                 <h2 className="text-xl font-bold text-[#1F2937]">Add IQA Audit Day</h2>
@@ -2679,7 +2679,7 @@ export function AccreditationSupport() {
                     value={iqaDayForm.day_number}
                     onChange={(e) => setIqaDayForm({ ...iqaDayForm, day_number: parseInt(e.target.value) || 1 })}
                     required
-                    className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-gray-200 rounded-xl text-sm font-semibold text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#FF9501]"
+                    className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-gray-200 rounded-xl text-sm font-semibold text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#dd7230]"
                   />
                 </div>
 
@@ -2692,7 +2692,7 @@ export function AccreditationSupport() {
                     value={iqaDayForm.day_date}
                     onChange={(e) => setIqaDayForm({ ...iqaDayForm, day_date: e.target.value })}
                     required
-                    className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-gray-200 rounded-xl text-sm font-semibold text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#FF9501] cursor-pointer"
+                    className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-gray-200 rounded-xl text-sm font-semibold text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#dd7230] cursor-pointer"
                   />
                 </div>
               </div>
@@ -2707,7 +2707,7 @@ export function AccreditationSupport() {
                   onChange={(e) => setIqaDayForm({ ...iqaDayForm, title: e.target.value })}
                   placeholder="e.g. Context, Risk & Resource Audit"
                   required
-                  className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-gray-200 rounded-xl text-sm font-medium text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#FF9501]"
+                  className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-gray-200 rounded-xl text-sm font-medium text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#dd7230]"
                 />
               </div>
 
@@ -2721,7 +2721,7 @@ export function AccreditationSupport() {
                   placeholder="Describe specific offices to be audited, target clauses, and verification criteria..."
                   rows={3}
                   required
-                  className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-gray-200 rounded-xl text-sm font-medium text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#FF9501] resize-none"
+                  className="w-full px-4 py-2.5 bg-[#F5F7FA] border border-gray-200 rounded-xl text-sm font-medium text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#dd7230] resize-none"
                 />
               </div>
 
@@ -2729,7 +2729,7 @@ export function AccreditationSupport() {
                 <button type="button" onClick={() => setShowAddIqaDayModal(false)} disabled={isSavingIqaDay} className="px-5 py-2.5 text-xs font-bold text-gray-500 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors uppercase tracking-widest cursor-pointer">
                   Cancel
                 </button>
-                <button type="submit" disabled={isSavingIqaDay || !iqaDayForm.title.trim() || !iqaDayForm.day_date.trim()} className="px-5 py-2.5 text-xs font-bold text-white bg-[#FF9501] hover:bg-[#D97E00] rounded-xl transition-all shadow-md disabled:opacity-50 flex items-center gap-2 uppercase tracking-widest cursor-pointer">
+                <button type="submit" disabled={isSavingIqaDay || !iqaDayForm.title.trim() || !iqaDayForm.day_date.trim()} className="px-5 py-2.5 text-xs font-bold text-white bg-[#dd7230] hover:bg-[#dd7230] rounded-xl transition-all shadow-md disabled:opacity-50 flex items-center gap-2 uppercase tracking-widest cursor-pointer">
                   {isSavingIqaDay ? <><Loader2 className="h-4 w-4 animate-spin"/> Adding...</> : "Add Audit Day"}
                 </button>
               </div>
