@@ -1,18 +1,13 @@
 // server.js
 // ---------------------------------------------------------------------------
-// A tiny local backend for testing the AI Document Generator with Vite/CRA,
-// which has no server of its own. This keeps your GROQ_API_KEY out of the
-// browser — the React app calls this server, and this server calls Groq
-// (a free, OpenAI-compatible API — no credit card required).
+// A tiny local backend for testing the AI Document Generator with Vite/CRA.
+// Keeps your GROQ_API_KEY secure on the server side.
 //
 // SETUP
-//   npm install express cors dotenv
-//   Get a free key at https://console.groq.com/keys
 //   Add GROQ_API_KEY=gsk_... to your .env file
 //
 // RUN
 //   node server.js
-//   (keep this running in its own terminal, alongside `npm run dev`)
 // ---------------------------------------------------------------------------
 
 import express from "express";
@@ -27,38 +22,47 @@ const PORT = process.env.PORT || 3001;
 app.use(cors());
 app.use(express.json());
 
-const SYSTEM_PROMPT = `You are a professional document-drafting assistant embedded in an
-institutional document generator.
+const SYSTEM_PROMPT = `You are a senior institutional and academic document drafting assistant for higher education institutions (such as Cebu Technological University - CTU Argao Campus and partner organizations).
+
+You generate professional, legally sound, and academic-grade documents (e.g., Memoranda, Office Orders, Activity Proposals, Course Syllabi, Endorsement Letters, Resolutions, Certificates, Policy Guidelines, Contracts, Terms of Reference, Minutes of Meeting).
 
 RULES:
-1. Generate ONLY the body content of the requested document (academic,
-   business, legal, invoice, contract, report, proposal, letter, NDA,
-   certificate, or any other document type the user describes).
-2. NEVER generate, describe, or reference a header, footer, letterhead,
-   logo, page-number block, or company seal. Those are controlled
-   exclusively by the user's own image uploads outside of your output.
-3. Do not wrap the response in markdown code fences.
-4. Use clear structure, formatted like a formal printed document:
-   - A single top-level title as the very first line, prefixed with "# ".
-     Write it in Title Case (it will be centered and capitalized
-     automatically) - keep it short, e.g. "# Property Management Agreement".
-   - Section headings prefixed with "## ", short and in Title Case
-     (e.g. "## Parties", "## Term", "## Responsibilities of the Agent").
-     These render bold and underlined, matching standard legal/contract
-     section headers - do not add numbering to them yourself.
-   - For any information that must be filled in later by the user (names,
-     dates, addresses, amounts, signatures), write a blank line using a
-     run of underscores at least 15 characters long, e.g. "between
-     ______________________ (the \"Owner\") and ______________________
-     (the \"Agent\")". Do NOT use bracket placeholders like [Owner Name].
-   - Use "- " for bulleted lists (e.g. responsibilities, clauses, line
-     items). Use plain paragraphs for everything else. No HTML.
-5. Match tone and formality to the document type requested (e.g. legal
-   documents should read as formal legal prose with the blank-line
-   convention above; invoices should use clean line-item structure;
-   lesson plans should be structured and practical for an instructor).
-6. Be complete and usable as a first draft - the user will review and
-   edit before finalizing, but it should require minimal rewriting.`;
+1. Generate ONLY the body content of the document. Do not generate or simulate graphic letterheads or institutional logos (those are attached via letterhead images).
+2. Do not wrap the response in markdown code fences (\`\`\`markdown or \`\`\`).
+3. Maintain an executive, professional academic tone with pristine formatting:
+   - A top-level Title (# DOCUMENT TITLE) in UPPERCASE.
+   - For Memoranda/Letters/Proposals, include institutional metadata block:
+     **MEMORANDUM NO. / REF NO.:** __________, s. 2026
+     **FOR / TO:** ___________________________________
+     **THROUGH:** ___________________________________ (if applicable)
+     **FROM:** _____________________________________
+     **DATE:** _____________________________________
+     **SUBJECT:** __________________________________
+   - Use structured section headings (## 1.0 RATIONALE, ## 2.0 OBJECTIVES, ## 3.0 SCOPE & COVERAGE, ## 4.0 GUIDELINES / PROVISIONS, ## 5.0 TIMELINE & DELIVERABLES, ## 6.0 EFFECTIVITY, etc.) appropriate for the document type.
+   - For lists, use standard bulleted points ("- ") or numbered points ("1. ").
+   - For blanks to be filled in later (names, amounts, dates, titles), use solid underline blanks: "________________________". Do NOT use bracket placeholders like [Name].
+   - Always include formal university signature/concurrence blocks at the end:
+     **Prepared by:**
+     ____________________________________
+     Faculty Member / Proponent
+
+     **Reviewed & Endorsed by:**
+     ____________________________________
+     Department Chairperson / Dean
+
+     **Approved by:**
+     ____________________________________
+     Campus Director / University President
+4. Ensure the draft is complete, rich in institutional context, coherent, and ready for immediate review and printing without missing standard sections.`;
+
+// Candidate models in order of priority
+const MODELS_TO_TRY = [
+  process.env.GROQ_MODEL,
+  "openai/gpt-oss-120b",
+  "openai/gpt-oss-20b",
+  "qwen/qwen3.6-27b",
+  "groq/compound",
+].filter(Boolean);
 
 app.post("/api/generate-document", async (req, res) => {
   try {
@@ -66,7 +70,7 @@ app.post("/api/generate-document", async (req, res) => {
       console.error("GROQ_API_KEY is not set. Check your .env file.");
       return res
         .status(500)
-        .json({ error: "The AI service is not configured. Please contact the site administrator." });
+        .json({ error: "The AI service is not configured. Please add GROQ_API_KEY in .env." });
     }
 
     const { prompt } = req.body;
@@ -75,35 +79,56 @@ app.post("/api/generate-document", async (req, res) => {
       return res.status(400).json({ error: "A prompt is required." });
     }
 
-    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: "llama-3.3-70b-versatile",
-        messages: [
-          { role: "system", content: SYSTEM_PROMPT },
-          { role: "user", content: prompt },
-        ],
-        temperature: 0.7,
-      }),
-    });
+    let lastError = null;
+    let content = "";
 
-    if (!response.ok) {
-      const errText = await response.text();
-      console.error("OpenAI API error:", response.status, errText);
+    // Try candidate models
+    for (const model of MODELS_TO_TRY) {
+      try {
+        const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
+          },
+          body: JSON.stringify({
+            model,
+            messages: [
+              { role: "system", content: SYSTEM_PROMPT },
+              { role: "user", content: prompt },
+            ],
+            temperature: 0.7,
+          }),
+        });
+
+        if (!response.ok) {
+          const errText = await response.text();
+          console.warn(`Groq model ${model} failed (${response.status}):`, errText);
+          lastError = errText;
+          continue; // try next model
+        }
+
+        const data = await response.json();
+        let rawContent = data.choices?.[0]?.message?.content ?? "";
+
+        // Strip any thinking tags if present in model output
+        rawContent = rawContent.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
+
+        if (rawContent) {
+          content = rawContent;
+          break; // Success!
+        }
+      } catch (modelErr) {
+        console.warn(`Error connecting with model ${model}:`, modelErr.message);
+        lastError = modelErr.message;
+      }
+    }
+
+    if (!content.trim()) {
+      console.error("All models failed. Last error:", lastError);
       return res
         .status(502)
         .json({ error: "The AI service could not generate this document. Please try again." });
-    }
-
-    const data = await response.json();
-    const content = data.choices?.[0]?.message?.content ?? "";
-
-    if (!content.trim()) {
-      return res.status(502).json({ error: "The AI service returned an empty response." });
     }
 
     res.json({ content });
