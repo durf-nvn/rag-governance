@@ -241,4 +241,4 @@ class IQADayScheduleResponse(BaseModel):
         from_attributes = True
 
 
-
+

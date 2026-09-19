@@ -23,6 +23,16 @@ from sanitizer import sanitize_user_input, check_prompt_injection
 import traceback
 import numpy as np
 from PIL import Image as PILImage
+import base64
+from document_service import (
+    generate_content,
+    upload_docx_to_drive,
+    save_local_docx,
+    record_generated_document,
+    drive_is_available,
+)
+from google_drive import export_google_doc
+
 
 # Lazy-load PaddleOCR to avoid blocking at startup
 _ocr_instance = None
@@ -3495,4 +3505,4 @@ def delete_iqa_schedule_day(
     return {"message": "IQA Audit Day deleted successfully."}
 
 
-
+
