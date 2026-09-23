@@ -1,4 +1,9 @@
 import os
+import sys
+
+# Ensure backend directory is in sys.path so modules import correctly from root or backend
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
 import io
 import json
 import time
@@ -24,14 +29,17 @@ import traceback
 import numpy as np
 from PIL import Image as PILImage
 import base64
-from document_service import (
-    generate_content,
-    upload_docx_to_drive,
-    save_local_docx,
-    record_generated_document,
-    drive_is_available,
-)
-from google_drive import export_google_doc
+try:
+    from document_service import (
+        generate_content,
+        upload_docx_to_drive,
+        save_local_docx,
+        record_generated_document,
+        drive_is_available,
+    )
+    from google_drive import export_google_doc
+except ImportError:
+    pass
 
 
 # Lazy-load PaddleOCR to avoid blocking at startup

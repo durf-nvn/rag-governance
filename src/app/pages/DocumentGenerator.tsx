@@ -18,6 +18,19 @@
  *   • Tables split between rows (header row repeats); Enter in a heading
  *     never creates another underlined heading.
  *   • Preview pages scale to the panel width at any browser zoom.
+ *
+ * LINE-SPACING / FIT FIX (v4)
+ *   • Line-height is never compressed by the fitter — the user's chosen
+ *     spacing is a hard contract that survives into editor, preview and print.
+ *   • Changing line spacing or page size in the Layout ribbon now counts as
+ *     a user customization, just like typing. Once the user has customized
+ *     the document, the aggressive "force onto the requested page count"
+ *     pass is disabled: the document flows onto as many pages as the chosen
+ *     typography requires. The small-overflow absorption (≤ 20% of a page)
+ *     still applies so a lone spilling line gets pulled back in.
+ *   • The paginator fast-paths "already fits on one page" and otherwise
+ *     measures real rendered positions (getBoundingClientRect), so margin
+ *     collapsing is respected and adjacent margins never count twice.
  */
 
 import React, { useState, useRef, useEffect, type RefObject } from "react";
@@ -76,7 +89,7 @@ const PAGE_FIT_SAFETY_PX = 12;
 
 const MIN_FIT_FONT_PT = 10;
 
-/** Non-AI documents (templates etc.) are only auto-fitted when they overflow one page by at most this ratio. */
+/** Non-AI / user-customized documents are only auto-fitted when they overflow one page by at most this ratio. */
 const SMALL_OVERFLOW_FIT_RATIO = 1.2;
 
 /** The signature block is only searched for among the last N blocks of the document. */
@@ -112,9 +125,11 @@ const DEFAULT_FOOTER_URL = "/ctu-argao-footer.jpg";
 
 /* ============================================================================
  * SHARED CONTENT CSS
+ * ── line-height is a single custom property (--doc-line-height), written on
+ *    every .wysiwyg-content surface (editor / measure / preview / print).
  * ==========================================================================*/
 const CONTENT_STYLES = `
-  .wysiwyg-content { box-sizing: border-box; }
+  .wysiwyg-content { box-sizing: border-box; line-height: var(--doc-line-height, 1.45); }
   .wysiwyg-content * { box-sizing: border-box; }
   .wysiwyg-content h1 { font-size: 1.45em; text-align: center; text-transform: uppercase;
     margin: 0 0 14px 0; letter-spacing: 0.03em; font-weight: 700; }
@@ -122,10 +137,10 @@ const CONTENT_STYLES = `
     padding-bottom: 2px; margin: 14px 0 6px 0; font-weight: 700; }
   .wysiwyg-content h3 { font-size: 1.02em; border-bottom: 1px solid #6b7280;
     padding-bottom: 2px; margin: 10px 0 4px 0; font-weight: 700; }
-  .wysiwyg-content p { margin: 0 0 6px 0; line-height: 1.45; }
+  .wysiwyg-content p { margin: 0 0 6px 0; }
   .wysiwyg-content ul { margin: 0 0 8px 0; padding-left: 24px; list-style-type: disc; }
   .wysiwyg-content ol { margin: 0 0 8px 0; padding-left: 24px; list-style-type: decimal; }
-  .wysiwyg-content li { margin-bottom: 4px; line-height: 1.45; }
+  .wysiwyg-content li { margin-bottom: 4px; }
   .wysiwyg-content table { width: 100%; border-collapse: collapse; margin: 8px 0; font-size: 0.9em; }
   .wysiwyg-content img { max-width: 100%; height: auto; }
   .wysiwyg-content strong { font-weight: 700; }
@@ -202,6 +217,12 @@ type DownloadTarget = "docx" | null;
 type DocAlign = "left" | "center" | "right" | "justify";
 type AppView = "chooser" | "templates" | "compose" | "editor";
 type RibbonTab = "home" | "layout" | "insert";
+type LineSpacing = "1.15" | "1.5" | "2.0";
+
+/** Helper: safely set a CSS custom property inline without TS complaining. */
+function cssVars(vars: Record<string, string>): React.CSSProperties {
+  return vars as unknown as React.CSSProperties;
+}
 
 /* ============================================================================
  * IMAGE HELPERS
@@ -381,7 +402,6 @@ function splitTableAtHeight(table: HTMLElement, maxHeight: number): { firstHtml:
   const rows = Array.from(table.querySelectorAll("tbody > tr")) as HTMLElement[];
   if (rows.length < 2) return null;
 
-  // Leave room for the table's own top margin.
   const limit = maxHeight - 10;
   const top = table.getBoundingClientRect().top;
   let splitIndex = -1;
@@ -478,18 +498,24 @@ function sanitizeFileName(input: string): string {
   return input.trim().slice(0, 40).replace(/[^a-z0-9\s-]/gi, "").replace(/\s+/g, "_") || "CTU_Document";
 }
 
+/** Institutional memos/proposals/letters are realistically 1-5 pages; capping
+ *  here keeps generations fast, keeps the browser-side pagination snappy, and
+ *  stays well clear of any model's default completion-length limit. */
+const MAX_TARGET_PAGES = 5;
+
 function parseTargetPageCount(prompt: string): number | null {
   const p = (prompt || "").toLowerCase();
-  if (/multi[-\s]?page/.test(p)) return null;
+  if (/multi[-\s]?page/.test(p)) return MAX_TARGET_PAGES;
   const wordMatch = p.match(/\b(one|two|three|four|five|six|seven|eight|nine|ten)\s*page/);
   if (wordMatch) {
     const map: Record<string, number> = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10 };
-    return map[wordMatch[1]] ?? 1;
+    const n = map[wordMatch[1]] ?? 1;
+    return Math.min(n, MAX_TARGET_PAGES);
   }
   const numMatch = p.match(/(\d+)\s*page/);
   if (numMatch) {
     const n = parseInt(numMatch[1], 10);
-    if (n >= 1 && n <= 30) return n;
+    if (n >= 1) return Math.min(n, MAX_TARGET_PAGES);
   }
   return 1;
 }
@@ -507,7 +533,7 @@ function parseFontSizePt(styleStr: string, baseSizePt: number): number | null {
 }
 
 /* ============================================================================
- * FIT-TO-PAGE HELPERS — fully two-way
+ * FIT-TO-PAGE HELPERS
  * ==========================================================================*/
 
 /** Reduce explicit font sizes on any element that carries one inline. */
@@ -521,15 +547,26 @@ function reduceExplicitFontSizes(measure: HTMLElement, delta: number): void {
 }
 
 /**
- * Aggressive single-page fit. Spacing first, then font (container + explicit
- * spans), down to the 10pt floor. Exits as soon as the content fits.
+ * Aggressive single-page fit.
+ *
+ * Line-height is NEVER compressed — the user's chosen line spacing is a
+ * hard contract that survives into editor, preview and print. The fitter
+ * only tightens margins and, as a last resort, reduces the font size down
+ * to MIN_FIT_FONT_PT. If a document can't fit at the user's spacing even
+ * after margins are tight and font is at the floor, it correctly flows
+ * onto additional pages instead of silently tightening the leading.
  */
-function aggressiveFitToOnePage(measure: HTMLElement, targetHeight: number, baseFontPt: number): void {
-  const MAX_STEPS = 70;
-  const SPACING_RAMP = 22;
+function aggressiveFitToOnePage(
+  measure: HTMLElement,
+  targetHeight: number,
+  baseFontPt: number
+): void {
+  const MAX_STEPS = 200;
+  const SPACING_RAMP = 18;
 
   let fontPt = baseFontPt;
   let steps = 0;
+  let prevHeight = Infinity;
 
   while (measure.offsetHeight > targetHeight && steps < MAX_STEPS) {
     steps++;
@@ -541,32 +578,25 @@ function aggressiveFitToOnePage(measure: HTMLElement, targetHeight: number, base
     const h3MarginTop = Math.max(1, 10 - p * 9);
     const h3MarginBottom = Math.max(0, 4 - p * 4);
     const pMarginBottom = Math.max(0, 6 - p * 6);
-    const pLineHeight = Math.max(1.05, 1.45 - p * 0.4);
     const ulMarginBottom = Math.max(0, 8 - p * 8);
     const liMarginBottom = Math.max(0, 4 - p * 4);
     const tableMargin = Math.max(0, 8 - p * 8);
     const ulPaddingLeft = Math.max(12, 24 - p * 12);
+    const h2PaddingBottom = Math.max(0, 2 - p * 2);
 
     measure.querySelectorAll("h1").forEach((el) => {
-      const h = el as HTMLElement;
-      h.style.margin = `0 0 ${h1Margin}px 0`;
-      h.style.lineHeight = "1.05";
+      (el as HTMLElement).style.margin = `0 0 ${h1Margin}px 0`;
     });
     measure.querySelectorAll("h2").forEach((el) => {
       const h = el as HTMLElement;
       h.style.margin = `${h2MarginTop}px 0 ${h2MarginBottom}px 0`;
-      h.style.paddingBottom = "0px";
-      h.style.lineHeight = "1.1";
+      h.style.paddingBottom = `${h2PaddingBottom}px`;
     });
     measure.querySelectorAll("h3").forEach((el) => {
-      const h = el as HTMLElement;
-      h.style.margin = `${h3MarginTop}px 0 ${h3MarginBottom}px 0`;
-      h.style.lineHeight = "1.1";
+      (el as HTMLElement).style.margin = `${h3MarginTop}px 0 ${h3MarginBottom}px 0`;
     });
     measure.querySelectorAll("p").forEach((el) => {
-      const h = el as HTMLElement;
-      h.style.margin = `0 0 ${pMarginBottom}px 0`;
-      h.style.lineHeight = String(pLineHeight);
+      (el as HTMLElement).style.margin = `0 0 ${pMarginBottom}px 0`;
     });
     measure.querySelectorAll("ul, ol").forEach((el) => {
       const h = el as HTMLElement;
@@ -574,31 +604,29 @@ function aggressiveFitToOnePage(measure: HTMLElement, targetHeight: number, base
       h.style.paddingLeft = `${ulPaddingLeft}px`;
     });
     measure.querySelectorAll("li").forEach((el) => {
-      const h = el as HTMLElement;
-      h.style.marginBottom = `${liMarginBottom}px`;
-      h.style.lineHeight = String(pLineHeight);
+      (el as HTMLElement).style.marginBottom = `${liMarginBottom}px`;
     });
     measure.querySelectorAll("table").forEach((el) => {
-      const h = el as HTMLElement;
-      h.style.margin = `${tableMargin}px 0`;
+      (el as HTMLElement).style.margin = `${tableMargin}px 0`;
     });
 
-    if (measure.offsetHeight > targetHeight && p >= 1) {
-      // Full spacing compression — now reduce font sizes.
-      if (fontPt > MIN_FIT_FONT_PT) {
-        fontPt = Math.max(MIN_FIT_FONT_PT, fontPt - 0.5);
-        measure.style.fontSize = `${fontPt}pt`;
-        measure.style.lineHeight = "1.15";
-      }
-      // Also reduce any explicit inline font sizes so manually-set text can shrink too.
-      reduceExplicitFontSizes(measure, 0.5);
-    }
+    const h = measure.offsetHeight;
+    if (h <= targetHeight) break;
 
-    if (p >= 1 && fontPt <= MIN_FIT_FONT_PT && measure.offsetHeight <= targetHeight) break;
+    if (p >= 1 && fontPt > MIN_FIT_FONT_PT) {
+      fontPt = Math.max(MIN_FIT_FONT_PT, fontPt - 0.5);
+      measure.style.fontSize = `${fontPt}pt`;
+      reduceExplicitFontSizes(measure, 0.5);
+    } else if (h >= prevHeight - 0.5) {
+      // Font is at the floor and no explicit sizes remain (or the last pass
+      // produced no height change at all). Nothing more to gain — stop.
+      break;
+    }
+    prevHeight = h;
   }
 }
 
-/** Moderate shrink toward an N-page target (N > 1). */
+/** Moderate shrink toward an N-page target (N > 1). Never touches line-height. */
 function moderateShrinkForMultiPage(measure: HTMLElement, maxTotalHeight: number, baseFontPt: number): void {
   const MAX_STEPS = 30;
   let fontPt = baseFontPt;
@@ -611,19 +639,18 @@ function moderateShrinkForMultiPage(measure: HTMLElement, maxTotalHeight: number
     measure.querySelectorAll("h1, h2, h3, p, ul, ol, li, table").forEach((el) => {
       const h = el as HTMLElement;
       const tag = h.tagName.toLowerCase();
-      if (tag === "h1") { h.style.margin = "0 0 6px 0"; h.style.fontSize = `${Math.max(1.0, 1.3 - intensity * 0.02)}em`; h.style.lineHeight = "1.15"; }
-      else if (tag === "h2") { h.style.margin = "6px 0 2px 0"; h.style.fontSize = `${Math.max(0.85, 1.02 - intensity * 0.015)}em`; h.style.paddingBottom = "1px"; h.style.lineHeight = "1.15"; }
-      else if (tag === "h3") { h.style.margin = "4px 0 2px 0"; h.style.lineHeight = "1.15"; }
-      else if (tag === "p") { h.style.margin = "0 0 3px 0"; h.style.lineHeight = "1.25"; }
+      if (tag === "h1") { h.style.margin = "0 0 6px 0"; h.style.fontSize = `${Math.max(1.0, 1.3 - intensity * 0.02)}em`; }
+      else if (tag === "h2") { h.style.margin = "6px 0 2px 0"; h.style.fontSize = `${Math.max(0.85, 1.02 - intensity * 0.015)}em`; h.style.paddingBottom = "1px"; }
+      else if (tag === "h3") { h.style.margin = "4px 0 2px 0"; }
+      else if (tag === "p") { h.style.margin = "0 0 3px 0"; }
       else if (tag === "ul" || tag === "ol") { h.style.margin = "0 0 3px 0"; h.style.paddingLeft = "20px"; }
-      else if (tag === "li") { h.style.margin = "0 0 2px 0"; h.style.lineHeight = "1.25"; }
+      else if (tag === "li") { h.style.margin = "0 0 2px 0"; }
       else if (tag === "table") { h.style.margin = "4px 0"; }
     });
 
     if (measure.offsetHeight > maxTotalHeight && fontPt > MIN_FIT_FONT_PT) {
       fontPt = Math.max(MIN_FIT_FONT_PT, fontPt - 0.5);
       measure.style.fontSize = `${fontPt}pt`;
-      measure.style.lineHeight = "1.2";
     }
     if (fontPt <= MIN_FIT_FONT_PT) {
       reduceExplicitFontSizes(measure, 0.5);
@@ -639,8 +666,6 @@ function wrapTrailingSignatureBlock(measure: HTMLElement, maxHeight: number = In
   const children = Array.from(measure.children) as HTMLElement[];
   if (children.length < 3) return;
 
-  // Only look at the tail of the document so a phrase like "approved by" in the
-  // body text can never turn most of the document into one unsplittable block.
   let firstSigIdx = -1;
   for (let i = Math.max(0, children.length - SIGNATURE_LOOKBACK_BLOCKS); i < children.length; i++) {
     const text = (children[i].textContent || "").trim();
@@ -651,7 +676,6 @@ function wrapTrailingSignatureBlock(measure: HTMLElement, maxHeight: number = In
   const wrapStart = firstSigIdx - 1;
   const toWrap = children.slice(wrapStart);
 
-  // An atomic block taller than a page can never fit and would be clipped.
   const blockHeight = toWrap.reduce((sum, el) => sum + el.offsetHeight, 0);
   if (blockHeight > maxHeight) return;
 
@@ -665,16 +689,28 @@ function wrapTrailingSignatureBlock(measure: HTMLElement, maxHeight: number = In
   measure.appendChild(wrapper);
 }
 
-/** Split the measure element's children into an array of fragment HTML strings. */
+/**
+ * Split the measure element's children into an array of fragment HTML strings.
+ *
+ * Fast path: if the whole document already fits inside one page, return it
+ * as ONE fragment without running the split loop. The loop measures real
+ * rendered positions (getBoundingClientRect), so margin collapsing is
+ * respected — adjacent margins never count twice.
+ */
 function splitHtmlIntoFragments(measure: HTMLElement, pageHeight: number): string[] {
-  const children = Array.from(measure.children);
+  const children = Array.from(measure.children) as HTMLElement[];
   if (children.length === 0) return [measure.innerHTML];
 
+  // ── Fast path: the whole thing already fits on one page. ────────────────
+  if (measure.offsetHeight <= pageHeight + 4) {
+    return [measure.innerHTML];
+  }
+
   const fragments: string[] = [];
-  const queue: HTMLElement[] = children as HTMLElement[];
+  const queue: HTMLElement[] = [...children];
   let qIndex = 0;
   let currentFragmentBlocks: string[] = [];
-  let currentHeight = 0;
+  let pageStartTop: number | null = null;
   const MIN_USEFUL_SPACE = 32;
 
   while (qIndex < queue.length) {
@@ -682,64 +718,73 @@ function splitHtmlIntoFragments(measure: HTMLElement, pageHeight: number): strin
     qIndex++;
 
     const tag = el.tagName.toLowerCase();
-    const style = window.getComputedStyle(el);
-    const marginTop = parseFloat(style.marginTop) || 0;
-    const marginBottom = parseFloat(style.marginBottom) || 0;
-    const blockHeight = Math.ceil((el.offsetHeight || 24) + marginTop + marginBottom);
+    const rect = el.getBoundingClientRect();
+    const elTop = rect.top;
+    const elBottom = rect.bottom;
+    const elHeight = elBottom - elTop;
 
-    const spaceOnCurrentPage = pageHeight - currentHeight;
-
-    if (blockHeight <= spaceOnCurrentPage) {
-      currentFragmentBlocks.push(el.outerHTML);
-      currentHeight += blockHeight;
-      continue;
-    }
-
-    const isList = tag === "ul" || tag === "ol";
-    const isParagraph = tag === "p";
     const isAtomic = tag === "div" || el.getAttribute("data-signature-block") === "1";
 
     const trySplit = (maxHeight: number) => {
       if (maxHeight < MIN_USEFUL_SPACE) return null;
       if (isAtomic) return null;
-      if (isList) return splitListAtHeight(el, maxHeight);
+      if (tag === "ul" || tag === "ol") return splitListAtHeight(el, maxHeight);
       if (tag === "table") return splitTableAtHeight(el, maxHeight);
-      if (isParagraph) return splitElementAtHeight(el, maxHeight);
+      if (tag === "p") return splitElementAtHeight(el, maxHeight);
       return null;
     };
 
-    const splitOnCurrentPage = currentFragmentBlocks.length > 0 ? trySplit(spaceOnCurrentPage) : null;
+    if (pageStartTop === null) {
+      if (elHeight > pageHeight) {
+        const split = trySplit(pageHeight);
+        if (split) {
+          fragments.push(split.firstHtml);
+          el.insertAdjacentElement("afterend", split.restEl);
+          queue.splice(qIndex, 0, split.restEl);
+          continue;
+        }
+      }
+      currentFragmentBlocks.push(el.outerHTML);
+      pageStartTop = elTop;
+      continue;
+    }
 
-    if (splitOnCurrentPage) {
-      currentFragmentBlocks.push(splitOnCurrentPage.firstHtml);
+    const usedHeight = elBottom - pageStartTop;
+    if (usedHeight <= pageHeight) {
+      currentFragmentBlocks.push(el.outerHTML);
+      continue;
+    }
+
+    const spaceForEl = pageHeight - (elTop - pageStartTop);
+    const split = spaceForEl >= MIN_USEFUL_SPACE ? trySplit(spaceForEl) : null;
+
+    if (split) {
+      currentFragmentBlocks.push(split.firstHtml);
       fragments.push(currentFragmentBlocks.join(""));
       currentFragmentBlocks = [];
-      currentHeight = 0;
-      el.insertAdjacentElement("afterend", splitOnCurrentPage.restEl);
-      queue.splice(qIndex, 0, splitOnCurrentPage.restEl);
+      pageStartTop = null;
+      el.insertAdjacentElement("afterend", split.restEl);
+      queue.splice(qIndex, 0, split.restEl);
       continue;
     }
 
     if (currentFragmentBlocks.length > 0) {
       fragments.push(currentFragmentBlocks.join(""));
       currentFragmentBlocks = [];
-      currentHeight = 0;
+      pageStartTop = null;
     }
 
-    if (blockHeight > pageHeight) {
-      const splitOnFreshPage = trySplit(pageHeight);
-      if (splitOnFreshPage) {
-        fragments.push(splitOnFreshPage.firstHtml);
-        el.insertAdjacentElement("afterend", splitOnFreshPage.restEl);
-        queue.splice(qIndex, 0, splitOnFreshPage.restEl);
+    if (elHeight > pageHeight) {
+      const splitFresh = trySplit(pageHeight);
+      if (splitFresh) {
+        fragments.push(splitFresh.firstHtml);
+        el.insertAdjacentElement("afterend", splitFresh.restEl);
+        queue.splice(qIndex, 0, splitFresh.restEl);
         continue;
       }
-      fragments.push(el.outerHTML);
-      continue;
     }
-
     currentFragmentBlocks.push(el.outerHTML);
-    currentHeight += blockHeight;
+    pageStartTop = elTop;
   }
 
   if (currentFragmentBlocks.length > 0) {
@@ -786,7 +831,9 @@ function buildSinglePageHtml(opts: SinglePageOptions): string {
   const headerImgStyle =
     `max-height:${MAX_HEADER_IMG_HEIGHT}px;max-width:100%;height:auto;width:auto;display:block;object-fit:contain;`;
 
-  const contentStyle = `flex:1 1 auto;min-height:0;overflow:hidden;text-align:${alignment};`;
+  const contentStyle =
+    `flex:1 1 auto;min-height:0;overflow:hidden;text-align:${alignment};` +
+    `--doc-line-height:${lineSpacing};`;
 
   const footerStyle =
     `height:${hasFooter ? FOOTER_AREA_HEIGHT : FOOTER_MIN_HEIGHT}px;` +
@@ -1072,7 +1119,7 @@ export function DocumentGenerator() {
   const [docFont] = useState<DocFont>("serif");
   const [docFontSize] = useState(12);
   const [docAlign] = useState<DocAlign>("left");
-  const [lineSpacing, setLineSpacing] = useState<"1.15" | "1.5" | "2.0">("1.5");
+  const [lineSpacing, setLineSpacing] = useState<LineSpacing>("1.5");
 
   const [activeStyles, setActiveStyles] = useState({
     bold: false, italic: false, underline: false, strike: false,
@@ -1086,7 +1133,6 @@ export function DocumentGenerator() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [downloading, setDownloading] = useState<DownloadTarget>(null);
 
-  // New: toggle hides the EDITOR panel (preview takes full width when hidden)
   const [showEditor, setShowEditor] = useState(true);
 
   const [headerImage, setHeaderImage] = useState<ImageAsset | null>(null);
@@ -1101,11 +1147,29 @@ export function DocumentGenerator() {
 
   const [masterHtml, setMasterHtml] = useState("");
   const [previewFragments, setPreviewFragments] = useState<string[]>([]);
-  // Typography the paginator actually measured with. Pages MUST be drawn with the same values.
+  // Typography the paginator actually measured with. Pages MUST be drawn with
+  // the same values. `lineHeight` is always the user's chosen spacing — the
+  // fitter is forbidden from compressing it.
   const [fit, setFit] = useState<{ fontPt: number; lineHeight: string } | null>(null);
 
   const editorRef = useRef<HTMLDivElement>(null);
   const isApplyingExternalHtmlRef = useRef(false);
+
+  // Tracks whether the document has been customized since it was loaded.
+  // Set to TRUE by:
+  //   • typing in the editor (`handleEditorInput`)
+  //   • changing Line Spacing in the Layout ribbon
+  //   • changing Page Size in the Layout ribbon
+  //
+  // While this is FALSE, an AI-generated draft is aggressively squeezed onto
+  // its requested page count (default: 1) — the fitter may shrink the font
+  // down to MIN_FIT_FONT_PT to make it fit.
+  //
+  // Once it becomes TRUE, the aggressive squeeze is disabled: the document
+  // simply flows onto however many pages its content + chosen typography
+  // require. Only a small overflow (≤ 20% of a page) is still absorbed onto
+  // one page, so a lone spilling line or signature block is never orphaned.
+  const hasUserEditedRef = useRef(false);
 
   const savedRangeRef = useRef<Range | null>(null);
   const suppressNextStyleSyncRef = useRef<boolean>(false);
@@ -1190,6 +1254,7 @@ export function DocumentGenerator() {
     const contentAreaHeight = getContentAreaHeight(cfg.cssHeight, hasHeader, hasFooter);
     const effectiveContentHeight = Math.max(80, contentAreaHeight - PAGE_FIT_SAFETY_PX);
     const contentAreaWidth = getContentAreaWidth(cfg.cssWidth);
+    const baseLineHeight = parseFloat(lineSpacing) || 1.5;
 
     // Build a fresh measure container for THIS run.
     const measure = document.createElement("div");
@@ -1202,24 +1267,27 @@ export function DocumentGenerator() {
       width: ${contentAreaWidth}px;
       font-family: ${FONT_CONFIG[docFont].css};
       font-size: ${docFontSize}pt;
-      line-height: ${lineSpacing};
       color: #111827;
       box-sizing: border-box;
       overflow: hidden;
     `;
+    // Line-height is written ONCE here and never changed by the fitter.
+    measure.style.setProperty("--doc-line-height", String(baseLineHeight));
     measure.innerHTML = fullHtml;
     document.body.appendChild(measure);
 
-    // AI drafts honour the requested page count (default: 1 page). Templates and
-    // other documents only absorb a SMALL overflow, so a lone line or signature
-    // never spills onto an extra page, while long documents flow across pages.
-    let targetPageCount: number | null =
-      entryMode === "ai" ? parseTargetPageCount(prompt) : null;
-    if (entryMode !== "ai" && measure.offsetHeight <= effectiveContentHeight * SMALL_OVERFLOW_FIT_RATIO) {
+    // AI drafts get squeezed onto their requested page count — but ONLY for
+    // the initial draft, before the user has typed anything OR changed the
+    // line spacing / page size. Once the user has customized the document,
+    // it flows at whatever size it naturally needs.
+    const honourAiPageTarget = entryMode === "ai" && !hasUserEditedRef.current;
+    let targetPageCount: number | null = honourAiPageTarget ? parseTargetPageCount(prompt) : null;
+    if (!honourAiPageTarget && measure.offsetHeight <= effectiveContentHeight * SMALL_OVERFLOW_FIT_RATIO) {
       targetPageCount = 1;
     }
 
-    // 1. Fit / shrink to the target page count
+    // 1. Fit / shrink to the target page count. The fitter only touches
+    //    margins and font size — NEVER line-height.
     if (targetPageCount === 1) {
       aggressiveFitToOnePage(measure, effectiveContentHeight, docFontSize);
     } else if (targetPageCount !== null && targetPageCount > 1) {
@@ -1231,9 +1299,10 @@ export function DocumentGenerator() {
       moderateShrinkForMultiPage(measure, maxTotalHeight, docFontSize);
     }
 
-    // Remember what the fitter did to the container: the pages must be drawn with it.
-    let fitFontPt = parseFloat(measure.style.fontSize) || docFontSize;
-    let fitLineHeight = measure.style.lineHeight || String(lineSpacing);
+    // Remember what the fitter did: pages must be drawn with it. Line-height
+    // is unchanged from what we set above.
+    const fitFontPt = parseFloat(measure.style.fontSize) || docFontSize;
+    const fitLineHeight = String(baseLineHeight);
 
     // 2. Keep trailing signature block as a single unit
     wrapTrailingSignatureBlock(measure, effectiveContentHeight);
@@ -1246,11 +1315,11 @@ export function DocumentGenerator() {
       const retry = document.createElement("div");
       retry.className = "wysiwyg-content";
       retry.style.cssText = measure.style.cssText;
+      retry.style.setProperty("--doc-line-height", String(baseLineHeight));
       retry.innerHTML = fullHtml;
       document.body.appendChild(retry);
 
       aggressiveFitToOnePage(retry, effectiveContentHeight, docFontSize);
-      // Extra pass: shave explicit span sizes again
       reduceExplicitFontSizes(retry, 0.5);
       reduceExplicitFontSizes(retry, 0.5);
       wrapTrailingSignatureBlock(retry, effectiveContentHeight);
@@ -1258,8 +1327,6 @@ export function DocumentGenerator() {
       const retryFragments = splitHtmlIntoFragments(retry, effectiveContentHeight);
       if (retryFragments.length > 0 && retryFragments.length < fragments.length) {
         fragments = retryFragments;
-        fitFontPt = parseFloat(retry.style.fontSize) || docFontSize;
-        fitLineHeight = retry.style.lineHeight || String(lineSpacing);
       }
 
       document.body.removeChild(retry);
@@ -1331,6 +1398,9 @@ export function DocumentGenerator() {
     setMasterHtml(html);
     setPreviewFragments((prev) => (prev.length ? prev : [html]));
     savedRangeRef.current = null;
+    // A freshly-loaded document (new AI draft, template, undo/redo target)
+    // starts clean — the aggressive one-page fit is allowed to run again.
+    hasUserEditedRef.current = false;
   };
 
   const handleUndo = () => {
@@ -1385,21 +1455,17 @@ export function DocumentGenerator() {
 
     const p = document.createElement("p");
     if (atStart && atEnd) {
-      // Empty heading: turn it into a normal paragraph.
       p.innerHTML = "<br>";
       heading.replaceWith(p);
       placeCaretAtStart(p);
     } else if (atStart) {
-      // Blank line ABOVE the heading; the caret stays on the heading.
       p.innerHTML = "<br>";
       heading.before(p);
     } else if (atEnd) {
-      // New normal paragraph below the heading.
       p.innerHTML = "<br>";
       heading.after(p);
       placeCaretAtStart(p);
     } else {
-      // Split: the text after the caret moves into a normal paragraph.
       const tail = document.createRange();
       tail.setStart(range.startContainer, range.startOffset);
       tail.setEnd(heading, heading.childNodes.length);
@@ -1528,9 +1594,27 @@ export function DocumentGenerator() {
   const handleEditorInput = (e: React.FormEvent<HTMLDivElement>) => {
     if (isApplyingExternalHtmlRef.current) return;
     const html = e.currentTarget.innerHTML;
+    hasUserEditedRef.current = true;
     setMasterHtml(html);
     saveHistorySnapshot(html);
     updateActiveSelectionStyles();
+  };
+
+  /* ── Layout ribbon handlers ────────────────────────────────────────────
+   * Changing line spacing or page size counts as a user customization. Once
+   * the user has done so, the aggressive "force onto the requested page
+   * count" fit is disabled — the document flows at whatever size it needs
+   * at the chosen typography, instead of shrinking the font to force it
+   * back onto one page. (See the comment on `hasUserEditedRef` above.)
+   */
+  const handleLineSpacingChange = (ls: LineSpacing) => {
+    hasUserEditedRef.current = true;
+    setLineSpacing(ls);
+  };
+
+  const handlePageSizeChange = (ps: PageSize) => {
+    hasUserEditedRef.current = true;
+    setPageSize(ps);
   };
 
   /* ── Image upload ─────────────────────────────────────────────────────── */
@@ -1591,15 +1675,18 @@ export function DocumentGenerator() {
       if (footerImage) headerFooterInfo.push("Footer letterhead image attached.");
 
       const targetPages = parseTargetPageCount(prompt);
+      const WORDS_PER_PAGE = 275;
       let pagePromptInstruction = "";
       if (targetPages === 1) {
         pagePromptInstruction =
           "CRITICAL: The generated text MUST FIT ON EXACTLY ONE (1) PAGE. " +
-          "Aim for ~350–400 words total. Be concise and executive.";
+          "Aim for 250–300 words total, no more. Be concise and executive — " +
+          "every extra word risks spilling onto a second page.";
       } else if (targetPages !== null && targetPages > 1) {
-        const targetWords = targetPages * 400;
+        const targetWords = targetPages * WORDS_PER_PAGE;
         pagePromptInstruction =
-          `PAGE LIMIT: Produce content of approximately ${targetPages} pages (~${targetWords} words total).`;
+          `PAGE LIMIT: Produce content of approximately ${targetPages} pages ` +
+          `(~250–300 words per page, ~${targetWords} words total). Do not exceed this.`;
       }
 
       const fullPromptPayload = `${prompt}\n\n${pagePromptInstruction} ${headerFooterInfo.join(" ")}`.trim();
@@ -2101,7 +2188,7 @@ export function DocumentGenerator() {
                           <button
                             key={psKey}
                             type="button"
-                            onClick={() => setPageSize(psKey)}
+                            onClick={() => handlePageSizeChange(psKey)}
                             className={`px-3.5 py-2 rounded-xl border text-xs font-bold transition-all text-left flex items-center gap-2.5 ${
                               isSelected
                                 ? "bg-[#FFF4E5] border-[#dd7230] text-[#dd7230] shadow-sm ring-1 ring-[#dd7230]"
@@ -2126,7 +2213,7 @@ export function DocumentGenerator() {
                         <button
                           key={ls}
                           type="button"
-                          onClick={() => setLineSpacing(ls)}
+                          onClick={() => handleLineSpacingChange(ls)}
                           className={`px-3 py-1.5 rounded-lg border text-xs font-bold transition-all ${
                             lineSpacing === ls
                               ? "bg-[#FFF4E5] text-[#dd7230] border-[#dd7230] font-extrabold"
@@ -2137,6 +2224,9 @@ export function DocumentGenerator() {
                         </button>
                       ))}
                     </div>
+                    <span className="text-[10px] text-[#9CA3AF] mt-0.5">
+                      Changing spacing disables auto-fit — the document flows at its natural size.
+                    </span>
                   </div>
                 </>
               )}
@@ -2235,7 +2325,6 @@ export function DocumentGenerator() {
                     padding: `${PAGE_PADDING_TOP}px ${PAGE_PADDING_RIGHT}px ${PAGE_PADDING_BOTTOM}px ${PAGE_PADDING_LEFT}px`,
                     fontFamily: FONT_CONFIG[docFont].css,
                     fontSize: `${docFontSize}pt`,
-                    lineHeight: lineSpacing,
                     color: "#111827",
                     boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
                   }}
@@ -2249,7 +2338,10 @@ export function DocumentGenerator() {
                     onKeyUp={() => { saveCurrentSelection(); updateActiveSelectionStyles(); }}
                     onMouseUp={() => { saveCurrentSelection(); updateActiveSelectionStyles(); }}
                     onKeyDown={handleKeyDown}
-                    style={{ minHeight: `${getContentAreaHeight(cfg.cssHeight, !!headerImage, !!footerImage)}px` }}
+                    style={{
+                      minHeight: `${getContentAreaHeight(cfg.cssHeight, !!headerImage, !!footerImage)}px`,
+                      ...cssVars({ "--doc-line-height": lineSpacing }),
+                    }}
                   />
                 </div>
               </div>
@@ -2328,6 +2420,8 @@ export function DocumentGenerator() {
             <span className="font-semibold text-[#374151]">Paper: {cfg.label} ({cfg.subLabel})</span>
             <span>·</span>
             <span>{wordCount} Words</span>
+            <span>·</span>
+            <span>Line spacing: {lineSpacing}×</span>
           </div>
           <div className="flex items-center gap-2 text-[11px] text-[#9CA3AF]">
             <span>Cebu Technological University · CTU DOCUMENT</span>
