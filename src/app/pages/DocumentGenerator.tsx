@@ -3,54 +3,75 @@
 /**
  * DocumentGenerator.tsx
  * ---------------------------------------------------------------------------
- * CTU Document Studio — WYSIWYG split-view editor with paginated preview.
+ * CTU Document Studio — single-surface WYSIWYG editor.
  *
- * PAGINATION GUARANTEES
- *   • Preview and print consume the SAME fragment array and SAME single-page
- *     HTML builder → identical page breaks and page counts.
- *   • Two-way responsiveness: increasing or decreasing the font re-paginates
- *     from scratch, so pages appear/disappear as the content grows/shrinks.
- *   • No leftover empty pages: trailing empty fragments are stripped.
- *   • Header / footer images stay compact and repeat on every page.
- *   • Trailing signature block moves as a single atomic unit.
- *   • Pages are drawn with the SAME font size / line height the paginator
- *     measured with (state `fit`), so nothing is clipped.
- *   • Tables split between rows (header row repeats); Enter in a heading
- *     never creates another underlined heading.
- *   • Preview pages scale to the panel width at any browser zoom.
+ * ARCHITECTURE (v15 — justify fixes)
+ *   • Single editable surface: the paginated preview itself.
+ *   • previewFragments: string[] is the only body-content state.
+ *   • PreviewPage writes innerHTML via ref ONLY when the incoming fragment
+ *     differs from the DOM's current innerHTML.
+ *   • Reflow replaces a page's DOM subtree wholesale; selection continuity
+ *     is preserved via a semantic descriptor resolved against the post-
+ *     reflow DOM in a useLayoutEffect.
+ *   • Letterhead is sized in JS via fitImageInBand() and rendered as <img>
+ *     with explicit width/height — no CSS sizing hazards.
  *
- * LINE-SPACING / FIT FIX (v4)
- *   • Line-height is never compressed by the fitter — the user's chosen
- *     spacing is a hard contract that survives into editor, preview and print.
- *   • Changing line spacing or page size in the Layout ribbon now counts as
- *     a user customization, just like typing. Once the user has customized
- *     the document, the aggressive "force onto the requested page count"
- *     pass is disabled: the document flows onto as many pages as the chosen
- *     typography requires. The small-overflow absorption (≤ 20% of a page)
- *     still applies so a lone spilling line gets pulled back in.
- *   • The paginator fast-paths "already fits on one page" and otherwise
- *     measures real rendered positions (getBoundingClientRect), so margin
- *     collapsing is respected and adjacent margins never count twice.
+ * v15 CHANGES (justify)
+ *   • markdownToHtml now joins consecutive non-blank lines into one <p>
+ *     (standard Markdown paragraph semantics). Previously each source line
+ *     became its own <p>, producing one-line paragraphs that CSS never
+ *     justifies. Block-terminating label lines (bold-prefixed labels like
+ *     **TO:**, short ALL-CAPS labels like SUBJECT:, horizontal rules) are
+ *     still emitted as their own <p> so memo headers don't collapse.
+ *   • stripExtractionBrTags tolerance widened from max(8, w*0.04) to
+ *     max(24, w*0.12), so ordinary wrapped prose (which usually ends
+ *     10-80px short of the right edge) gets its extraction <br>s removed
+ *     when the user applies justify.
+ *   • applyParagraphAlignment: PRE added to BLOCK_TAGS; direct-child DIVs
+ *     recognized as blocks (Chrome's contentEditable Enter wrapper);
+ *     multi-block traversal walks the page in document order including
+ *     those DIVs.
+ *
+ * v14 CHANGES
+ *   • Paragraph alignment is applied by setting `style.textAlign` directly
+ *     on the block-level elements intersecting the selection. Bypasses
+ *     document.execCommand, whose justifyFull silently no-ops inside a
+ *     CSS-transformed contentEditable, and whose behaviour for the other
+ *     three alignments varies across browsers.
+ *   • Toolbar commands operate on a caret-tolerant range, so alignment and
+ *     list toggles work from a bare caret (previously they required a
+ *     non-collapsed text selection).
+ *   • Toolbar commands cancel any pending debounced repaginate and reflow
+ *     synchronously from the mutated DOM, so a stale fragment can never
+ *     overwrite the change ~600 ms later (fixes the "bullet list reverts"
+ *     bug).
+ *   • The toolbar's active-state detection reads the block's computed
+ *     text-align instead of document.queryCommandState.
  */
 
-import React, { useState, useRef, useEffect, type RefObject } from "react";
+import React, {
+  useState, useRef, useEffect, useLayoutEffect, useMemo,
+  type RefObject,
+} from "react";
 import {
   Sparkles, RefreshCw, Image as ImageIcon, X, FileText, AlertCircle,
   ChevronDown, ChevronUp, AlignLeft, AlignCenter, AlignRight, AlignJustify,
   Printer, ArrowLeft, Plus, Minus, Bold, Italic,
   Underline as UnderlineIcon, Strikethrough, List, ListOrdered,
   PenTool, Calendar, Layers, FileSpreadsheet, Trash2, Check,
-  Undo, Redo, FolderOpen, UploadCloud, Eye, EyeOff, PanelLeftClose, PanelLeftOpen,
+  Undo, Redo, FolderOpen, UploadCloud, Eye, Search,
 } from "lucide-react";
 import {
   Document, Packer, Paragraph, TextRun, ImageRun, AlignmentType,
   Header, Footer, Table, TableRow, TableCell, WidthType, BorderStyle,
 } from "docx";
 import { saveAs } from "file-saver";
-import {
-  DOCUMENT_TEMPLATES, getTemplateById,
-  type DocumentTemplate, type PageSize, type DocFont,
-} from "../components/documentTemplates";
+
+/* ============================================================================
+ * LOCAL TYPE ALIASES
+ * ==========================================================================*/
+type PageSize = "short" | "a4" | "long";
+type DocFont = "serif" | "sans" | "georgia" | "mono";
 
 /* ============================================================================
  * PAGE SIZE SPECIFICATIONS
@@ -77,23 +98,15 @@ const PAGE_PADDING_BOTTOM = 36;
 const PAGE_PADDING_LEFT = 48;
 const PAGE_PADDING_RIGHT = 48;
 
-const HEADER_AREA_HEIGHT = 84;
-const FOOTER_AREA_HEIGHT = 72;
+const HEADER_AREA_HEIGHT = 135;
+const FOOTER_AREA_HEIGHT = 100;
 const FOOTER_MIN_HEIGHT = 26;
 
-const MAX_HEADER_IMG_HEIGHT = 62;
-const MAX_FOOTER_IMG_HEIGHT = 42;
-
-/** Sub-pixel slack so a fragment never clips by a hair. */
 const PAGE_FIT_SAFETY_PX = 12;
-
 const MIN_FIT_FONT_PT = 10;
-
-/** Non-AI / user-customized documents are only auto-fitted when they overflow one page by at most this ratio. */
 const SMALL_OVERFLOW_FIT_RATIO = 1.2;
-
-/** The signature block is only searched for among the last N blocks of the document. */
 const SIGNATURE_LOOKBACK_BLOCKS = 12;
+const REPAGINATE_DEBOUNCE_MS = 600;
 
 function getContentAreaHeight(cssHeight: number, hasHeader: boolean, hasFooter: boolean): number {
   return (
@@ -117,16 +130,11 @@ const FONT_CONFIG: Record<DocFont, { name: string; css: string; docx: string; pd
   mono:    { name: "Courier New",      css: "'Courier New', Courier, monospace",     docx: "Courier New",     pdf: "courier" },
 };
 
-/* ============================================================================
- * DEFAULT LETTERHEAD ASSETS
- * ==========================================================================*/
 const DEFAULT_HEADER_URL = "/ctu-argao-header.jpg";
 const DEFAULT_FOOTER_URL = "/ctu-argao-footer.jpg";
 
 /* ============================================================================
  * SHARED CONTENT CSS
- * ── line-height is a single custom property (--doc-line-height), written on
- *    every .wysiwyg-content surface (editor / measure / preview / print).
  * ==========================================================================*/
 const CONTENT_STYLES = `
   .wysiwyg-content { box-sizing: border-box; line-height: var(--doc-line-height, 1.45); }
@@ -146,42 +154,16 @@ const CONTENT_STYLES = `
   .wysiwyg-content strong { font-weight: 700; }
   .wysiwyg-content em { font-style: italic; }
   .wysiwyg-content u { text-decoration: underline; }
-  /* Blank lines that live inside a heading must be invisible spacing, not a rule. */
   .wysiwyg-content h1:has(> br:only-child),
   .wysiwyg-content h2:has(> br:only-child),
   .wysiwyg-content h3:has(> br:only-child),
   .wysiwyg-content h2:empty,
   .wysiwyg-content h3:empty { border-bottom: 0 !important; }
+  [data-page-content='1']:focus { outline: none; }
 `;
 
-/* ============================================================================
- * SYSTEM PROMPT
- * ==========================================================================*/
 export const SYSTEM_PROMPT = `You are a senior institutional and academic document drafting assistant for Cebu Technological University (CTU Argao Campus and System).
-
-You generate professional, legally sound, and academic-grade documents.
-
-STRICT PAGE LIMIT RULE (MANDATORY):
-- If the user says "1 page" or says nothing about page count → the document MUST FIT ON EXACTLY ONE (1) PAGE.
-- If the user says "N pages" (N > 1) → produce content that fills approximately N pages (~400 words/page).
-- If the user says "multi-page" with no number → use best judgment.
-
-RULES:
-1. Generate ONLY the body content. No graphic letterheads.
-2. Do not wrap the response in markdown code fences.
-3. Tone: professional academic.
-   - # DOCUMENT TITLE (UPPERCASE)
-   - Metadata block for memos/letters:
-     **MEMORANDUM NO. / REF NO.:** __________, s. 2026
-     **FOR / TO:** ___________________________________
-     **FROM:** _____________________________________
-     **DATE:** _____________________________________
-     **SUBJECT:** __________________________________
-   - Section headings: ## 1.0 RATIONALE, ## 2.0 OBJECTIVES, etc.
-   - Bullets "- " or numbers "1. ".
-   - Underline blanks: "________________________".
-   - Always end with formal signature blocks.
-4. Ready for immediate printing.`;
+You generate professional, legally sound, and academic-grade documents.`;
 
 /* ============================================================================
  * QUICK PROMPTS
@@ -219,7 +201,41 @@ type AppView = "chooser" | "templates" | "compose" | "editor";
 type RibbonTab = "home" | "layout" | "insert";
 type LineSpacing = "1.15" | "1.5" | "2.0";
 
-/** Helper: safely set a CSS custom property inline without TS complaining. */
+interface RepositoryDocument {
+  name: string;
+  category: string;
+  office: string;
+  program?: string;
+  version?: string;
+  effectivity_date?: string;
+  status?: string;
+  file_url?: string;
+  upload_date?: string;
+  uploaded_by?: string;
+  has_content_html?: boolean;
+  header_image_url?: string | null;
+  footer_image_url?: string | null;
+}
+
+interface RepositoryDocumentContent {
+  name: string;
+  category: string;
+  office: string;
+  version?: string;
+  effectivity_date?: string;
+  content_html: string;
+  header_image_url?: string | null;
+  footer_image_url?: string | null;
+  file_url?: string;
+  page_size?: string;
+  line_spacing?: string;
+}
+
+interface SelectionDescriptor {
+  start: number;
+  end: number;
+}
+
 function cssVars(vars: Record<string, string>): React.CSSProperties {
   return vars as unknown as React.CSSProperties;
 }
@@ -229,8 +245,43 @@ function cssVars(vars: Record<string, string>): React.CSSProperties {
  * ==========================================================================*/
 const MAX_IMAGE_DIMENSION_PX = 1600;
 const MAX_IMAGE_SIZE_MB = 5;
-const HEADER_FOOTER_DISPLAY_HEIGHT_PX = 60;
+const HEADER_FOOTER_DISPLAY_HEIGHT_PX = 110;
 const ACCEPTED_IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp"];
+
+/**
+ * Returns true if the given raw markdown source line should be treated as
+ * a self-contained block rather than a continuation of the current
+ * paragraph. Used by markdownToHtml so that memo headers like
+ *
+ *     **TO:** All Faculty
+ *     **FROM:** Office of the Dean
+ *     **SUBJECT:** Midterm Grade Submission
+ *
+ * do not collapse into a single paragraph while ordinary body lines do.
+ */
+function isBlockLabelLine(rawLine: string): boolean {
+  const line = rawLine.trim();
+  if (!line) return false;
+
+  // Signature rule or horizontal rule
+  if (/^_{3,}\s*$/.test(line)) return true;
+  if (/^-{3,}\s*$/.test(line)) return true;
+
+  // Bold-prefixed label: **TO:**, **Prepared by:**, **DATE:** March 14, 2026
+  const boldMatch = line.match(/^\*\*([^*]+)\*\*\s*:?\s*(.*)$/);
+  if (boldMatch) {
+    const label = boldMatch[1].trim();
+    const rest = boldMatch[2].trim();
+    if (label.endsWith(":") && label.length <= 40 && rest.length <= 60) return true;
+    if (rest === "" && label.length <= 40) return true;
+  }
+
+  // Short ALL-CAPS-style label ending in a colon with no content after:
+  // SUBJECT:, RE:, DATE:
+  if (/^[A-Z][A-Z /_-]{1,30}:\s*$/.test(line)) return true;
+
+  return false;
+}
 
 function markdownToHtml(raw: string): string {
   const lines = raw.replace(/\r\n/g, "\n").split("\n");
@@ -238,32 +289,56 @@ function markdownToHtml(raw: string): string {
   let inList = false;
   let inTable = false;
   let isTableHeader = true;
+  let pendingParagraph: string[] = [];
+
+  const processInline = (line: string): string => {
+    let s = line;
+    s = s.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>");
+    s = s.replace(/__(.*?)__/g, "<strong>$1</strong>");
+    s = s.replace(/\*([^*]+)\*/g, "<em>$1</em>");
+    return s;
+  };
+
+  const flushParagraph = () => {
+    if (pendingParagraph.length === 0) return;
+    html += `<p>${pendingParagraph.join(" ")}</p>`;
+    pendingParagraph = [];
+  };
 
   for (let i = 0; i < lines.length; i++) {
-    let line = lines[i].trim();
+    const rawLine = lines[i];
+    const line = rawLine.trim();
 
+    // Blank line: paragraph break, list break, table break.
     if (!line) {
+      flushParagraph();
       if (inList) { html += "</ul>"; inList = false; }
-      if (inTable) { html += "</tbody></table>"; inTable = false; }
+      if (inTable) {
+        html += (isTableHeader ? "</thead>" : "</tbody>") + "</table>";
+        inTable = false;
+        isTableHeader = true;
+      }
       continue;
     }
 
-    line = line.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>");
-    line = line.replace(/__(.*?)__/g, "<strong>$1</strong>");
-    line = line.replace(/\*([^*]+)\*/g, "<em>$1</em>");
-
+    // Table rows.
     if (line.startsWith("|")) {
+      flushParagraph();
       if (inList) { html += "</ul>"; inList = false; }
       if (/^[-:\s]+$/.test(line.replace(/\|/g, "").trim())) {
         if (inTable && isTableHeader) { html += "</thead><tbody>"; isTableHeader = false; }
         continue;
       }
-      const cells = line.split("|").filter((_, idx, arr) => idx > 0 && idx < arr.length - 1).map((c) => c.trim());
+      const cells = line
+        .split("|")
+        .filter((_, idx, arr) => idx > 0 && idx < arr.length - 1)
+        .map((c) => c.trim());
       if (!inTable) {
-        inTable = true; isTableHeader = true;
+        inTable = true;
+        isTableHeader = true;
         html += `<table><thead><tr>`;
         cells.forEach((cell) => {
-          html += `<th style="border: 1px solid #9ca3af; padding: 5px 8px; text-align: left; font-weight: 700; background-color: #f3f4f6;">${cell}</th>`;
+          html += `<th style="border: 1px solid #9ca3af; padding: 5px 8px; text-align: left; font-weight: 700; background-color: #f3f4f6;">${processInline(cell)}</th>`;
         });
         html += `</tr>`;
       } else {
@@ -272,31 +347,69 @@ function markdownToHtml(raw: string): string {
           ? "border: 1px solid #9ca3af; padding: 5px 8px; text-align: left; font-weight: 700;"
           : "border: 1px solid #d1d5db; padding: 5px 8px;";
         html += `<tr>`;
-        cells.forEach((cell) => { html += `<${tag} style="${style}">${cell}</${tag}>`; });
+        cells.forEach((cell) => { html += `<${tag} style="${style}">${processInline(cell)}</${tag}>`; });
         html += `</tr>`;
       }
       continue;
     } else if (inTable) {
       html += (isTableHeader ? "</thead>" : "</tbody>") + "</table>";
       inTable = false;
+      isTableHeader = true;
     }
 
-    if (line.startsWith("# ")) { if (inList) { html += "</ul>"; inList = false; } html += `<h1>${line.slice(2)}</h1>`; }
-    else if (line.startsWith("## ")) { if (inList) { html += "</ul>"; inList = false; } html += `<h2>${line.slice(3)}</h2>`; }
-    else if (line.startsWith("### ")) { if (inList) { html += "</ul>"; inList = false; } html += `<h3>${line.slice(4)}</h3>`; }
-    else if (line.startsWith("- ") || line.startsWith("* ")) {
+    // Headings.
+    if (line.startsWith("# ")) {
+      flushParagraph();
+      if (inList) { html += "</ul>"; inList = false; }
+      html += `<h1>${processInline(line.slice(2))}</h1>`;
+      continue;
+    }
+    if (line.startsWith("## ")) {
+      flushParagraph();
+      if (inList) { html += "</ul>"; inList = false; }
+      html += `<h2>${processInline(line.slice(3))}</h2>`;
+      continue;
+    }
+    if (line.startsWith("### ")) {
+      flushParagraph();
+      if (inList) { html += "</ul>"; inList = false; }
+      html += `<h3>${processInline(line.slice(4))}</h3>`;
+      continue;
+    }
+
+    // Bullet list items.
+    if (line.startsWith("- ") || line.startsWith("* ")) {
+      flushParagraph();
       if (!inList) { html += `<ul>`; inList = true; }
-      html += `<li>${line.slice(2)}</li>`;
-    } else if (/^\d+\.\s/.test(line)) {
+      html += `<li>${processInline(line.slice(2))}</li>`;
+      continue;
+    }
+
+    // Numbered list items — rendered as a bolded-number paragraph.
+    if (/^\d+\.\s/.test(line)) {
+      flushParagraph();
       if (inList) { html += "</ul>"; inList = false; }
       const text = line.replace(/^\d+\.\s/, "");
-      html += `<p><strong>${line.match(/^\d+\./)?.[0]}</strong> ${text}</p>`;
-    } else {
-      if (inList) { html += "</ul>"; inList = false; }
-      html += `<p>${line}</p>`;
+      html += `<p><strong>${line.match(/^\d+\./)?.[0]}</strong> ${processInline(text)}</p>`;
+      continue;
     }
+
+    // Block-terminating label lines (memo headers, signature lines, rules).
+    if (isBlockLabelLine(line)) {
+      flushParagraph();
+      if (inList) { html += "</ul>"; inList = false; }
+      html += `<p>${processInline(line)}</p>`;
+      continue;
+    }
+
+    // Ordinary paragraph continuation line — accumulate into the current
+    // paragraph so consecutive lines join into one <p> that is long enough
+    // for text-align: justify to actually distribute space between words.
+    if (inList) { html += "</ul>"; inList = false; }
+    pendingParagraph.push(processInline(line));
   }
 
+  flushParagraph();
   if (inList) html += "</ul>";
   if (inTable) html += (isTableHeader ? "</thead>" : "</tbody>") + "</table>";
 
@@ -368,6 +481,26 @@ function scaledDocxDimensions(image: ImageAsset): { width: number; height: numbe
   return { width, height: Math.round(height) };
 }
 
+/**
+ * Compute the pixel dimensions to render an image inside a fixed band
+ * (maxW × maxH) while preserving its aspect ratio.
+ */
+function fitImageInBand(
+  image: { width: number; height: number } | null,
+  maxW: number,
+  maxH: number,
+): { width: number; height: number } | null {
+  if (!image || !image.width || !image.height) return null;
+  const aspect = image.width / image.height;
+  let h = maxH;
+  let w = h * aspect;
+  if (w > maxW) {
+    w = maxW;
+    h = w / aspect;
+  }
+  return { width: Math.round(w), height: Math.round(h) };
+}
+
 /* ============================================================================
  * PAGINATION SPLITTING HELPERS
  * ==========================================================================*/
@@ -397,7 +530,6 @@ function splitListAtHeight(listEl: HTMLElement, maxHeight: number): { firstHtml:
   return { firstHtml: firstEl.outerHTML, restEl };
 }
 
-/** Split a table between rows. The header row(s) are repeated on the continuation. */
 function splitTableAtHeight(table: HTMLElement, maxHeight: number): { firstHtml: string; restEl: HTMLElement } | null {
   const rows = Array.from(table.querySelectorAll("tbody > tr")) as HTMLElement[];
   if (rows.length < 2) return null;
@@ -498,9 +630,6 @@ function sanitizeFileName(input: string): string {
   return input.trim().slice(0, 40).replace(/[^a-z0-9\s-]/gi, "").replace(/\s+/g, "_") || "CTU_Document";
 }
 
-/** Institutional memos/proposals/letters are realistically 1-5 pages; capping
- *  here keeps generations fast, keeps the browser-side pagination snappy, and
- *  stays well clear of any model's default completion-length limit. */
 const MAX_TARGET_PAGES = 5;
 
 function parseTargetPageCount(prompt: string): number | null {
@@ -533,10 +662,230 @@ function parseFontSizePt(styleStr: string, baseSizePt: number): number | null {
 }
 
 /* ============================================================================
+ * SELECTION STYLING HELPER
+ * ==========================================================================*/
+function wrapRangeInStyledSpans(
+  range: Range,
+  cssProp: "font-family" | "font-size",
+  cssValue: string
+): HTMLElement[] {
+  const common = range.commonAncestorContainer;
+  const rootEl: Element | null = common.nodeType === Node.ELEMENT_NODE
+    ? (common as Element)
+    : common.parentElement;
+  if (!rootEl) return [];
+
+  const walker = document.createTreeWalker(rootEl, NodeFilter.SHOW_TEXT);
+  const intersecting: Text[] = [];
+  let n: Node | null;
+  while ((n = walker.nextNode())) {
+    const t = n as Text;
+    if (!t.data || !range.intersectsNode(t)) continue;
+    const isStart = t === range.startContainer;
+    const isEnd = t === range.endContainer;
+    const s = isStart ? range.startOffset : 0;
+    const e = isEnd ? range.endOffset : t.data.length;
+    if (e <= s) continue;
+    intersecting.push(t);
+  }
+  if (intersecting.length === 0) return [];
+
+  const isolated: Text[] = [];
+  for (let i = intersecting.length - 1; i >= 0; i--) {
+    const t = intersecting[i];
+    const isStart = t === range.startContainer;
+    const isEnd = t === range.endContainer;
+    const s = isStart ? range.startOffset : 0;
+    const e = isEnd ? range.endOffset : t.data.length;
+
+    let middle: Text = t;
+    if (e < middle.data.length) middle.splitText(e);
+    if (s > 0) middle = middle.splitText(s);
+    isolated.push(middle);
+  }
+  isolated.reverse();
+
+  const spans: HTMLElement[] = [];
+  for (const t of isolated) {
+    const parent = t.parentNode;
+    if (!parent) continue;
+    const span = document.createElement("span");
+    span.style.setProperty(cssProp, cssValue, "important");
+    parent.insertBefore(span, t);
+    span.appendChild(t);
+    spans.push(span);
+  }
+  return spans;
+}
+
+/* ============================================================================
+ * GLOBAL TEXT OFFSET HELPERS
+ * ==========================================================================*/
+function getPageElements(pagesRoot: HTMLElement): HTMLElement[] {
+  return Array.from(pagesRoot.querySelectorAll<HTMLElement>("[data-page-content='1']"));
+}
+
+function captureCaretOffset(root: HTMLElement): number | null {
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0) return null;
+  const range = sel.getRangeAt(0);
+  if (!root.contains(range.startContainer)) return null;
+
+  let offset = 0;
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  let n: Node | null;
+  while ((n = walker.nextNode())) {
+    if (n === range.startContainer) return offset + range.startOffset;
+    offset += (n.textContent || "").length;
+  }
+  return null;
+}
+
+function restoreCaretOffset(root: HTMLElement, offset: number): boolean {
+  let remaining = offset;
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  let n: Node | null;
+  while ((n = walker.nextNode())) {
+    const len = (n.textContent || "").length;
+    if (remaining <= len) {
+      const range = document.createRange();
+      range.setStart(n, remaining);
+      range.collapse(true);
+      const sel = window.getSelection();
+      if (sel) { sel.removeAllRanges(); sel.addRange(range); }
+      return true;
+    }
+    remaining -= len;
+  }
+  return false;
+}
+
+function captureGlobalCaretOffset(pagesRoot: HTMLElement): number | null {
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0) return null;
+  const start = sel.getRangeAt(0).startContainer;
+  if (!pagesRoot.contains(start)) return null;
+
+  const pageEls = getPageElements(pagesRoot);
+  let globalOffset = 0;
+  for (const pageEl of pageEls) {
+    if (pageEl.contains(start)) {
+      const localOffset = captureCaretOffset(pageEl);
+      if (localOffset === null) return null;
+      return globalOffset + localOffset;
+    }
+    globalOffset += (pageEl.textContent || "").length;
+  }
+  return null;
+}
+
+function restoreGlobalCaretOffset(pagesRoot: HTMLElement, globalOffset: number): boolean {
+  const pageEls = getPageElements(pagesRoot);
+  let remaining = globalOffset;
+  for (const pageEl of pageEls) {
+    const textLen = (pageEl.textContent || "").length;
+    if (remaining <= textLen) return restoreCaretOffset(pageEl, remaining);
+    remaining -= textLen;
+  }
+  const last = pageEls[pageEls.length - 1];
+  if (last) return restoreCaretOffset(last, (last.textContent || "").length);
+  return false;
+}
+
+function findGlobalTextPosition(
+  pageEls: HTMLElement[],
+  target: number
+): { node: Text; offset: number } | null {
+  if (target < 0) return null;
+  let remaining = target;
+  for (const pageEl of pageEls) {
+    const walker = document.createTreeWalker(pageEl, NodeFilter.SHOW_TEXT);
+    let n: Node | null;
+    while ((n = walker.nextNode())) {
+      const text = n as Text;
+      const len = text.data.length;
+      if (len === 0) continue;
+      if (remaining <= len) return { node: text, offset: remaining };
+      remaining -= len;
+    }
+  }
+  return null;
+}
+
+function computeGlobalRangeOffsets(
+  range: Range,
+  pagesRoot: HTMLElement
+): SelectionDescriptor | null {
+  const pageEls = getPageElements(pagesRoot);
+  if (pageEls.length === 0) return null;
+
+  const offsetFor = (node: Node, offset: number): number | null => {
+    let cumulative = 0;
+    for (const pageEl of pageEls) {
+      if (pageEl.contains(node)) {
+        if (node.nodeType === Node.TEXT_NODE) {
+          let local = 0;
+          const walker = document.createTreeWalker(pageEl, NodeFilter.SHOW_TEXT);
+          let n: Node | null;
+          while ((n = walker.nextNode())) {
+            if (n === node) return cumulative + local + offset;
+            local += (n as Text).data.length;
+          }
+          return null;
+        } else if (node.nodeType === Node.ELEMENT_NODE) {
+          const el = node as Element;
+          let sum = 0;
+          const max = Math.min(offset, el.childNodes.length);
+          for (let i = 0; i < max; i++) {
+            sum += (el.childNodes[i].textContent || "").length;
+          }
+          return cumulative + sum;
+        }
+        return null;
+      }
+      cumulative += (pageEl.textContent || "").length;
+    }
+    return null;
+  };
+
+  const start = offsetFor(range.startContainer, range.startOffset);
+  const end = offsetFor(range.endContainer, range.endOffset);
+  if (start === null || end === null || end <= start) return null;
+  return { start, end };
+}
+
+function resolveGlobalRange(
+  pagesRoot: HTMLElement,
+  startGlobal: number,
+  endGlobal: number
+): Range | null {
+  const pageEls = getPageElements(pagesRoot);
+  if (pageEls.length === 0) return null;
+
+  const start = findGlobalTextPosition(pageEls, startGlobal);
+  const end = findGlobalTextPosition(pageEls, endGlobal);
+  if (!start || !end) return null;
+
+  try {
+    const range = document.createRange();
+    range.setStart(start.node, start.offset);
+    range.setEnd(end.node, end.offset);
+    return range;
+  } catch {
+    return null;
+  }
+}
+
+function isRangeAttachedToPages(range: Range, pagesRoot: HTMLElement): boolean {
+  return (
+    pagesRoot.contains(range.startContainer) &&
+    pagesRoot.contains(range.endContainer)
+  );
+}
+
+/* ============================================================================
  * FIT-TO-PAGE HELPERS
  * ==========================================================================*/
-
-/** Reduce explicit font sizes on any element that carries one inline. */
 function reduceExplicitFontSizes(measure: HTMLElement, delta: number): void {
   measure.querySelectorAll<HTMLElement>("[style*='font-size']").forEach((el) => {
     const current = parseFloat(el.style.fontSize);
@@ -546,16 +895,6 @@ function reduceExplicitFontSizes(measure: HTMLElement, delta: number): void {
   });
 }
 
-/**
- * Aggressive single-page fit.
- *
- * Line-height is NEVER compressed — the user's chosen line spacing is a
- * hard contract that survives into editor, preview and print. The fitter
- * only tightens margins and, as a last resort, reduces the font size down
- * to MIN_FIT_FONT_PT. If a document can't fit at the user's spacing even
- * after margins are tight and font is at the floor, it correctly flows
- * onto additional pages instead of silently tightening the leading.
- */
 function aggressiveFitToOnePage(
   measure: HTMLElement,
   targetHeight: number,
@@ -618,15 +957,12 @@ function aggressiveFitToOnePage(
       measure.style.fontSize = `${fontPt}pt`;
       reduceExplicitFontSizes(measure, 0.5);
     } else if (h >= prevHeight - 0.5) {
-      // Font is at the floor and no explicit sizes remain (or the last pass
-      // produced no height change at all). Nothing more to gain — stop.
       break;
     }
     prevHeight = h;
   }
 }
 
-/** Moderate shrink toward an N-page target (N > 1). Never touches line-height. */
 function moderateShrinkForMultiPage(measure: HTMLElement, maxTotalHeight: number, baseFontPt: number): void {
   const MAX_STEPS = 30;
   let fontPt = baseFontPt;
@@ -658,7 +994,6 @@ function moderateShrinkForMultiPage(measure: HTMLElement, maxTotalHeight: number
   }
 }
 
-/** Wrap the trailing signature block (plus the preceding paragraph) as one atomic unit. */
 const SIG_BLOCK_REGEX =
   /\b(prepared\s+by|reviewed\s+by|approved\s+by|recommending\s+approval|recommended\s+by|noted\s+by|attested\s+by|conforme|submitted\s+by|respectfully\s+submitted)\b/i;
 
@@ -689,19 +1024,10 @@ function wrapTrailingSignatureBlock(measure: HTMLElement, maxHeight: number = In
   measure.appendChild(wrapper);
 }
 
-/**
- * Split the measure element's children into an array of fragment HTML strings.
- *
- * Fast path: if the whole document already fits inside one page, return it
- * as ONE fragment without running the split loop. The loop measures real
- * rendered positions (getBoundingClientRect), so margin collapsing is
- * respected — adjacent margins never count twice.
- */
 function splitHtmlIntoFragments(measure: HTMLElement, pageHeight: number): string[] {
   const children = Array.from(measure.children) as HTMLElement[];
   if (children.length === 0) return [measure.innerHTML];
 
-  // ── Fast path: the whole thing already fits on one page. ────────────────
   if (measure.offsetHeight <= pageHeight + 4) {
     return [measure.innerHTML];
   }
@@ -794,8 +1120,89 @@ function splitHtmlIntoFragments(measure: HTMLElement, pageHeight: number): strin
   return fragments;
 }
 
+/**
+ * Strip <br> elements that appear to be PDF/DOCX extraction artifacts —
+ * hard line breaks inserted at positions where the source text was already
+ * wrapping. These breaks defeat `text-align: justify`, because CSS treats
+ * every forced break as the last line of a segment and does not stretch
+ * it. Removing them lets the browser flow the text naturally.
+ *
+ * Detection is positional: for each <br> inside the block, measure the
+ * horizontal position of the character immediately before it. If that
+ * character reaches within a tolerance of the block's right edge, the
+ * <br> was placed where the text was already wrapping — replace it with
+ * a space. If the character ended well short (a signature block, a header
+ * label, an intentional blank line), the <br> is left intact.
+ *
+ * The tolerance is a compromise: too small and ordinary wrapped prose
+ * (which usually ends 10–80px short of the right edge because the last
+ * word didn't quite fit) escapes detection; too large and short-line
+ * content like signature blocks gets mangled. max(24, width*0.12) catches
+ * typical prose while still preserving deliberate short lines.
+ *
+ * Returns the number of <br> elements replaced.
+ */
+function stripExtractionBrTags(block: HTMLElement): number {
+  const blockRect = block.getBoundingClientRect();
+  if (blockRect.width <= 0) return 0;
+  const blockRight = blockRect.right;
+  const tolerance = Math.max(24, blockRect.width * 0.12);
+
+  const lastCharRightBeforeBr = (br: HTMLBRElement): number | null => {
+    let cursor: Node | null = br.previousSibling;
+    while (cursor) {
+      if (cursor.nodeType === Node.TEXT_NODE) {
+        const text = cursor.textContent || "";
+        if (text.trim().length > 0) {
+          const range = document.createRange();
+          try {
+            range.setStart(cursor, text.length - 1);
+            range.setEnd(cursor, text.length);
+            const rects = range.getClientRects();
+            if (rects.length > 0) return rects[rects.length - 1].right;
+          } catch { /* ignore */ }
+          return null;
+        }
+      } else if (cursor.nodeType === Node.ELEMENT_NODE) {
+        const walker = document.createTreeWalker(cursor, NodeFilter.SHOW_TEXT);
+        let last: Text | null = null;
+        let n: Node | null;
+        while ((n = walker.nextNode())) {
+          if ((n.textContent || "").trim().length > 0) last = n as Text;
+        }
+        if (last) {
+          const text = last.textContent || "";
+          const range = document.createRange();
+          try {
+            range.setStart(last, text.length - 1);
+            range.setEnd(last, text.length);
+            const rects = range.getClientRects();
+            if (rects.length > 0) return rects[rects.length - 1].right;
+          } catch { /* ignore */ }
+          return null;
+        }
+      }
+      cursor = cursor.previousSibling;
+    }
+    return null;
+  };
+
+  const brs = Array.from(block.querySelectorAll("br")) as HTMLBRElement[];
+  let removed = 0;
+  for (const br of brs) {
+    const rightPos = lastCharRightBeforeBr(br);
+    if (rightPos === null) continue;
+    if (rightPos >= blockRight - tolerance) {
+      const space = document.createTextNode(" ");
+      br.parentNode?.replaceChild(space, br);
+      removed++;
+    }
+  }
+  return removed;
+}
+
 /* ============================================================================
- * SINGLE-PAGE HTML BUILDER (preview + print share this)
+ * SINGLE-PAGE HTML BUILDER  (print / PDF only)
  * ==========================================================================*/
 interface SinglePageOptions {
   fragment: string;
@@ -806,18 +1213,20 @@ interface SinglePageOptions {
   fontSizePt: number;
   lineSpacing: string;
   alignment: DocAlign;
-  headerUrl: string | null;
-  footerUrl: string | null;
+  headerImage: ImageAsset | null;
+  footerImage: ImageAsset | null;
 }
 
 function buildSinglePageHtml(opts: SinglePageOptions): string {
   const {
     fragment, pageNum, totalPages, cfg, fontCss, fontSizePt,
-    lineSpacing, alignment, headerUrl, footerUrl,
+    lineSpacing, alignment, headerImage, footerImage,
   } = opts;
 
-  const hasHeader = !!headerUrl;
-  const hasFooter = !!footerUrl;
+  const bandWidth = cfg.cssWidth - PAGE_PADDING_LEFT - PAGE_PADDING_RIGHT;
+
+  const headerDims = fitImageInBand(headerImage, bandWidth, HEADER_AREA_HEIGHT - 8);
+  const footerDims = fitImageInBand(footerImage, bandWidth, FOOTER_AREA_HEIGHT - 6);
 
   const pageStyle =
     `width:${cfg.cssWidth}px;height:${cfg.cssHeight}px;` +
@@ -826,31 +1235,44 @@ function buildSinglePageHtml(opts: SinglePageOptions): string {
     `background:#ffffff;font-family:${fontCss};font-size:${fontSizePt}pt;` +
     `color:#111827;line-height:${lineSpacing};position:relative;`;
 
-  const headerStyle =
-    `height:${HEADER_AREA_HEIGHT}px;flex-shrink:0;display:flex;align-items:center;justify-content:center;overflow:hidden;`;
-  const headerImgStyle =
-    `max-height:${MAX_HEADER_IMG_HEIGHT}px;max-width:100%;height:auto;width:auto;display:block;object-fit:contain;`;
+  const headerBandStyle =
+    `height:${HEADER_AREA_HEIGHT}px;flex-shrink:0;` +
+    `display:flex;align-items:center;justify-content:center;` +
+    `padding:4px 0;box-sizing:border-box;overflow:hidden;`;
+
+  const headerHtml =
+    headerImage && headerDims
+      ? `<div style="${headerBandStyle}">` +
+          `<img src="${headerImage.dataUrl}" ` +
+          `style="width:${headerDims.width}px;height:${headerDims.height}px;display:block;" alt="" />` +
+        `</div>`
+      : "";
 
   const contentStyle =
     `flex:1 1 auto;min-height:0;overflow:hidden;text-align:${alignment};` +
     `--doc-line-height:${lineSpacing};`;
 
-  const footerStyle =
-    `height:${hasFooter ? FOOTER_AREA_HEIGHT : FOOTER_MIN_HEIGHT}px;` +
-    `flex-shrink:0;display:flex;flex-direction:column;justify-content:flex-end;` +
-    `padding-top:4px;border-top:1px solid #E5E7EB;position:relative;overflow:hidden;`;
-  const footerImgStyle =
-    `max-height:${MAX_FOOTER_IMG_HEIGHT}px;max-width:100%;height:auto;width:auto;display:inline-block;object-fit:contain;`;
+  const footerBandHeight = footerImage ? FOOTER_AREA_HEIGHT : FOOTER_MIN_HEIGHT;
 
-  const pageNumStyle = `position:absolute;right:0;bottom:0;font-size:10px;color:#9CA3AF;font-weight:600;`;
+  const footerBandStyle =
+    `height:${footerBandHeight}px;flex-shrink:0;` +
+    `display:flex;flex-direction:column;justify-content:flex-end;align-items:center;` +
+    `padding-top:4px;border-top:1px solid #E5E7EB;position:relative;` +
+    `overflow:hidden;box-sizing:border-box;`;
 
-  const headerHtml = hasHeader
-    ? `<div style="${headerStyle}"><img src="${headerUrl}" style="${headerImgStyle}" alt="" /></div>`
-    : "";
+  const pageNumStyle =
+    `position:absolute;right:0;bottom:0;font-size:10px;` +
+    `color:#9CA3AF;font-weight:600;`;
+
+  const footerImgHtml =
+    footerImage && footerDims
+      ? `<img src="${footerImage.dataUrl}" ` +
+          `style="width:${footerDims.width}px;height:${footerDims.height}px;display:block;" alt="" />`
+      : "";
 
   const footerHtml = `
-    <div style="${footerStyle}">
-      ${hasFooter ? `<div style="text-align:center;"><img src="${footerUrl}" style="${footerImgStyle}" alt="" /></div>` : ""}
+    <div style="${footerBandStyle}">
+      ${footerImgHtml}
       <div style="${pageNumStyle}">Page ${pageNum} of ${totalPages}</div>
     </div>
   `;
@@ -1104,6 +1526,157 @@ async function buildDocxBlobFromHtml(
 }
 
 /* ============================================================================
+ * PREVIEW PAGE COMPONENT
+ * ==========================================================================*/
+interface PreviewPageProps {
+  fragment: string;
+  pageIndex: number;
+  totalPages: number;
+  cfg: PageSizeConfig;
+  fontCss: string;
+  fontSizePt: number;
+  lineSpacing: string;
+  alignment: DocAlign;
+  headerImage: ImageAsset | null;
+  footerImage: ImageAsset | null;
+  onInput: (pageIndex: number, html: string) => void;
+  onFocus: (pageIndex: number) => void;
+  onBlur: (pageIndex: number, e: React.FocusEvent<HTMLDivElement>) => void;
+  onKeyDown: (e: React.KeyboardEvent<HTMLDivElement>) => void;
+  onSelectionSync: () => void;
+}
+
+function PreviewPage(props: PreviewPageProps) {
+  const {
+    fragment, pageIndex, totalPages, cfg, fontCss, fontSizePt,
+    lineSpacing, alignment, headerImage, footerImage,
+    onInput, onFocus, onBlur, onKeyDown, onSelectionSync,
+  } = props;
+
+  const contentRef = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    const el = contentRef.current;
+    if (!el) return;
+    if (el.innerHTML !== fragment) {
+      el.innerHTML = fragment;
+    }
+  }, [fragment]);
+
+  const bandWidth = cfg.cssWidth - PAGE_PADDING_LEFT - PAGE_PADDING_RIGHT;
+  const headerDims = fitImageInBand(headerImage, bandWidth, HEADER_AREA_HEIGHT - 8);
+  const footerDims = fitImageInBand(footerImage, bandWidth, FOOTER_AREA_HEIGHT - 6);
+
+  return (
+    <div
+      style={{
+        width: cfg.cssWidth,
+        height: cfg.cssHeight,
+        padding: `${PAGE_PADDING_TOP}px ${PAGE_PADDING_RIGHT}px ${PAGE_PADDING_BOTTOM}px ${PAGE_PADDING_LEFT}px`,
+        boxSizing: "border-box",
+        display: "flex",
+        flexDirection: "column",
+        overflow: "hidden",
+        background: "#ffffff",
+        fontFamily: fontCss,
+        fontSize: `${fontSizePt}pt`,
+        color: "#111827",
+        lineHeight: lineSpacing,
+        position: "relative",
+      }}
+    >
+      {headerImage && headerDims && (
+        <div
+          style={{
+            height: HEADER_AREA_HEIGHT,
+            flexShrink: 0,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "4px 0",
+            boxSizing: "border-box",
+            overflow: "hidden",
+          }}
+        >
+          <img
+            src={headerImage.dataUrl}
+            alt=""
+            style={{
+              width: `${headerDims.width}px`,
+              height: `${headerDims.height}px`,
+              display: "block",
+            }}
+          />
+        </div>
+      )}
+
+      <div
+        ref={contentRef}
+        className="wysiwyg-content"
+        data-page-content="1"
+        data-page-index={pageIndex}
+        contentEditable
+        suppressContentEditableWarning
+        spellCheck={false}
+        onInput={(e) => onInput(pageIndex, e.currentTarget.innerHTML)}
+        onFocus={() => onFocus(pageIndex)}
+        onBlur={(e) => onBlur(pageIndex, e)}
+        onKeyDown={onKeyDown}
+        onKeyUp={onSelectionSync}
+        onMouseUp={onSelectionSync}
+        style={{
+          flex: "1 1 auto",
+          minHeight: 0,
+          overflow: "hidden",
+          textAlign: alignment,
+          ...cssVars({ "--doc-line-height": lineSpacing }),
+        }}
+      />
+
+      <div
+        style={{
+          height: footerImage ? FOOTER_AREA_HEIGHT : FOOTER_MIN_HEIGHT,
+          flexShrink: 0,
+          display: "flex",
+          flexDirection: "column",
+          justifyContent: "flex-end",
+          alignItems: "center",
+          paddingTop: 4,
+          borderTop: "1px solid #E5E7EB",
+          position: "relative",
+          overflow: "hidden",
+          boxSizing: "border-box",
+        }}
+      >
+        {footerImage && footerDims && (
+          <img
+            src={footerImage.dataUrl}
+            alt=""
+            style={{
+              width: `${footerDims.width}px`,
+              height: `${footerDims.height}px`,
+              display: "block",
+            }}
+          />
+        )}
+        <div
+          style={{
+            position: "absolute",
+            right: 0,
+            bottom: 0,
+            fontSize: 10,
+            color: "#9CA3AF",
+            fontWeight: 600,
+          }}
+        >
+          Page {pageIndex + 1} of {totalPages}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ============================================================================
  * MAIN COMPONENT
  * ==========================================================================*/
 export function DocumentGenerator() {
@@ -1133,7 +1706,7 @@ export function DocumentGenerator() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [downloading, setDownloading] = useState<DownloadTarget>(null);
 
-  const [showEditor, setShowEditor] = useState(true);
+  const [repositoryLoading, setRepositoryLoading] = useState<string | null>(null);
 
   const [headerImage, setHeaderImage] = useState<ImageAsset | null>(null);
   const [headerError, setHeaderError] = useState<string | null>(null);
@@ -1145,78 +1718,58 @@ export function DocumentGenerator() {
   const headerInputRef = useRef<HTMLInputElement>(null);
   const footerInputRef = useRef<HTMLInputElement>(null);
 
-  const [masterHtml, setMasterHtml] = useState("");
   const [previewFragments, setPreviewFragments] = useState<string[]>([]);
-  // Typography the paginator actually measured with. Pages MUST be drawn with
-  // the same values. `lineHeight` is always the user's chosen spacing — the
-  // fitter is forbidden from compressing it.
   const [fit, setFit] = useState<{ fontPt: number; lineHeight: string } | null>(null);
 
-  const editorRef = useRef<HTMLDivElement>(null);
-  const isApplyingExternalHtmlRef = useRef(false);
+  const previewWrapRef = useRef<HTMLDivElement>(null);
+  const previewPagesRef = useRef<HTMLDivElement>(null);
+  const activePageIndexRef = useRef<number>(-1);
 
-  // Tracks whether the document has been customized since it was loaded.
-  // Set to TRUE by:
-  //   • typing in the editor (`handleEditorInput`)
-  //   • changing Line Spacing in the Layout ribbon
-  //   • changing Page Size in the Layout ribbon
-  //
-  // While this is FALSE, an AI-generated draft is aggressively squeezed onto
-  // its requested page count (default: 1) — the fitter may shrink the font
-  // down to MIN_FIT_FONT_PT to make it fit.
-  //
-  // Once it becomes TRUE, the aggressive squeeze is disabled: the document
-  // simply flows onto however many pages its content + chosen typography
-  // require. Only a small overflow (≤ 20% of a page) is still absorbed onto
-  // one page, so a lone spilling line or signature block is never orphaned.
-  const hasUserEditedRef = useRef(false);
-
+  const pendingGlobalCaretRef = useRef<number | null>(null);
+  const savedSelectionDescriptorRef = useRef<SelectionDescriptor | null>(null);
   const savedRangeRef = useRef<Range | null>(null);
+
   const suppressNextStyleSyncRef = useRef<boolean>(false);
   const historyStackRef = useRef<string[]>([]);
   const historyIndexRef = useRef<number>(-1);
-  const initialHtmlRef = useRef<string>("");
+  const repaginateDebounceRef = useRef<NodeJS.Timeout | null>(null);
 
-  /* ── Preview scale: fit the page width into the panel at any browser zoom ─ */
-  const previewWrapRef = useRef<HTMLDivElement>(null);
+  const hasUserEditedRef = useRef(false);
+
   const [previewScale, setPreviewScale] = useState(1);
   useEffect(() => {
     const el = previewWrapRef.current;
     if (!el) return;
     const pageW = PAGE_SIZES[pageSize].cssWidth;
     const update = () => {
-      const available = el.clientWidth - 32;
-      setPreviewScale(Math.max(0.3, Math.min(1, available / pageW)));
+      const available = el.clientWidth - 64;
+      setPreviewScale(Math.max(0.3, Math.min(1.25, available / pageW)));
     };
     update();
     const ro = new ResizeObserver(update);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [pageSize, showEditor, view]);
+  }, [pageSize, view]);
 
-  /* ── New lines in the editor become <p> (splittable), not <div> ───────── */
   useEffect(() => {
     if (view !== "editor") return;
     try { document.execCommand("defaultParagraphSeparator", false, "p"); } catch {}
   }, [view]);
 
-  /* ── Default Letterhead Bootstrap ─────────────────────────────────────── */
   const defaultsAppliedRef = useRef(false);
   useEffect(() => {
     if (defaultsAppliedRef.current) return;
     defaultsAppliedRef.current = true;
 
-    let cancelled = false;
     (async () => {
       const [defHeader, defFooter] = await Promise.all([
         loadImageAssetFromUrl(DEFAULT_HEADER_URL),
         loadImageAssetFromUrl(DEFAULT_FOOTER_URL),
       ]);
-      if (cancelled) return;
+
       if (defHeader) setHeaderImage((prev) => prev ?? defHeader);
       if (defFooter) setFooterImage((prev) => prev ?? defFooter);
     })();
-    return () => { cancelled = true; };
   }, []);
 
   useEffect(() => {
@@ -1227,21 +1780,8 @@ export function DocumentGenerator() {
     return () => document.removeEventListener("mousedown", handler);
   }, [showFontDropdown]);
 
-  useEffect(() => {
-    const el = editorRef.current;
-    if (!el) return;
-    if (isApplyingExternalHtmlRef.current) return;
-    if (el.innerHTML !== masterHtml) {
-      isApplyingExternalHtmlRef.current = true;
-      el.innerHTML = masterHtml;
-      isApplyingExternalHtmlRef.current = false;
-    }
-  }, [masterHtml, view, showEditor]);
-
-  /* ── Preview pagination (fully re-run from scratch each time) ─────────── */
-  const computePreviewFragments = (sourceHtml?: string) => {
-    const fullHtml = sourceHtml ?? masterHtml;
-    if (!fullHtml || !fullHtml.trim()) {
+  const computePreviewFragments = (sourceHtml: string) => {
+    if (!sourceHtml || !sourceHtml.trim()) {
       setFit(null);
       setPreviewFragments([""]);
       return;
@@ -1256,7 +1796,6 @@ export function DocumentGenerator() {
     const contentAreaWidth = getContentAreaWidth(cfg.cssWidth);
     const baseLineHeight = parseFloat(lineSpacing) || 1.5;
 
-    // Build a fresh measure container for THIS run.
     const measure = document.createElement("div");
     measure.className = "wysiwyg-content";
     measure.style.cssText = `
@@ -1271,23 +1810,16 @@ export function DocumentGenerator() {
       box-sizing: border-box;
       overflow: hidden;
     `;
-    // Line-height is written ONCE here and never changed by the fitter.
     measure.style.setProperty("--doc-line-height", String(baseLineHeight));
-    measure.innerHTML = fullHtml;
+    measure.innerHTML = sourceHtml;
     document.body.appendChild(measure);
 
-    // AI drafts get squeezed onto their requested page count — but ONLY for
-    // the initial draft, before the user has typed anything OR changed the
-    // line spacing / page size. Once the user has customized the document,
-    // it flows at whatever size it naturally needs.
     const honourAiPageTarget = entryMode === "ai" && !hasUserEditedRef.current;
     let targetPageCount: number | null = honourAiPageTarget ? parseTargetPageCount(prompt) : null;
     if (!honourAiPageTarget && measure.offsetHeight <= effectiveContentHeight * SMALL_OVERFLOW_FIT_RATIO) {
       targetPageCount = 1;
     }
 
-    // 1. Fit / shrink to the target page count. The fitter only touches
-    //    margins and font size — NEVER line-height.
     if (targetPageCount === 1) {
       aggressiveFitToOnePage(measure, effectiveContentHeight, docFontSize);
     } else if (targetPageCount !== null && targetPageCount > 1) {
@@ -1299,24 +1831,19 @@ export function DocumentGenerator() {
       moderateShrinkForMultiPage(measure, maxTotalHeight, docFontSize);
     }
 
-    // Remember what the fitter did: pages must be drawn with it. Line-height
-    // is unchanged from what we set above.
     const fitFontPt = parseFloat(measure.style.fontSize) || docFontSize;
     const fitLineHeight = String(baseLineHeight);
 
-    // 2. Keep trailing signature block as a single unit
     wrapTrailingSignatureBlock(measure, effectiveContentHeight);
 
-    // 3. Split into fragments
     let fragments = splitHtmlIntoFragments(measure, effectiveContentHeight);
 
-    // 4. Retry once for a 1-page target if the first pass still yielded >1 page.
     if (targetPageCount === 1 && fragments.length > 1) {
       const retry = document.createElement("div");
       retry.className = "wysiwyg-content";
       retry.style.cssText = measure.style.cssText;
       retry.style.setProperty("--doc-line-height", String(baseLineHeight));
-      retry.innerHTML = fullHtml;
+      retry.innerHTML = sourceHtml;
       document.body.appendChild(retry);
 
       aggressiveFitToOnePage(retry, effectiveContentHeight, docFontSize);
@@ -1334,7 +1861,6 @@ export function DocumentGenerator() {
 
     document.body.removeChild(measure);
 
-    // 5. Strip trailing empty fragments (no leftover blank pages)
     while (fragments.length > 1) {
       const last = fragments[fragments.length - 1];
       const text = last.replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ").trim();
@@ -1342,45 +1868,134 @@ export function DocumentGenerator() {
       else break;
     }
 
-    const finalFragments = fragments.length > 0 ? fragments : [fullHtml];
+    const finalFragments = fragments.length > 0 ? fragments : [sourceHtml];
     setFit({ fontPt: fitFontPt, lineHeight: fitLineHeight });
     setPreviewFragments(finalFragments);
   };
 
-  const previewDebounceRef = useRef<NodeJS.Timeout | null>(null);
+  const repaginateFromDom = () => {
+    const pagesRoot = previewPagesRef.current;
+    if (!pagesRoot) return;
+    const pageEls = getPageElements(pagesRoot);
+    if (pageEls.length === 0) return;
 
-  const schedulePreviewRebuild = (sourceHtml?: string) => {
-    if (previewDebounceRef.current) clearTimeout(previewDebounceRef.current);
-    previewDebounceRef.current = setTimeout(() => computePreviewFragments(sourceHtml), 40);
+    const currentFragments = pageEls.map((el) => el.innerHTML);
+
+    const sel = window.getSelection();
+    if (sel && sel.rangeCount > 0) {
+      const range = sel.getRangeAt(0);
+      if (pagesRoot.contains(range.startContainer)) {
+        if (!range.collapsed && range.toString().trim().length > 0) {
+          const desc = computeGlobalRangeOffsets(range, pagesRoot);
+          if (desc) {
+            savedSelectionDescriptorRef.current = desc;
+            pendingGlobalCaretRef.current = null;
+          }
+        } else {
+          const caret = captureGlobalCaretOffset(pagesRoot);
+          if (caret !== null) pendingGlobalCaretRef.current = caret;
+        }
+      }
+    }
+
+    computePreviewFragments(currentFragments.join(""));
   };
 
-  const rebuildPreviewNow = (sourceHtml?: string) => {
-    if (previewDebounceRef.current) clearTimeout(previewDebounceRef.current);
-    previewDebounceRef.current = null;
-    computePreviewFragments(sourceHtml);
+  const scheduleRepaginate = () => {
+    if (repaginateDebounceRef.current) clearTimeout(repaginateDebounceRef.current);
+    repaginateDebounceRef.current = setTimeout(() => {
+      repaginateDebounceRef.current = null;
+      repaginateFromDom();
+    }, REPAGINATE_DEBOUNCE_MS);
   };
 
-  // Recompute whenever anything that affects pagination changes
-  useEffect(() => {
-    schedulePreviewRebuild();
-    return () => { if (previewDebounceRef.current) clearTimeout(previewDebounceRef.current); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [masterHtml, pageSize, docFont, docFontSize, lineSpacing, docAlign, headerImage, footerImage, view, entryMode]);
+  const cancelScheduledRepaginate = () => {
+    if (repaginateDebounceRef.current) {
+      clearTimeout(repaginateDebounceRef.current);
+      repaginateDebounceRef.current = null;
+    }
+  };
+
+  const loadHtmlIntoPreview = (html: string) => {
+    cancelScheduledRepaginate();
+    hasUserEditedRef.current = false;
+    pendingGlobalCaretRef.current = null;
+    activePageIndexRef.current = -1;
+    savedRangeRef.current = null;
+    savedSelectionDescriptorRef.current = null;
+    computePreviewFragments(html);
+  };
+
+  useLayoutEffect(() => {
+    const pagesRoot = previewPagesRef.current;
+    if (!pagesRoot) return;
+
+    const pendingCaret = pendingGlobalCaretRef.current;
+    if (pendingCaret !== null) {
+      pendingGlobalCaretRef.current = null;
+      if (restoreGlobalCaretOffset(pagesRoot, pendingCaret)) {
+        const sel = window.getSelection();
+        if (sel && sel.rangeCount > 0) {
+          const node = sel.getRangeAt(0).startContainer;
+          const page = (node instanceof Element ? node : node.parentElement)
+            ?.closest<HTMLElement>("[data-page-content='1']");
+          if (page) {
+            const idx = parseInt(page.getAttribute("data-page-index") || "-1", 10);
+            if (idx >= 0) activePageIndexRef.current = idx;
+          }
+        }
+        return;
+      }
+    }
+
+    const desc = savedSelectionDescriptorRef.current;
+    if (desc) {
+      const resolved = resolveGlobalRange(pagesRoot, desc.start, desc.end);
+      if (resolved) {
+        const sel = window.getSelection();
+        if (sel) {
+          try { sel.removeAllRanges(); sel.addRange(resolved); } catch {}
+        }
+        savedRangeRef.current = null;
+
+        const page = (resolved.startContainer instanceof Element
+          ? resolved.startContainer
+          : resolved.startContainer.parentElement
+        )?.closest<HTMLElement>("[data-page-content='1']");
+        if (page) {
+          const idx = parseInt(page.getAttribute("data-page-index") || "-1", 10);
+          if (idx >= 0) activePageIndexRef.current = idx;
+        }
+      }
+    }
+  }, [previewFragments]);
 
   useEffect(() => {
-    if (view === "editor") schedulePreviewRebuild();
+    if (view !== "editor") return;
+    const pagesRoot = previewPagesRef.current;
+    if (!pagesRoot) return;
+    const pageEls = pagesRoot.querySelectorAll("[data-page-content='1']");
+    if (pageEls.length === 0) return;
+    repaginateFromDom();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view]);
+  }, [pageSize, docFont, docFontSize, lineSpacing, docAlign, headerImage, footerImage]);
 
   useEffect(() => {
-    const text = (masterHtml || "").replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ");
+    const text = previewFragments.join(" ").replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ");
     const words = text.trim() ? text.trim().split(/\s+/).length : 0;
     setWordCount(words);
-  }, [masterHtml]);
+  }, [previewFragments]);
 
-  /* ── History ──────────────────────────────────────────────────────────── */
-  const saveHistorySnapshot = (html?: string) => {
-    const snapshot = html ?? masterHtml;
+  const readCurrentDocumentHtml = (): string => {
+    const pagesRoot = previewPagesRef.current;
+    if (!pagesRoot) return previewFragments.join("");
+    const pageEls = getPageElements(pagesRoot);
+    if (pageEls.length === 0) return previewFragments.join("");
+    return pageEls.map((el) => el.innerHTML).join("");
+  };
+
+  const saveHistorySnapshotFromDom = () => {
+    const snapshot = readCurrentDocumentHtml();
     if (!snapshot) return;
     if (historyIndexRef.current >= 0 && historyStackRef.current[historyIndexRef.current] === snapshot) return;
     historyStackRef.current = historyStackRef.current.slice(0, historyIndexRef.current + 1);
@@ -1388,34 +2003,17 @@ export function DocumentGenerator() {
     historyIndexRef.current = historyStackRef.current.length - 1;
   };
 
-  const applyExternalHtml = (html: string) => {
-    const el = editorRef.current;
-    if (el) {
-      isApplyingExternalHtmlRef.current = true;
-      el.innerHTML = html;
-      isApplyingExternalHtmlRef.current = false;
-    }
-    setMasterHtml(html);
-    setPreviewFragments((prev) => (prev.length ? prev : [html]));
-    savedRangeRef.current = null;
-    // A freshly-loaded document (new AI draft, template, undo/redo target)
-    // starts clean — the aggressive one-page fit is allowed to run again.
-    hasUserEditedRef.current = false;
-  };
-
   const handleUndo = () => {
     if (historyIndexRef.current > 0) {
       historyIndexRef.current--;
-      applyExternalHtml(historyStackRef.current[historyIndexRef.current]);
-      rebuildPreviewNow(historyStackRef.current[historyIndexRef.current]);
+      loadHtmlIntoPreview(historyStackRef.current[historyIndexRef.current]);
     }
   };
 
   const handleRedo = () => {
     if (historyIndexRef.current < historyStackRef.current.length - 1) {
       historyIndexRef.current++;
-      applyExternalHtml(historyStackRef.current[historyIndexRef.current]);
-      rebuildPreviewNow(historyStackRef.current[historyIndexRef.current]);
+      loadHtmlIntoPreview(historyStackRef.current[historyIndexRef.current]);
     }
   };
 
@@ -1427,15 +2025,43 @@ export function DocumentGenerator() {
     if (s) { s.removeAllRanges(); s.addRange(r); }
   };
 
-  /**
-   * Enter inside a heading must never create another heading (which would draw
-   * another underline). Blank lines and the text after the caret become <p>.
-   * Returns true when the key press was handled.
-   */
+  const handlePageInput = (pageIndex: number, html: string) => {
+    hasUserEditedRef.current = true;
+    setPreviewFragments((prev) => {
+      if (prev[pageIndex] === html) return prev;
+      const next = [...prev];
+      next[pageIndex] = html;
+      return next;
+    });
+    scheduleRepaginate();
+  };
+
+  const handlePageFocus = (pageIndex: number) => {
+    activePageIndexRef.current = pageIndex;
+  };
+
+  const handlePageBlur = (_pageIndex: number, e: React.FocusEvent<HTMLDivElement>) => {
+    const related = e.relatedTarget as HTMLElement | null;
+    if (related && related.closest && related.closest("[data-page-content='1']")) {
+      return;
+    }
+    cancelScheduledRepaginate();
+    saveHistorySnapshotFromDom();
+    repaginateFromDom();
+  };
+
+  const getPageIndexFromEl = (el: HTMLElement | null): number => {
+    if (!el) return -1;
+    const v = el.getAttribute("data-page-index");
+    if (v === null) return -1;
+    const n = parseInt(v, 10);
+    return isNaN(n) ? -1 : n;
+  };
+
   const handleEnterInHeading = (e: React.KeyboardEvent<HTMLDivElement>): boolean => {
-    const ed = editorRef.current;
+    const ed = e.currentTarget;
     const sel = window.getSelection();
-    if (!ed || !sel || sel.rangeCount === 0 || !sel.isCollapsed) return false;
+    if (!sel || sel.rangeCount === 0 || !sel.isCollapsed) return false;
 
     const anchor = sel.anchorNode;
     const anchorEl = anchor instanceof Element ? anchor : anchor?.parentElement;
@@ -1474,14 +2100,22 @@ export function DocumentGenerator() {
       placeCaretAtStart(p);
     }
 
-    const html = ed.innerHTML;
-    setMasterHtml(html);
-    saveHistorySnapshot(html);
-    rebuildPreviewNow(html);
+    const pageIndex = getPageIndexFromEl(ed);
+    if (pageIndex >= 0) {
+      const html = ed.innerHTML;
+      setPreviewFragments((prev) => {
+        if (prev[pageIndex] === html) return prev;
+        const next = [...prev];
+        next[pageIndex] = html;
+        return next;
+      });
+    }
+    hasUserEditedRef.current = true;
+    scheduleRepaginate();
     return true;
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+  const handlePageKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     if (e.key === "Enter" && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey && !e.nativeEvent.isComposing) {
       if (handleEnterInHeading(e)) return;
     }
@@ -1496,55 +2130,167 @@ export function DocumentGenerator() {
     }
   };
 
-  /* ── Selection ────────────────────────────────────────────────────────── */
+  const captureActiveSelectionFromRange = (range: Range) => {
+    const pagesRoot = previewPagesRef.current;
+    if (!pagesRoot) return;
+    savedRangeRef.current = range.cloneRange();
+    const desc = computeGlobalRangeOffsets(range, pagesRoot);
+    if (desc) savedSelectionDescriptorRef.current = desc;
+  };
+
+  const clearActiveSelection = () => {
+    savedRangeRef.current = null;
+    savedSelectionDescriptorRef.current = null;
+  };
+
   const getActiveLiveRange = (): Range | null => {
+    const pagesRoot = previewPagesRef.current;
+    if (!pagesRoot) return null;
+
     const sel = window.getSelection();
     if (sel && sel.rangeCount > 0 && !sel.isCollapsed) {
       const range = sel.getRangeAt(0);
-      if (!range.collapsed && range.toString().trim().length > 0) return range;
+      if (
+        !range.collapsed &&
+        range.toString().trim().length > 0 &&
+        pagesRoot.contains(range.startContainer) &&
+        pagesRoot.contains(range.endContainer)
+      ) {
+        return range;
+      }
     }
-    if (savedRangeRef.current && !savedRangeRef.current.collapsed && savedRangeRef.current.toString().trim().length > 0) {
+
+    if (
+      savedRangeRef.current &&
+      !savedRangeRef.current.collapsed &&
+      savedRangeRef.current.toString().trim().length > 0 &&
+      isRangeAttachedToPages(savedRangeRef.current, pagesRoot)
+    ) {
       return savedRangeRef.current;
     }
+
+    const desc = savedSelectionDescriptorRef.current;
+    if (desc) {
+      const resolved = resolveGlobalRange(pagesRoot, desc.start, desc.end);
+      if (resolved && !resolved.collapsed && resolved.toString().trim().length > 0) {
+        return resolved;
+      }
+    }
+
+    return null;
+  };
+
+  /**
+   * Return the range to act on for toolbar commands that should also work
+   * from a collapsed caret (alignment, list toggles, block-level styles).
+   */
+  const getActiveRangeOrCaret = (): Range | null => {
+    const pagesRoot = previewPagesRef.current;
+    if (!pagesRoot) return null;
+
+    const sel = window.getSelection();
+    if (sel && sel.rangeCount > 0) {
+      const range = sel.getRangeAt(0);
+      if (
+        pagesRoot.contains(range.startContainer) &&
+        pagesRoot.contains(range.endContainer)
+      ) {
+        return range;
+      }
+    }
+
+    if (
+      savedRangeRef.current &&
+      isRangeAttachedToPages(savedRangeRef.current, pagesRoot)
+    ) {
+      return savedRangeRef.current;
+    }
+
+    const desc = savedSelectionDescriptorRef.current;
+    if (desc) {
+      const resolved = resolveGlobalRange(pagesRoot, desc.start, desc.end);
+      if (resolved) return resolved;
+    }
+
     return null;
   };
 
   const saveCurrentSelection = () => {
     const sel = window.getSelection();
-    const ed = editorRef.current;
-    if (sel && sel.rangeCount > 0 && !sel.isCollapsed && sel.toString().trim().length > 0 && ed && ed.contains(sel.anchorNode)) {
-      savedRangeRef.current = sel.getRangeAt(0).cloneRange();
+    const pagesRoot = previewPagesRef.current;
+    if (
+      sel && sel.rangeCount > 0 && !sel.isCollapsed &&
+      sel.toString().trim().length > 0 &&
+      pagesRoot && pagesRoot.contains(sel.anchorNode)
+    ) {
+      captureActiveSelectionFromRange(sel.getRangeAt(0));
     }
   };
 
   const restoreSelection = () => {
-    const ed = editorRef.current;
-    if (ed) ed.focus();
-    if (savedRangeRef.current) {
-      const sel = window.getSelection();
-      if (sel) { try { sel.removeAllRanges(); sel.addRange(savedRangeRef.current.cloneRange()); } catch {} }
+    const range = getActiveLiveRange();
+    if (!range) return;
+    const sel = window.getSelection();
+    if (sel) {
+      try { sel.removeAllRanges(); sel.addRange(range); } catch {}
     }
+  };
+
+  const getPageElFromRange = (range: Range): HTMLElement | null => {
+    const pagesRoot = previewPagesRef.current;
+    if (!pagesRoot) return null;
+    const node = range.startContainer;
+    const el = (node instanceof Element ? node : node.parentElement)
+      ?.closest<HTMLElement>("[data-page-content='1']");
+    if (!el || !pagesRoot.contains(el)) return null;
+    return el;
+  };
+
+  const getFocusedPageEl = (): HTMLElement | null => {
+    const pagesRoot = previewPagesRef.current;
+    if (!pagesRoot) return null;
+    const idx = activePageIndexRef.current;
+    if (idx < 0) return null;
+    const pageEls = getPageElements(pagesRoot);
+    return pageEls[idx] || null;
+  };
+
+  const syncAllPageState = () => {
+    const pagesRoot = previewPagesRef.current;
+    if (!pagesRoot) return;
+    const pageEls = getPageElements(pagesRoot);
+    if (pageEls.length === 0) return;
+    const nextFragments = pageEls.map((el) => el.innerHTML);
+    setPreviewFragments((prev) => {
+      if (prev.length === nextFragments.length && prev.every((p, i) => p === nextFragments[i])) return prev;
+      return nextFragments;
+    });
+  };
+
+  const handleSelectionSync = () => {
+    saveCurrentSelection();
+    updateActiveSelectionStyles();
   };
 
   const updateActiveSelectionStyles = () => {
     if (suppressNextStyleSyncRef.current) { suppressNextStyleSyncRef.current = false; return; }
     try {
       const sel = window.getSelection();
-      const ed = editorRef.current;
-      if (!ed) return;
+      const pagesRoot = previewPagesRef.current;
+      if (!pagesRoot) return;
 
-      if (sel && sel.rangeCount > 0 && ed.contains(sel.anchorNode)) {
+      if (sel && sel.rangeCount > 0 && pagesRoot.contains(sel.anchorNode)) {
         if (!sel.isCollapsed && sel.toString().trim().length > 0) {
-          savedRangeRef.current = sel.getRangeAt(0).cloneRange();
+          captureActiveSelectionFromRange(sel.getRangeAt(0));
         } else if (sel.isCollapsed) {
-          savedRangeRef.current = null;
+          clearActiveSelection();
         }
       }
 
-      if (sel && sel.rangeCount > 0 && ed.contains(sel.anchorNode)) {
-        let isBold = document.queryCommandState("bold");
-        let isItalic = document.queryCommandState("italic");
-        let isUnderline = document.queryCommandState("underline");
+      if (sel && sel.rangeCount > 0 && pagesRoot.contains(sel.anchorNode)) {
+        const isBold = document.queryCommandState("bold");
+        const isItalic = document.queryCommandState("italic");
+        const isUnderline = document.queryCommandState("underline");
         const isStrike = document.queryCommandState("strikeThrough");
         const isUl = document.queryCommandState("insertUnorderedList");
         const isOl = document.queryCommandState("insertOrderedList");
@@ -1554,6 +2300,7 @@ export function DocumentGenerator() {
 
         let detectedFont: DocFont = docFont;
         let detectedSize: number = docFontSize;
+        let blockAlign: "left" | "center" | "right" | "justify" = "left";
 
         if (node && node instanceof HTMLElement) {
           const fs = window.getComputedStyle(node);
@@ -1563,21 +2310,26 @@ export function DocumentGenerator() {
           else if (ff.includes("georgia")) detectedFont = "georgia";
           else if (ff.includes("courier")) detectedFont = "mono";
 
-          if (!isBold && (fs.fontWeight === "bold" || parseInt(fs.fontWeight) >= 600 || node.closest("b, strong"))) isBold = true;
-          if (!isItalic && (fs.fontStyle === "italic" || node.closest("i, em"))) isItalic = true;
-          if (!isUnderline && (fs.textDecoration.includes("underline") || node.closest("u"))) isUnderline = true;
-
           const px = parseFloat(fs.fontSize);
           if (px) detectedSize = Math.round((px * 72) / 96);
+
+          const alignNode = node.closest(
+            "p, h1, h2, h3, h4, h5, h6, li, td, th, blockquote"
+          ) as HTMLElement | null;
+          const cssAlign = (alignNode ? window.getComputedStyle(alignNode).textAlign : "").toLowerCase();
+          if (cssAlign === "center") blockAlign = "center";
+          else if (cssAlign === "right" || cssAlign === "end") blockAlign = "right";
+          else if (cssAlign === "justify") blockAlign = "justify";
+          else blockAlign = "left";
         }
 
         setActiveStyles({
           bold: isBold, italic: isItalic, underline: isUnderline, strike: isStrike,
           ul: isUl, ol: isOl,
-          alignLeft: document.queryCommandState("justifyLeft") || docAlign === "left",
-          alignCenter: document.queryCommandState("justifyCenter") || docAlign === "center",
-          alignRight: document.queryCommandState("justifyRight") || docAlign === "right",
-          alignJustify: document.queryCommandState("justifyFull") || docAlign === "justify",
+          alignLeft: blockAlign === "left",
+          alignCenter: blockAlign === "center",
+          alignRight: blockAlign === "right",
+          alignJustify: blockAlign === "justify",
           font: detectedFont,
         });
         setDisplayedFontSize(detectedSize);
@@ -1591,22 +2343,6 @@ export function DocumentGenerator() {
     return () => document.removeEventListener("selectionchange", handler);
   }, [view, docAlign]);
 
-  const handleEditorInput = (e: React.FormEvent<HTMLDivElement>) => {
-    if (isApplyingExternalHtmlRef.current) return;
-    const html = e.currentTarget.innerHTML;
-    hasUserEditedRef.current = true;
-    setMasterHtml(html);
-    saveHistorySnapshot(html);
-    updateActiveSelectionStyles();
-  };
-
-  /* ── Layout ribbon handlers ────────────────────────────────────────────
-   * Changing line spacing or page size counts as a user customization. Once
-   * the user has done so, the aggressive "force onto the requested page
-   * count" fit is disabled — the document flows at whatever size it needs
-   * at the chosen typography, instead of shrinking the font to force it
-   * back onto one page. (See the comment on `hasUserEditedRef` above.)
-   */
   const handleLineSpacingChange = (ls: LineSpacing) => {
     hasUserEditedRef.current = true;
     setLineSpacing(ls);
@@ -1617,7 +2353,6 @@ export function DocumentGenerator() {
     setPageSize(ps);
   };
 
-  /* ── Image upload ─────────────────────────────────────────────────────── */
   const handleHeaderUpload = async (file: File | undefined) => {
     if (!file) return;
     setHeaderError(null);
@@ -1637,32 +2372,78 @@ export function DocumentGenerator() {
 
   const resolveFileNameBase = (): string => {
     if (entryMode === "template" && activeTemplateId) {
-      const tpl = getTemplateById(activeTemplateId);
-      if (tpl) return tpl.fileName;
+      return sanitizeFileName(activeTemplateId);
     }
     return sanitizeFileName(prompt);
   };
 
-  /* ── Load template ────────────────────────────────────────────────────── */
-  const loadTemplate = (tpl: DocumentTemplate) => {
-    historyStackRef.current = [tpl.html];
-    historyIndexRef.current = 0;
-    initialHtmlRef.current = tpl.html;
+  const loadRepositoryDocument = async (doc: RepositoryDocument) => {
+    if (repositoryLoading) {
+      console.warn("[loadRepositoryDocument] ignoring click — already loading:", repositoryLoading);
+      return;
+    }
 
-    setPageSize(tpl.pageSize);
-    setLineSpacing(tpl.lineSpacing);
-    setPrompt(tpl.title);
-    setEntryMode("template");
-    setActiveTemplateId(tpl.id);
-    setStatus("success");
-    setShowEditor(true);
+    setErrorMessage(null);
+    setRepositoryLoading(doc.name);
 
-    applyExternalHtml(tpl.html);
-    setView("editor");
-    setTimeout(() => rebuildPreviewNow(tpl.html), 30);
+    try {
+      const url = `/api/repository-documents/${encodeURIComponent(doc.name)}/content`;
+      console.log("[loadRepositoryDocument] →", url);
+
+      const resp = await fetch(url);
+      console.log("[loadRepositoryDocument] ←", resp.status, resp.headers.get("content-type"));
+
+      if (!resp.ok) {
+        const errText = await resp.text().catch(() => "");
+        const snippet = errText ? ` — ${errText.slice(0, 200)}` : "";
+        throw new Error(`Could not load document content (HTTP ${resp.status})${snippet}`);
+      }
+
+      const payload: RepositoryDocumentContent = await resp.json();
+      console.log("[loadRepositoryDocument] payload keys:", Object.keys(payload || {}));
+
+      if (!payload.content_html || !payload.content_html.trim()) {
+        throw new Error(
+          `"${doc.name}" could not be reconstructed as an editable document. ` +
+          "The original file may be missing from storage. " +
+          "Re-upload it via the accreditation evidence flow."
+        );
+      }
+
+      // The repository's stored header_image_url / footer_image_url are
+      // intentionally ignored — the editor always uses the local
+      // /public/ctu-argao-header.jpg and /public/ctu-argao-footer.jpg files
+      // loaded by the mount-time bootstrap.
+      if (payload.page_size && ["short", "a4", "long"].includes(payload.page_size)) {
+        setPageSize(payload.page_size as PageSize);
+      }
+      if (payload.line_spacing && ["1.15", "1.5", "2.0"].includes(payload.line_spacing)) {
+        setLineSpacing(payload.line_spacing as LineSpacing);
+      }
+
+      historyStackRef.current = [payload.content_html];
+      historyIndexRef.current = 0;
+
+      setPrompt(payload.name || doc.name);
+      setEntryMode("template");
+      setActiveTemplateId(doc.name);
+      setStatus("success");
+      setErrorMessage(null);
+      setView("editor");
+      loadHtmlIntoPreview(payload.content_html);
+
+      console.log("[loadRepositoryDocument] ✓ opened:", doc.name);
+    } catch (err) {
+      console.error("[loadRepositoryDocument] ✗ failed:", err);
+      setErrorMessage(
+        err instanceof Error ? err.message : "Failed to open document."
+      );
+      setStatus("error");
+    } finally {
+      setRepositoryLoading(null);
+    }
   };
 
-  /* ── Generate ─────────────────────────────────────────────────────────── */
   const handleGenerate = async () => {
     if (!prompt.trim()) return;
     setStatus("generating");
@@ -1706,172 +2487,280 @@ export function DocumentGenerator() {
       }
 
       const parsedHtml = markdownToHtml(rawContent);
-
       historyStackRef.current = [parsedHtml];
       historyIndexRef.current = 0;
-      initialHtmlRef.current = parsedHtml;
 
       setEntryMode("ai");
       setActiveTemplateId(null);
       setStatus("success");
-      setShowEditor(true);
 
-      applyExternalHtml(parsedHtml);
       setView("editor");
-      setTimeout(() => rebuildPreviewNow(parsedHtml), 30);
+      loadHtmlIntoPreview(parsedHtml);
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : "Failed to draft document.");
       setStatus("error");
     }
   };
 
-  /* ── Formatting ───────────────────────────────────────────────────────── */
+  const restoreSelectionAroundSpans = (spans: HTMLElement[]): Range | null => {
+    if (spans.length === 0) return null;
+    const first = spans[0];
+    const last = spans[spans.length - 1];
+    const firstText = first.firstChild;
+    const lastText = last.lastChild;
+
+    const nr = document.createRange();
+    if (firstText && firstText.nodeType === Node.TEXT_NODE && lastText && lastText.nodeType === Node.TEXT_NODE) {
+      nr.setStart(firstText, 0);
+      nr.setEnd(lastText, (lastText.textContent ?? "").length);
+    } else {
+      nr.selectNodeContents(first);
+    }
+    const sel = window.getSelection();
+    if (sel) { sel.removeAllRanges(); sel.addRange(nr); }
+    return nr;
+  };
+
+  const commitPageMutation = () => {
+    hasUserEditedRef.current = true;
+
+    const sel = window.getSelection();
+    const pagesRoot = previewPagesRef.current;
+    if (
+      sel && sel.rangeCount > 0 && !sel.isCollapsed &&
+      sel.toString().trim().length > 0 &&
+      pagesRoot && pagesRoot.contains(sel.anchorNode) && pagesRoot.contains(sel.focusNode)
+    ) {
+      captureActiveSelectionFromRange(sel.getRangeAt(0));
+    } else {
+      clearActiveSelection();
+    }
+
+    syncAllPageState();
+    scheduleRepaginate();
+    saveHistorySnapshotFromDom();
+  };
+
   const applyFontToSelection = (fontKey: DocFont): boolean => {
-    restoreSelection();
-    const ed = editorRef.current;
-    if (!ed) return false;
     const range = getActiveLiveRange();
     if (!range || range.collapsed) return false;
+    const pageEl = getPageElFromRange(range);
+    if (!pageEl) return false;
 
-    const fontCss = FONT_CONFIG[fontKey].css;
-    ed.focus();
+    pageEl.focus();
     const sel = window.getSelection();
     if (sel) { sel.removeAllRanges(); sel.addRange(range); }
 
-    try {
-      const span = document.createElement("span");
-      span.style.fontFamily = fontCss;
-      const fragment = range.extractContents();
-      fragment.querySelectorAll("*").forEach((c) => {
-        if (c instanceof HTMLElement) {
-          if (c.style.fontFamily) c.style.fontFamily = fontCss;
-          if (c.tagName === "FONT") { c.removeAttribute("face"); c.style.fontFamily = fontCss; }
-        }
-      });
-      span.appendChild(fragment);
-      range.insertNode(span);
+    const spans = wrapRangeInStyledSpans(range, "font-family", FONT_CONFIG[fontKey].css);
+    if (spans.length === 0) return false;
 
-      const nr = document.createRange();
-      nr.selectNode(span);
-      suppressNextStyleSyncRef.current = true;
-      if (sel) { sel.removeAllRanges(); sel.addRange(nr); }
-      savedRangeRef.current = nr.cloneRange();
-      setActiveStyles((prev) => ({ ...prev, font: fontKey }));
-
-      const newHtml = ed.innerHTML;
-      setMasterHtml(newHtml);
-      saveHistorySnapshot(newHtml);
-      restoreSelection();
-      rebuildPreviewNow(newHtml);
-      return true;
-    } catch { return false; }
+    const nr = restoreSelectionAroundSpans(spans);
+    if (nr) suppressNextStyleSyncRef.current = true;
+    setActiveStyles((prev) => ({ ...prev, font: fontKey }));
+    commitPageMutation();
+    return true;
   };
 
   const applyFontSizeToSelection = (deltaOrSize: number, isAbsolute = false): boolean => {
-    restoreSelection();
-    const ed = editorRef.current;
-    if (!ed) return false;
     const range = getActiveLiveRange();
     if (!range || range.collapsed) return false;
+    const pageEl = getPageElFromRange(range);
+    if (!pageEl) return false;
 
     const targetPt = isAbsolute
       ? Math.max(8, Math.min(124, deltaOrSize))
       : Math.max(8, Math.min(124, displayedFontSize + deltaOrSize));
 
-    ed.focus();
+    pageEl.focus();
     const sel = window.getSelection();
     if (sel) { sel.removeAllRanges(); sel.addRange(range); }
 
-    try {
-      const span = document.createElement("span");
-      span.style.fontSize = `${targetPt}pt`;
-      const fragment = range.extractContents();
-      fragment.querySelectorAll("*").forEach((c) => {
-        if (c instanceof HTMLElement && c.style.fontSize) c.style.fontSize = `${targetPt}pt`;
-      });
-      span.appendChild(fragment);
-      range.insertNode(span);
+    const spans = wrapRangeInStyledSpans(range, "font-size", `${targetPt}pt`);
+    if (spans.length === 0) return false;
 
-      const nr = document.createRange();
-      nr.selectNode(span);
-      suppressNextStyleSyncRef.current = true;
-      if (sel) { sel.removeAllRanges(); sel.addRange(nr); }
-      savedRangeRef.current = nr.cloneRange();
-      setDisplayedFontSize(targetPt);
-
-      const newHtml = ed.innerHTML;
-      setMasterHtml(newHtml);
-      saveHistorySnapshot(newHtml);
-      restoreSelection();
-      rebuildPreviewNow(newHtml);
-      return true;
-    } catch { return false; }
+    const nr = restoreSelectionAroundSpans(spans);
+    if (nr) suppressNextStyleSyncRef.current = true;
+    setDisplayedFontSize(targetPt);
+    commitPageMutation();
+    return true;
   };
 
   const applyFormattingCommand = (command: string, value?: string) => {
-    restoreSelection();
-    const ed = editorRef.current;
-    if (!ed) return;
-    const range = getActiveLiveRange();
+    // Caret-tolerant range so list toggles work from a bare caret.
+    const range = getActiveRangeOrCaret();
     if (!range) return;
+    const pageEl = getPageElFromRange(range);
+    if (!pageEl) return;
 
-    ed.focus();
+    pageEl.focus();
     const sel = window.getSelection();
     if (sel) { sel.removeAllRanges(); sel.addRange(range); }
 
     document.execCommand(command, false, value);
 
-    const newHtml = ed.innerHTML;
-    setMasterHtml(newHtml);
-    saveHistorySnapshot(newHtml);
+    // Cancel any debounced repaginate scheduled during execCommand's input
+    // events, and commit synchronously so the state we persist IS the DOM
+    // we just mutated. A stale fragment can no longer overwrite the change.
+    cancelScheduledRepaginate();
+    hasUserEditedRef.current = true;
+
+    const sel2 = window.getSelection();
+    const pagesRoot = previewPagesRef.current;
+    if (
+      sel2 && sel2.rangeCount > 0 && !sel2.isCollapsed &&
+      sel2.toString().trim().length > 0 &&
+      pagesRoot && pagesRoot.contains(sel2.anchorNode) && pagesRoot.contains(sel2.focusNode)
+    ) {
+      captureActiveSelectionFromRange(sel2.getRangeAt(0));
+    } else {
+      clearActiveSelection();
+    }
+
+    syncAllPageState();
+    saveHistorySnapshotFromDom();
+    repaginateFromDom();
     updateActiveSelectionStyles();
-    rebuildPreviewNow(newHtml);
   };
 
   const handleFontFamilyChange = (newFont: DocFont) => {
-    if (applyFontToSelection(newFont)) restoreSelection();
+    applyFontToSelection(newFont);
     setShowFontDropdown(false);
   };
 
   const handleFontSizeChange = (deltaOrSize: number, isAbsolute = false) => {
-    if (applyFontSizeToSelection(deltaOrSize, isAbsolute)) restoreSelection();
+    applyFontSizeToSelection(deltaOrSize, isAbsolute);
+  };
+
+  /**
+   * Apply text-align directly to the block-level elements intersecting the
+   * current selection. Bypasses document.execCommand, whose justifyFull
+   * silently no-ops inside a CSS-transformed contentEditable and whose
+   * behaviour varies for the other three alignments across browsers.
+   *
+   * Block detection recognizes standard block tags (P, H1-H6, LI, TD, TH,
+   * BLOCKQUOTE, PRE) plus direct-child DIVs — Chrome's contentEditable wraps
+   * Enter-generated paragraphs in a bare <div> when the initial content did
+   * not start as a <p>. Without the DIV case, selecting such a paragraph
+   * and clicking Justify would find no target and silently do nothing.
+   */
+  const applyParagraphAlignment = (align: DocAlign): boolean => {
+    const range = getActiveRangeOrCaret();
+    if (!range) return false;
+    const pageEl = getPageElFromRange(range);
+    if (!pageEl) return false;
+
+    const BLOCK_TAGS = new Set([
+      "P", "H1", "H2", "H3", "H4", "H5", "H6",
+      "LI", "TD", "TH", "BLOCKQUOTE", "PRE",
+    ]);
+
+    const isBlockElement = (el: HTMLElement): boolean => {
+      if (BLOCK_TAGS.has(el.tagName)) return true;
+      // A direct-child DIV of the page content element is a contentEditable
+      // paragraph wrapper (from Enter in a plain-text region). Nested divs
+      // — styling wrappers, table cells, etc. — are not alignment targets.
+      if (el.tagName === "DIV" && el.parentNode === pageEl) return true;
+      return false;
+    };
+
+    const findEnclosingBlock = (node: Node): HTMLElement | null => {
+      let cur: Node | null = node;
+      while (cur && cur !== pageEl) {
+        if (cur instanceof HTMLElement && isBlockElement(cur)) return cur;
+        cur = cur.parentNode;
+      }
+      return null;
+    };
+
+    const startBlock = findEnclosingBlock(range.startContainer);
+    const endBlock = findEnclosingBlock(range.endContainer);
+
+    const targets = new Set<HTMLElement>();
+    if (startBlock) targets.add(startBlock);
+
+    if (startBlock && endBlock && startBlock !== endBlock) {
+      // Build an ordered list of block-level descendants of the page,
+      // including direct-child DIVs, by walking every element in document
+      // order and keeping the ones that qualify.
+      const allBlocks = Array.from(pageEl.querySelectorAll<HTMLElement>("*"))
+        .filter(isBlockElement);
+
+      const lo = allBlocks.indexOf(startBlock);
+      const hi = allBlocks.indexOf(endBlock);
+      if (lo >= 0 && hi >= 0) {
+        const [a, b] = lo <= hi ? [lo, hi] : [hi, lo];
+        for (let i = a; i <= b; i++) targets.add(allBlocks[i]);
+      }
+    }
+
+    if (targets.size === 0) return false;
+
+    targets.forEach((block) => {
+      // For non-left alignments, remove PDF/DOCX extraction artifacts —
+      // the <br> tags that break each visual line — so the chosen
+      // alignment can actually take visual effect. The strip is
+      // position-based, so intentional short-line breaks (headers,
+      // signature blocks, addresses) are preserved.
+      if (align !== "left") {
+        stripExtractionBrTags(block);
+      }
+
+      if (align === "left") {
+        block.style.removeProperty("text-align");
+        if (block.getAttribute("style") === "") block.removeAttribute("style");
+      } else {
+        block.style.textAlign = align;
+      }
+    });
+
+    const arr = Array.from(targets);
+    const newRange = document.createRange();
+    newRange.setStartBefore(arr[0]);
+    newRange.setEndAfter(arr[arr.length - 1]);
+    const sel = window.getSelection();
+    if (sel) { sel.removeAllRanges(); sel.addRange(newRange); }
+    savedRangeRef.current = newRange.cloneRange();
+    const pagesRoot = previewPagesRef.current;
+    if (pagesRoot) {
+      const desc = computeGlobalRangeOffsets(newRange, pagesRoot);
+      if (desc) savedSelectionDescriptorRef.current = desc;
+    }
+
+    hasUserEditedRef.current = true;
+    cancelScheduledRepaginate();
+    syncAllPageState();
+    saveHistorySnapshotFromDom();
+    repaginateFromDom();
+    updateActiveSelectionStyles();
+    return true;
   };
 
   const handleAlignmentChange = (align: DocAlign) => {
-    const cmd =
-      align === "center" ? "justifyCenter" :
-      align === "right"  ? "justifyRight" :
-      align === "justify" ? "justifyFull" :
-      "justifyLeft";
-    applyFormattingCommand(cmd);
+    applyParagraphAlignment(align);
   };
 
-  const insertSignatureBlank = () => {
-    const ed = editorRef.current;
-    if (!ed) return;
-    ed.focus();
-    document.execCommand("insertText", false, "____________________________________");
-    const newHtml = ed.innerHTML;
-    setMasterHtml(newHtml);
-    saveHistorySnapshot(newHtml);
-    rebuildPreviewNow(newHtml);
+  const insertTextAtCaret = (text: string) => {
+    const range = getActiveLiveRange();
+    let pageEl = range ? getPageElFromRange(range) : null;
+    if (!pageEl) pageEl = getFocusedPageEl();
+    if (!pageEl) return;
+
+    pageEl.focus();
+    if (range) {
+      const sel = window.getSelection();
+      if (sel) { sel.removeAllRanges(); sel.addRange(range); }
+    }
+    document.execCommand("insertText", false, text);
+    clearActiveSelection();
+    commitPageMutation();
   };
 
-  const insertDateStamp = () => {
-    const ed = editorRef.current;
-    if (!ed) return;
-    ed.focus();
-    const dateStr = new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
-    document.execCommand("insertText", false, dateStr);
-    const newHtml = ed.innerHTML;
-    setMasterHtml(newHtml);
-    saveHistorySnapshot(newHtml);
-    rebuildPreviewNow(newHtml);
-  };
+  const insertSignatureBlank = () => insertTextAtCaret("____________________________________");
+  const insertDateStamp = () =>
+    insertTextAtCaret(new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }));
 
-  /* ── Print / PDF ──────────────────────────────────────────────────────── */
   const handlePrint = () => {
-    const fragments = previewFragments.length ? previewFragments : [masterHtml];
+    const fragments = previewFragments.length ? previewFragments : [""];
     const cfg = PAGE_SIZES[pageSize];
 
     const pagesHtml = fragments
@@ -1885,8 +2774,8 @@ export function DocumentGenerator() {
           fontSizePt: fit?.fontPt ?? docFontSize,
           lineSpacing: fit?.lineHeight ?? lineSpacing,
           alignment: docAlign,
-          headerUrl: headerImage ? headerImage.dataUrl : null,
-          footerUrl: footerImage ? footerImage.dataUrl : null,
+          headerImage,
+          footerImage,
         })
       )
       .join("");
@@ -1910,16 +2799,16 @@ export function DocumentGenerator() {
     setTimeout(() => { printWindow.print(); printWindow.close(); }, 400);
   };
 
-  /* ── DOCX ─────────────────────────────────────────────────────────────── */
   const handleDownloadDocx = async () => {
     setDownloading("docx");
     setErrorMessage(null);
     try {
+      const masterHtml = readCurrentDocumentHtml();
       const docxBlob = await buildDocxBlobFromHtml(
         masterHtml, docFont, Math.round((fit?.fontPt ?? docFontSize) * 2) / 2, pageSize, docAlign,
         headerImage, !headerImage, footerImage, !footerImage
       );
-      saveAs(docxBlob, `${sanitizeFileName(prompt)}_${new Date().toISOString().slice(0, 10)}.docx`);
+      saveAs(docxBlob, `${resolveFileNameBase()}_${new Date().toISOString().slice(0, 10)}.docx`);
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : "Failed to generate DOCX.");
     } finally { setDownloading(null); }
@@ -1927,28 +2816,46 @@ export function DocumentGenerator() {
 
   const handleDownloadPdf = () => handlePrint();
 
-  /* ========================================================================
-   * RENDER: CHOOSER
-   * ====================================================================== */
   if (view === "chooser") {
     return (
       <ChooserScreen
         onPickAI={() => { setEntryMode("ai"); setActiveTemplateId(null); setView("compose"); }}
-        onPickTemplate={() => setView("templates")}
+        onPickTemplate={() => {
+          setErrorMessage(null);
+          setRepositoryLoading(null);
+          setView("templates");
+        }}
       />
     );
   }
 
   if (view === "templates") {
-    return <TemplatesScreen onBack={() => setView("chooser")} onSelect={(tpl) => loadTemplate(tpl)} />;
+    return (
+      <TemplatesScreen
+        onBack={() => {
+          setErrorMessage(null);
+          setRepositoryLoading(null);
+          setView("chooser");
+        }}
+        onSelect={(doc) => loadRepositoryDocument(doc)}
+        errorMessage={errorMessage}
+        onDismissError={() => setErrorMessage(null)}
+        loadingDocName={repositoryLoading}
+        headerImage={headerImage}
+        footerImage={footerImage}
+        headerError={headerError}
+        footerError={footerError}
+        onHeaderUpload={handleHeaderUpload}
+        onFooterUpload={handleFooterUpload}
+        onRemoveHeader={removeHeaderLetterhead}
+        onRemoveFooter={removeFooterLetterhead}
+      />
+    );
   }
 
-  /* ========================================================================
-   * RENDER: EDITOR
-   * ====================================================================== */
   if (view === "editor") {
     const cfg = PAGE_SIZES[pageSize];
-    const fragments = previewFragments.length ? previewFragments : [masterHtml];
+    const fragments = previewFragments.length ? previewFragments : [""];
 
     return (
       <div className="space-y-4">
@@ -1961,7 +2868,6 @@ export function DocumentGenerator() {
 
         <style dangerouslySetInnerHTML={{ __html: CONTENT_STYLES }} />
 
-        {/* ── TOOLBAR ─────────────────────────────────────────────────────── */}
         <div className="sticky top-16 z-30 space-y-3 bg-[#F3F4F6] pt-2 pb-3 shadow-md -mx-4 px-4 sm:-mx-6 sm:px-6">
           <div className="bg-white rounded-xl border border-[#E5E7EB] shadow-sm p-4">
             <div className="flex flex-wrap items-center justify-between gap-4">
@@ -1971,12 +2877,12 @@ export function DocumentGenerator() {
                   className="flex items-center gap-2 px-3.5 py-2 bg-[#F9FAFB] hover:bg-[#F3F4F6] border border-[#E5E7EB] rounded-lg text-xs font-bold text-[#374151] transition-all shadow-sm active:scale-95"
                 >
                   <ArrowLeft className="h-4 w-4 text-[#dd7230]" />
-                  <span>{entryMode === "template" ? "Choose Another" : "New Prompt"}</span>
+                  <span>{entryMode === "template" ? "Back to Repository" : "New Prompt"}</span>
                 </button>
                 <div>
                   <span className="text-[11px] font-bold uppercase tracking-wider text-[#dd7230] flex items-center gap-1.5">
                     <Sparkles className="h-3.5 w-3.5" />
-                    AI DOCUMENT GENERATOR
+                    {entryMode === "template" ? "KNOWLEDGE REPOSITORY DOCUMENT" : "AI DOCUMENT GENERATOR"}
                   </span>
                   <p className="text-sm font-semibold text-[#1F2937] truncate max-w-[260px] sm:max-w-md">
                     {prompt || "Institutional Document"}
@@ -1985,17 +2891,6 @@ export function DocumentGenerator() {
               </div>
 
               <div className="flex flex-wrap items-center gap-2.5">
-                <button
-                  onClick={() => setShowEditor((v) => !v)}
-                  className="flex items-center gap-2 px-3.5 py-2.5 bg-[#F9FAFB] hover:bg-[#F3F4F6] border border-[#E5E7EB] rounded-lg text-xs font-bold text-[#374151] transition-all active:scale-95"
-                  title={showEditor ? "Hide the editable panel" : "Show the editable panel"}
-                >
-                  {showEditor
-                    ? <PanelLeftClose className="h-4 w-4 text-[#dd7230]" />
-                    : <PanelLeftOpen className="h-4 w-4 text-[#dd7230]" />}
-                  <span>{showEditor ? "Hide Editor" : "Show Editor"}</span>
-                </button>
-
                 <button
                   onClick={handleDownloadDocx}
                   disabled={downloading !== null}
@@ -2024,7 +2919,6 @@ export function DocumentGenerator() {
             </div>
           </div>
 
-          {/* Ribbon */}
           <div className="bg-white rounded-xl border border-[#E5E7EB] shadow-sm relative z-20">
             <div className="flex items-center border-b border-[#E5E7EB] bg-[#F9FAFB] px-3 pt-1 gap-1">
               {(["home", "layout", "insert"] as RibbonTab[]).map((tab) => (
@@ -2296,120 +3190,78 @@ export function DocumentGenerator() {
           </div>
         </div>
 
-        {/* ── SPLIT VIEW ──────────────────────────────────────────────────── */}
         <div
-          className="flex flex-col lg:flex-row gap-4"
-          style={{ height: "calc(100vh - 320px)", minHeight: "560px" }}
+          className="rounded-2xl border border-[#E5E7EB] shadow-sm overflow-hidden bg-white flex flex-col"
+          style={{ height: "calc(100vh - 320px)", minHeight: "600px" }}
         >
-          {/* LEFT: editor (hidden when showEditor === false) */}
-          {showEditor && (
-            <div className="rounded-2xl border border-[#E5E7EB] shadow-sm overflow-hidden bg-white flex-1 min-w-0 flex flex-col min-h-0">
-              <div className="flex items-center justify-between px-4 py-2.5 border-b border-[#E5E7EB] bg-[#F9FAFB] flex-shrink-0">
-                <div className="flex items-center gap-2">
-                  <PenTool className="h-3.5 w-3.5 text-[#dd7230]" />
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-[#374151]">
-                    Editable Content
-                  </span>
-                </div>
-                <span className="text-[10px] font-semibold text-[#9CA3AF]">{wordCount} words</span>
-              </div>
-
-              <div className="flex-1 min-h-0 overflow-auto" style={{ backgroundColor: "#FAFAFA" }}>
-                <div
-                  style={{
-                    maxWidth: `${cfg.cssWidth}px`,
-                    margin: "20px auto",
-                    backgroundColor: "#ffffff",
-                    border: "1px solid #E5E7EB",
-                    borderRadius: "4px",
-                    padding: `${PAGE_PADDING_TOP}px ${PAGE_PADDING_RIGHT}px ${PAGE_PADDING_BOTTOM}px ${PAGE_PADDING_LEFT}px`,
-                    fontFamily: FONT_CONFIG[docFont].css,
-                    fontSize: `${docFontSize}pt`,
-                    color: "#111827",
-                    boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
-                  }}
-                >
-                  <div
-                    ref={editorRef}
-                    className="wysiwyg-content outline-none focus:ring-1 focus:ring-[#dd7230]/40 transition-all"
-                    contentEditable={true}
-                    suppressContentEditableWarning={true}
-                    onInput={handleEditorInput}
-                    onKeyUp={() => { saveCurrentSelection(); updateActiveSelectionStyles(); }}
-                    onMouseUp={() => { saveCurrentSelection(); updateActiveSelectionStyles(); }}
-                    onKeyDown={handleKeyDown}
-                    style={{
-                      minHeight: `${getContentAreaHeight(cfg.cssHeight, !!headerImage, !!footerImage)}px`,
-                      ...cssVars({ "--doc-line-height": lineSpacing }),
-                    }}
-                  />
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* RIGHT: paginated preview — takes full width when editor is hidden */}
-          <div className="rounded-2xl border border-[#E5E7EB] shadow-sm overflow-hidden bg-white flex-1 min-w-0 flex flex-col min-h-0">
-            <div className="flex items-center justify-between px-4 py-2.5 border-b border-[#E5E7EB] bg-[#F9FAFB] flex-shrink-0">
-              <div className="flex items-center gap-2">
-                <Eye className="h-3.5 w-3.5 text-[#dd7230]" />
-                <span className="text-[11px] font-bold uppercase tracking-wider text-[#374151]">
-                  Live Output Preview
-                </span>
-              </div>
-              <span className="text-[10px] font-semibold text-[#9CA3AF]">
-                {fragments.length} {fragments.length === 1 ? "page" : "pages"} · {cfg.label}
+          <div className="flex items-center justify-between px-4 py-2.5 border-b border-[#E5E7EB] bg-[#F9FAFB] flex-shrink-0">
+            <div className="flex items-center gap-2">
+              <Eye className="h-3.5 w-3.5 text-[#dd7230]" />
+              <span className="text-[11px] font-bold uppercase tracking-wider text-[#374151]">
+                Document — click any page to edit
               </span>
             </div>
+            <span className="text-[10px] font-semibold text-[#9CA3AF]">
+              {fragments.length} {fragments.length === 1 ? "page" : "pages"} · {cfg.label}
+            </span>
+          </div>
 
-            <div ref={previewWrapRef} className="flex-1 min-h-0 overflow-auto" style={{ backgroundColor: "#D4D9E2" }}>
-              <div className="py-6 flex flex-col items-center gap-6">
-                {fragments.map((frag, idx) => {
-                  const pageHtml = buildSinglePageHtml({
-                    fragment: frag,
-                    pageNum: idx + 1,
-                    totalPages: fragments.length,
-                    cfg,
-                    fontCss: FONT_CONFIG[docFont].css,
-                    fontSizePt: fit?.fontPt ?? docFontSize,
-                    lineSpacing: fit?.lineHeight ?? lineSpacing,
-                    alignment: docAlign,
-                    headerUrl: headerImage ? headerImage.dataUrl : null,
-                    footerUrl: footerImage ? footerImage.dataUrl : null,
-                  });
-                  return (
-                    <div key={idx} className="flex flex-col items-center flex-shrink-0">
-                      <div
-                        className="shadow-2xl border border-[#C5CBD5] bg-white"
-                        style={{
-                          width: cfg.cssWidth * previewScale,
-                          height: cfg.cssHeight * previewScale,
-                          boxSizing: "content-box",
-                          overflow: "hidden",
-                        }}
-                      >
-                        <div
-                          style={{
-                            width: cfg.cssWidth,
-                            height: cfg.cssHeight,
-                            transform: `scale(${previewScale})`,
-                            transformOrigin: "top left",
-                          }}
-                          dangerouslySetInnerHTML={{ __html: pageHtml }}
-                        />
-                      </div>
-                      <div className="text-[10px] font-bold text-[#6B7280] mt-2 uppercase tracking-wider">
-                        Page {idx + 1} of {fragments.length}
-                      </div>
+          <div
+            ref={previewWrapRef}
+            className="flex-1 min-h-0 overflow-auto"
+            style={{ backgroundColor: "#D4D9E2" }}
+          >
+            <div
+              ref={previewPagesRef}
+              className="py-8 flex flex-col items-center gap-6"
+            >
+              {fragments.map((frag, idx) => (
+                <div key={idx} className="flex flex-col items-center flex-shrink-0">
+                  <div
+                    className="shadow-2xl border border-[#C5CBD5] bg-white"
+                    style={{
+                      width: cfg.cssWidth * previewScale,
+                      height: cfg.cssHeight * previewScale,
+                      boxSizing: "content-box",
+                      overflow: "hidden",
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: cfg.cssWidth,
+                        height: cfg.cssHeight,
+                        transform: `scale(${previewScale})`,
+                        transformOrigin: "top left",
+                      }}
+                    >
+                      <PreviewPage
+                        fragment={frag}
+                        pageIndex={idx}
+                        totalPages={fragments.length}
+                        cfg={cfg}
+                        fontCss={FONT_CONFIG[docFont].css}
+                        fontSizePt={fit?.fontPt ?? docFontSize}
+                        lineSpacing={fit?.lineHeight ?? lineSpacing}
+                        alignment={docAlign}
+                        headerImage={headerImage}
+                        footerImage={footerImage}
+                        onInput={handlePageInput}
+                        onFocus={handlePageFocus}
+                        onBlur={handlePageBlur}
+                        onKeyDown={handlePageKeyDown}
+                        onSelectionSync={handleSelectionSync}
+                      />
                     </div>
-                  );
-                })}
-              </div>
+                  </div>
+                  <div className="text-[10px] font-bold text-[#6B7280] mt-2 uppercase tracking-wider">
+                    Page {idx + 1} of {fragments.length}
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         </div>
 
-        {/* ── STATUS BAR ──────────────────────────────────────────────────── */}
         <div className="bg-white rounded-xl border border-[#E5E7EB] shadow-sm p-4 flex flex-wrap items-center justify-between text-xs text-[#6B7280]">
           <div className="flex items-center gap-4">
             <span className="font-extrabold text-[#1F2937] flex items-center gap-1.5 bg-[#FFF4E5] text-[#dd7230] px-3 py-1 rounded-lg border border-[#dd7230]/30">
@@ -2431,9 +3283,6 @@ export function DocumentGenerator() {
     );
   }
 
-  /* ========================================================================
-   * RENDER: COMPOSE (AI Prompt)
-   * ====================================================================== */
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
@@ -2594,7 +3443,8 @@ function ChooserScreen(props: { onPickAI: () => void; onPickTemplate: () => void
           </div>
           <h2 className="text-lg font-bold text-[#1F2937] mb-1">Open Existing Document</h2>
           <p className="text-sm text-[#6B7280] leading-relaxed">
-            Start from a pre-authored institutional document. Edit, reprint, or export exactly as it was originally issued.
+            Browse <strong>active</strong> Accreditation Evidence in the Knowledge Repository.
+            Edit, reprint, or export exactly as it was originally issued.
           </p>
         </button>
       </div>
@@ -2605,8 +3455,69 @@ function ChooserScreen(props: { onPickAI: () => void; onPickTemplate: () => void
 /* ============================================================================
  * SUBCOMPONENT: Templates Screen
  * ==========================================================================*/
-function TemplatesScreen(props: { onBack: () => void; onSelect: (tpl: DocumentTemplate) => void }) {
-  const { onBack, onSelect } = props;
+function TemplatesScreen(props: {
+  onBack: () => void;
+  onSelect: (doc: RepositoryDocument) => void;
+  errorMessage: string | null;
+  onDismissError: () => void;
+  loadingDocName: string | null;
+  headerImage: ImageAsset | null;
+  footerImage: ImageAsset | null;
+  headerError: string | null;
+  footerError: string | null;
+  onHeaderUpload: (file: File | undefined) => void;
+  onFooterUpload: (file: File | undefined) => void;
+  onRemoveHeader: () => void;
+  onRemoveFooter: () => void;
+}) {
+  const {
+    onBack, onSelect, errorMessage, onDismissError, loadingDocName,
+    headerImage, footerImage, headerError, footerError,
+    onHeaderUpload, onFooterUpload, onRemoveHeader, onRemoveFooter,
+  } = props;
+
+  const [documents, setDocuments] = useState<RepositoryDocument[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showLetterheadModal, setShowLetterheadModal] = useState(false);
+
+  const modalHeaderInputRef = useRef<HTMLInputElement>(null);
+  const modalFooterInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const url =
+          "/api/repository-documents" +
+          "?category=" + encodeURIComponent("Accreditation Evidence") +
+          "&status="   + encodeURIComponent("Active");
+        const resp = await fetch(url);
+        if (!resp.ok) {
+          throw new Error(`Failed to load repository (HTTP ${resp.status}).`);
+        }
+        const data = await resp.json();
+        if (!cancelled) setDocuments(Array.isArray(data) ? data : []);
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : "Failed to load documents.");
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  const filteredDocuments = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return documents;
+    return documents.filter((d) => (d.name || "").toLowerCase().includes(q));
+  }, [documents, searchQuery]);
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-4 flex-wrap">
@@ -2619,32 +3530,249 @@ function TemplatesScreen(props: { onBack: () => void; onSelect: (tpl: DocumentTe
             <span>Back</span>
           </button>
           <div>
-            <h1 className="text-xl font-semibold text-[#1F2937]">Institutional Documents</h1>
-            <p className="text-sm text-[#6B7280] mt-0.5">Select a document to open in the editor.</p>
+            <h1 className="text-xl font-semibold text-[#1F2937]">Accreditation Evidence</h1>
+            <p className="text-sm text-[#6B7280] mt-0.5">
+              Live from the Knowledge Repository — showing <strong>Active</strong> documents only.
+              Select a document to open it in the editor.
+            </p>
           </div>
         </div>
+
+        <button
+          onClick={() => setShowLetterheadModal(true)}
+          className="flex items-center gap-2 px-4 py-2.5 bg-white hover:bg-[#FFF4E5] border border-[#E5E7EB] hover:border-[#dd7230] rounded-lg text-xs font-bold text-[#374151] hover:text-[#dd7230] transition-all shadow-sm active:scale-95"
+          title="Change the header and footer letterhead applied to documents you open"
+        >
+          <ImageIcon className="h-4 w-4 text-[#dd7230]" />
+          <span>Change Header &amp; Footer</span>
+        </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-        {DOCUMENT_TEMPLATES.map((tpl) => (
-          <button
-            key={tpl.id}
-            onClick={() => onSelect(tpl)}
-            className="group text-left p-5 bg-white border border-[#E5E7EB] hover:border-[#dd7230] hover:shadow-lg rounded-2xl transition-all"
-          >
-            <div className="flex items-center gap-2 mb-3">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-[#dd7230] bg-[#FFF4E5] px-2 py-1 rounded">{tpl.category}</span>
-              <span className="text-[10px] font-semibold text-[#9CA3AF]">{PAGE_SIZES[tpl.pageSize].label}</span>
-            </div>
-            <h3 className="text-base font-bold text-[#1F2937] mb-1.5 group-hover:text-[#dd7230] transition-colors">{tpl.title}</h3>
-            <p className="text-xs text-[#6B7280] leading-relaxed line-clamp-3">{tpl.description}</p>
-            <div className="mt-4 flex items-center gap-1.5 text-[11px] font-bold text-[#dd7230]">
-              <FileText className="h-3.5 w-3.5" />
-              <span>Open in Editor →</span>
-            </div>
-          </button>
-        ))}
+      <div className="bg-white rounded-xl border border-[#E5E7EB] shadow-sm p-3">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#9CA3AF] pointer-events-none" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search by document title…"
+            className="w-full pl-10 pr-10 py-2.5 bg-[#F9FAFB] border border-[#E5E7EB] rounded-lg text-sm text-[#1F2937] placeholder-[#9CA3AF] focus:outline-none focus:ring-2 focus:ring-[#dd7230] focus:border-transparent transition-shadow"
+          />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => setSearchQuery("")}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 rounded-md hover:bg-[#E5E7EB] text-[#6B7280] hover:text-[#374151] transition-colors"
+              aria-label="Clear search"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
+        {searchQuery && !loading && !error && (
+          <p className="text-[11px] text-[#9CA3AF] mt-2">
+            Showing {filteredDocuments.length} of {documents.length} document{documents.length === 1 ? "" : "s"}
+          </p>
+        )}
       </div>
+
+      {errorMessage && (
+        <div className="flex items-start gap-3 p-4 bg-rose-50 border border-rose-200 rounded-xl">
+          <AlertCircle className="h-5 w-5 text-rose-500 mt-0.5 flex-shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-rose-700">Could not open document</p>
+            <p className="text-xs text-rose-600 mt-0.5 break-words">{errorMessage}</p>
+          </div>
+          <button
+            type="button"
+            onClick={onDismissError}
+            className="flex-shrink-0 p-1.5 rounded-lg hover:bg-rose-100 text-rose-500 hover:text-rose-700 transition-colors"
+            aria-label="Dismiss error"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+
+      {loading && (
+        <div className="flex items-center justify-center gap-3 p-8 bg-white rounded-2xl border border-[#E5E7EB]">
+          <RefreshCw className="h-4 w-4 text-[#dd7230] animate-spin" />
+          <span className="text-sm text-[#6B7280]">Loading documents…</span>
+        </div>
+      )}
+
+      {!loading && error && (
+        <div className="flex items-start gap-3 p-4 bg-rose-50 border border-rose-200 rounded-xl">
+          <AlertCircle className="h-5 w-5 text-rose-500 mt-0.5 flex-shrink-0" />
+          <div>
+            <p className="text-sm font-semibold text-rose-700">Could not load documents</p>
+            <p className="text-xs text-rose-600 mt-0.5">{error}</p>
+            <p className="text-[11px] text-rose-500 mt-1">
+              Ensure <code className="font-mono">main.py</code> is running and{" "}
+              <code className="font-mono">REPOSITORY_BACKEND_URL</code> is set on server.js.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {!loading && !error && documents.length === 0 && (
+        <div className="flex flex-col items-center justify-center gap-2 p-10 bg-white rounded-2xl border border-dashed border-[#E5E7EB]">
+          <FolderOpen className="h-8 w-8 text-[#9CA3AF]" />
+          <p className="text-sm font-semibold text-[#374151]">No active accreditation evidence found</p>
+          <p className="text-xs text-[#9CA3AF] max-w-md text-center">
+            Only documents with category <strong>Accreditation Evidence</strong> and status{" "}
+            <strong>Active</strong> appear here. Upload new evidence or activate existing
+            documents via the accreditation workflow.
+          </p>
+        </div>
+      )}
+
+      {!loading && !error && documents.length > 0 && filteredDocuments.length === 0 && (
+        <div className="flex flex-col items-center justify-center gap-2 p-10 bg-white rounded-2xl border border-dashed border-[#E5E7EB]">
+          <Search className="h-8 w-8 text-[#9CA3AF]" />
+          <p className="text-sm font-semibold text-[#374151]">No documents match &ldquo;{searchQuery}&rdquo;</p>
+          <p className="text-xs text-[#9CA3AF]">Try a different search term.</p>
+          <button
+            type="button"
+            onClick={() => setSearchQuery("")}
+            className="mt-1 text-xs font-semibold text-[#dd7230] hover:text-[#c4612a]"
+          >
+            Clear search
+          </button>
+        </div>
+      )}
+
+      {!loading && !error && filteredDocuments.length > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          {filteredDocuments.map((doc) => {
+            const isOpeningThis = loadingDocName === doc.name;
+            const anyLoading = loadingDocName !== null;
+            const disabled = anyLoading;
+            return (
+              <button
+                key={doc.name}
+                onClick={() => { if (!disabled) onSelect(doc); }}
+                disabled={disabled}
+                aria-busy={isOpeningThis}
+                className={`group text-left p-5 bg-white border border-[#E5E7EB] rounded-2xl transition-all ${
+                  disabled
+                    ? "opacity-60 cursor-not-allowed"
+                    : "hover:border-[#dd7230] hover:shadow-lg"
+                } ${isOpeningThis ? "ring-2 ring-[#dd7230] ring-offset-1" : ""}`}
+              >
+                <div className="flex items-center gap-2 mb-3 flex-wrap">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-[#dd7230] bg-[#FFF4E5] px-2 py-1 rounded">
+                    {doc.category || "Accreditation Evidence"}
+                  </span>
+                  {doc.office && (
+                    <span className="text-[10px] font-semibold text-[#9CA3AF]">{doc.office}</span>
+                  )}
+                  {doc.version && (
+                    <span className="text-[10px] font-semibold text-[#9CA3AF]">v{doc.version}</span>
+                  )}
+                  {doc.status && (
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 bg-emerald-50 px-2 py-1 rounded">
+                      {doc.status}
+                    </span>
+                  )}
+                </div>
+                <h3 className={`text-base font-bold mb-1.5 transition-colors ${
+                  disabled ? "text-[#6B7280]" : "text-[#1F2937] group-hover:text-[#dd7230]"
+                }`}>
+                  {doc.name}
+                </h3>
+                <p className="text-xs text-[#6B7280] leading-relaxed">
+                  {doc.effectivity_date
+                    ? `Effectivity: ${doc.effectivity_date}`
+                    : doc.upload_date
+                      ? `Uploaded: ${doc.upload_date.split("T")[0]}`
+                      : "No date recorded."}
+                </p>
+                {doc.uploaded_by && (
+                  <p className="text-[11px] text-[#9CA3AF] mt-1">Uploaded by {doc.uploaded_by}</p>
+                )}
+                <div className="mt-4 flex items-center gap-1.5 text-[11px] font-bold text-[#dd7230]">
+                  {isOpeningThis ? (
+                    <>
+                      <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                      <span>Opening…</span>
+                    </>
+                  ) : (
+                    <>
+                      <FileText className="h-3.5 w-3.5" />
+                      <span>Open in Editor →</span>
+                    </>
+                  )}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {showLetterheadModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
+          onClick={(e) => { if (e.target === e.currentTarget) setShowLetterheadModal(false); }}
+        >
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-auto">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-[#E5E7EB]">
+              <div className="flex items-center gap-2">
+                <ImageIcon className="h-4 w-4 text-[#dd7230]" />
+                <h2 className="text-base font-bold text-[#1F2937]">Header &amp; Footer Letterhead</h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowLetterheadModal(false)}
+                className="p-1.5 rounded-lg hover:bg-[#F3F4F6] text-[#6B7280] hover:text-[#374151] transition-colors"
+                aria-label="Close"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4">
+              <p className="text-xs text-[#6B7280] leading-relaxed">
+                These letterheads apply to <strong>any document you open next</strong> from this picker.
+                Leave either one empty (click <em>Remove</em>) to open documents with no letterhead on that
+                side. You can always change or clear it later from the editor's{" "}
+                <strong>Insert → Letterhead</strong> ribbon.
+              </p>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <ImageUploadField
+                  label="Header Image"
+                  helperText="Default CTU Argao header is pre-loaded. Drag & drop a PNG/JPG here to replace it, or click Remove to have no header."
+                  image={headerImage}
+                  error={headerError}
+                  inputRef={modalHeaderInputRef}
+                  onFileSelected={onHeaderUpload}
+                  onRemove={onRemoveHeader}
+                />
+                <ImageUploadField
+                  label="Footer Image"
+                  helperText="Default CTU Argao footer is pre-loaded. Drag & drop a PNG/JPG here to replace it, or click Remove to have no footer."
+                  image={footerImage}
+                  error={footerError}
+                  inputRef={modalFooterInputRef}
+                  onFileSelected={onFooterUpload}
+                  onRemove={onRemoveFooter}
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-[#E5E7EB] bg-[#F9FAFB]">
+              <button
+                type="button"
+                onClick={() => setShowLetterheadModal(false)}
+                className="px-4 py-2 bg-[#dd7230] hover:bg-[#c4612a] text-white rounded-lg text-xs font-bold shadow-sm transition-all active:scale-95"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

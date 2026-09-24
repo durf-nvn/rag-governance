@@ -29,6 +29,7 @@ import traceback
 import numpy as np
 from PIL import Image as PILImage
 import base64
+import urllib.request
 try:
     from document_service import (
         generate_content,
@@ -74,46 +75,1129 @@ def extract_pdf_text(contents: bytes) -> str:
     - For each page, try PyPDF2 first (fast).
     - If a page yields fewer than OCR_FALLBACK_THRESHOLD characters,
       it likely contains an embedded image/table — render the page
-      as an image and run PaddleOCR on it instead.
-    - This correctly handles:
-        1. Normal text PDFs      → PyPDF2 only (fast)
-        2. Fully scanned PDFs    → OCR every page
-        3. Mixed PDFs (e.g. Student Handbook with image tables)
-                                 → PyPDF2 for text pages, OCR for image pages
+      as an image (via PyMuPDF) and run PaddleOCR on it instead.
+    - If PyMuPDF is not installed, only PyPDF2 text extraction is
+      performed (OCR fallback silently disabled).
     """
-    import fitz
-
     extracted_text = ""
-    pdf_reader    = PyPDF2.PdfReader(io.BytesIO(contents))
-    pdf_document  = fitz.open(stream=contents, filetype="pdf")
-    ocr_instance  = None  # lazy-init only if needed
+    pdf_reader     = PyPDF2.PdfReader(io.BytesIO(contents))
+
+    # Optional PyMuPDF for the OCR fallback
+    fitz = None
+    pdf_document = None
+    try:
+        import fitz as _fitz
+        fitz = _fitz
+        pdf_document = fitz.open(stream=contents, filetype="pdf")
+    except ImportError:
+        print("[extract_pdf_text] PyMuPDF not installed — OCR fallback disabled")
+
+    ocr_instance = None
 
     for page_num, page in enumerate(pdf_reader.pages):
         page_text = page.extract_text() or ""
 
         if len(page_text.strip()) >= OCR_FALLBACK_THRESHOLD:
-            # Enough text from PyPDF2 — use it directly
             extracted_text += page_text + "\n"
-        else:
-            # Too little text → page is likely an image/table scan → use OCR
+            continue
+
+        # Try OCR fallback if we have both PyMuPDF and a working OCR
+        if pdf_document is None:
+            # No PyMuPDF — just use whatever PyPDF2 got
+            extracted_text += page_text + "\n"
+            continue
+
+        try:
             if ocr_instance is None:
                 ocr_instance = get_ocr()
-
             fitz_page = pdf_document.load_page(page_num)
             pix       = fitz_page.get_pixmap(dpi=150)
             img_array = np.frombuffer(pix.samples, dtype=np.uint8).reshape(
                 pix.height, pix.width, pix.n
             )
-            if pix.n == 4:  # RGBA → RGB
+            if pix.n == 4:
                 img_array = img_array[:, :, :3]
-
             ocr_text = run_ocr(ocr_instance, img_array)
-            # Prefer OCR result; if OCR also yields nothing, keep PyPDF2 text
             extracted_text += (ocr_text if ocr_text.strip() else page_text) + "\n"
+        except Exception as ocr_exc:
+            print(f"[extract_pdf_text] OCR fallback failed on page {page_num}: {ocr_exc}")
+            extracted_text += page_text + "\n"
 
-    pdf_document.close()
+    if pdf_document is not None:
+        try: pdf_document.close()
+        except Exception: pass
+
     return extracted_text
+# ─────────────────────────────────────────────────────────────────────────────
+# STRUCTURE-PRESERVING CONVERTERS  (editor-facing representation)
+#
+# These produce a parallel HTML representation of the uploaded document for
+# the DocumentGenerator's single-surface WYSIWYG editor. The plain-text
+# extraction feeding vector_store.add_to_vector_db is unchanged — this is
+# strictly additive.
+# ─────────────────────────────────────────────────────────────────────────────
 
+def _escape_html(s: str) -> str:
+    return (s or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def _docx_runs_to_html(paragraph) -> str:
+    """Convert python-docx paragraph runs into inline HTML with formatting."""
+    parts = []
+    for run in paragraph.runs:
+        text = run.text or ""
+        if not text:
+            continue
+        text = _escape_html(text)
+        if run.bold:
+            text = f"<strong>{text}</strong>"
+        if run.italic:
+            text = f"<em>{text}</em>"
+        if run.underline:
+            text = f"<u>{text}</u>"
+        parts.append(text)
+    return "".join(parts)
+
+
+def _extract_inline_images_from_part(part, doc):
+    """Return the first inline image's bytes from a header/footer part, or None."""
+    from docx.oxml.ns import qn
+    if part is None:
+        return None
+    try:
+        xml_root = part._element if hasattr(part, "_element") else None
+        if xml_root is None:
+            return None
+        for inline in xml_root.findall('.//' + qn('wp:inline')):
+            blip = inline.find('.//' + qn('a:blip'))
+            if blip is not None:
+                rid = blip.get(qn('r:embed'))
+                if rid and rid in doc.part.related_parts:
+                    return doc.part.related_parts[rid].blob
+    except Exception:
+        return None
+    return None
+# ─────────────────────────────────────────────────────────────────────────────
+# DOCX: table-aware body iteration
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _docx_iter_body(doc):
+    """
+    Yield Paragraph and Table objects in document order.
+
+    `doc.paragraphs` returns only top-level paragraphs and silently skips
+    everything inside a table. Walking `doc.element.body` gives us every
+    block in the order it appears on the page.
+    """
+    from docx.oxml.ns import qn
+    from docx.table import Table
+    from docx.text.paragraph import Paragraph
+
+    body = doc.element.body
+    for child in body.iterchildren():
+        if child.tag == qn("w:p"):
+            yield Paragraph(child, doc)
+        elif child.tag == qn("w:tbl"):
+            yield Table(child, doc)
+
+
+def _docx_cell_to_html(cell) -> str:
+    """Render one table cell's paragraphs as inline HTML, joined by <br>."""
+    pieces = []
+    for para in cell.paragraphs:
+        inner = _docx_runs_to_html(para)
+        if inner.strip():
+            pieces.append(inner)
+    return "<br>".join(pieces)
+
+
+def _docx_table_to_html(table) -> str:
+    """Render a python-docx Table as an HTML <table>."""
+    rows_html = []
+    for row in table.rows:
+        cells_html = []
+        for cell in row.cells:
+            inner = _docx_cell_to_html(cell)
+            cells_html.append(f"<td>{inner}</td>")
+        rows_html.append(f"<tr>{''.join(cells_html)}</tr>")
+    return "<table>" + "".join(rows_html) + "</table>"
+
+def docx_to_html_with_assets(contents: bytes):
+    """
+    Convert a DOCX into (html_string, header_image_bytes|None, footer_image_bytes|None).
+
+    Walks the document body in document order, emitting:
+      • <p>/<h1>/<h2>/<h3>/<li> for paragraphs (with per-paragraph text-align
+        from python-docx's `paragraph.alignment`, plus a style-chain fallback)
+      • <table><tr><td>…</td></tr></table> for tables
+
+    Previous versions iterated `doc.paragraphs` only, which silently dropped
+    every table's content.
+    """
+    import docx
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    from docx.table import Table
+    from docx.text.paragraph import Paragraph
+
+    doc = docx.Document(io.BytesIO(contents))
+
+    ALIGN_CSS = {
+        WD_ALIGN_PARAGRAPH.CENTER:  "center",
+        WD_ALIGN_PARAGRAPH.RIGHT:   "right",
+        WD_ALIGN_PARAGRAPH.JUSTIFY: "justify",
+    }
+
+    def _effective_alignment(para):
+        if para.alignment is not None:
+            return para.alignment
+        style = para.style
+        if style is not None:
+            try:
+                s_align = style.paragraph_format.alignment
+                if s_align is not None:
+                    return s_align
+            except Exception:
+                pass
+        return None
+
+    def _align_attr(para) -> str:
+        css = ALIGN_CSS.get(_effective_alignment(para))
+        return f' style="text-align:{css}"' if css else ""
+
+    html_blocks: list[str] = []
+
+    for block in _docx_iter_body(doc):
+        if isinstance(block, Table):
+            html_blocks.append(_docx_table_to_html(block))
+            continue
+
+        # Paragraph
+        para = block
+        inner = _docx_runs_to_html(para)
+        style_name = (para.style.name or "").lower() if para.style else ""
+        attr = _align_attr(para)
+
+        if not inner.strip():
+            html_blocks.append(f"<p{attr}><br></p>")
+            continue
+
+        if style_name == "title" or "heading 1" in style_name:
+            html_blocks.append(f"<h1{attr}>{inner}</h1>")
+        elif "heading 2" in style_name:
+            html_blocks.append(f"<h2{attr}>{inner}</h2>")
+        elif "heading 3" in style_name:
+            html_blocks.append(f"<h3{attr}>{inner}</h3>")
+        elif "list" in style_name:
+            html_blocks.append(f"<li{attr}>{inner}</li>")
+        else:
+            html_blocks.append(f"<p{attr}>{inner}</p>")
+
+    html = "\n".join(html_blocks)
+
+    # Group consecutive <li> elements into <ul> blocks (attribute-tolerant).
+    html = re.sub(
+        r"(?:<li[^>]*>.*?</li>\n?)+",
+        lambda m: f"<ul>{m.group(0)}</ul>",
+        html,
+        flags=re.DOTALL,
+    )
+
+    header_bytes = None
+    footer_bytes = None
+    for section in doc.sections:
+        if header_bytes is None:
+            try:
+                header_bytes = _extract_inline_images_from_part(section.header, doc)
+            except Exception:
+                header_bytes = None
+        if footer_bytes is None:
+            try:
+                footer_bytes = _extract_inline_images_from_part(section.footer, doc)
+            except Exception:
+                footer_bytes = None
+
+    return html, header_bytes, footer_bytes
+    def _effective_alignment(para):
+        """
+        Return the paragraph's effective alignment, walking the style chain
+        if the direct alignment is unset. Many real-world DOCX files put
+        alignment on the paragraph style (e.g. 'Title' → CENTER) rather than
+        on each paragraph directly.
+        """
+        if para.alignment is not None:
+            return para.alignment
+        style = para.style
+        if style is not None:
+            try:
+                style_align = style.paragraph_format.alignment
+                if style_align is not None:
+                    return style_align
+            except Exception:
+                pass
+        return None
+
+    def _align_attr(para) -> str:
+        css = ALIGN_CSS.get(_effective_alignment(para))
+        return f' style="text-align:{css}"' if css else ""
+
+    lines = []
+    for para in doc.paragraphs:
+        inner = _docx_runs_to_html(para)
+        style_name = (para.style.name or "").lower() if para.style else ""
+        attr = _align_attr(para)
+
+        if not inner.strip():
+            lines.append(f"<p{attr}><br></p>")
+            continue
+
+        if style_name == "title" or "heading 1" in style_name:
+            lines.append(f"<h1{attr}>{inner}</h1>")
+        elif "heading 2" in style_name:
+            lines.append(f"<h2{attr}>{inner}</h2>")
+        elif "heading 3" in style_name:
+            lines.append(f"<h3{attr}>{inner}</h3>")
+        elif "list" in style_name:
+            lines.append(f"<li{attr}>{inner}</li>")
+        else:
+            lines.append(f"<p{attr}>{inner}</p>")
+
+    html = "\n".join(lines)
+
+    # Group consecutive <li> elements into <ul> blocks. The regex accepts
+    # optional attributes (e.g. `style="text-align:right"`) so alignment
+    # information on list items survives the grouping step.
+    html = re.sub(
+        r"(?:<li[^>]*>.*?</li>\n?)+",
+        lambda m: f"<ul>{m.group(0)}</ul>",
+        html,
+        flags=re.DOTALL,
+    )
+
+    header_bytes = None
+    footer_bytes = None
+    for section in doc.sections:
+        if header_bytes is None:
+            try:
+                header_bytes = _extract_inline_images_from_part(section.header, doc)
+            except Exception:
+                header_bytes = None
+        if footer_bytes is None:
+            try:
+                footer_bytes = _extract_inline_images_from_part(section.footer, doc)
+            except Exception:
+                footer_bytes = None
+
+    return html, header_bytes, footer_bytes
+
+def _bbox_overlaps_any(bbox, other_bboxes, tolerance: float = 3.0) -> bool:
+    """True if `bbox` overlaps any bbox in `other_bboxes` (with tolerance)."""
+    x0a, y0a, x1a, y1a = (float(v) for v in bbox)
+    for ob in other_bboxes:
+        try:
+            x0b, y0b, x1b, y1b = (float(v) for v in ob)
+        except Exception:
+            continue
+        if x1a < x0b - tolerance or x0a > x1b + tolerance:
+            continue
+        if y1a < y0b - tolerance or y0a > y1b + tolerance:
+            continue
+        return True
+    return False
+
+
+def _pdf_table_to_html(pdf_table) -> str:
+    """
+    Convert a PyMuPDF Table (from page.find_tables()) into an HTML <table>.
+
+    Uses `pdf_table.extract()` for the cell grid. When PyMuPDF reports an
+    external header (i.e. the table was defined with an explicit header row),
+    the first row is emitted as <th>; otherwise every row is a <td>.
+    """
+    try:
+        data = pdf_table.extract()
+    except Exception as e:
+        print(f"[pdf_to_html] table.extract failed: {e}")
+        return ""
+
+    if not data:
+        return ""
+
+    has_external_header = False
+    try:
+        hdr = getattr(pdf_table, "header", None)
+        if hdr is not None and getattr(hdr, "external", False):
+            has_external_header = True
+    except Exception:
+        pass
+
+    rows_html: list[str] = []
+    for r_idx, row in enumerate(data):
+        cells_html: list[str] = []
+        for cell in row:
+            cell_text = (cell or "").strip()
+            escaped = _escape_html(cell_text).replace("\n", "<br>")
+            tag = "th" if (has_external_header and r_idx == 0) else "td"
+            cells_html.append(f"<{tag}>{escaped}</{tag}>")
+        rows_html.append(f"<tr>{''.join(cells_html)}</tr>")
+
+    return "<table>" + "".join(rows_html) + "</table>"
+def _pdf_pair_side_by_side_blocks(blocks):
+    """
+    After merging paragraph blocks, group them into "row bands" by Y overlap.
+
+    A band is a set of 2+ blocks whose vertical ranges intersect significantly
+    but whose horizontal ranges do NOT overlap. Those are the two-column
+    layouts common in institutional memos ("TO: <names>" | "- Dean of ...").
+    Emits a synthetic 2-column table so the name↔role pairing survives.
+
+    Blocks with no side-by-side partner stay as paragraphs.
+    """
+    # Sort by top-Y, then by left-X
+    ordered = []
+    for blk in blocks:
+        bboxes = [ln["bbox"] for ln in blk["lines"] if ln.get("bbox")]
+        if not bboxes:
+            continue
+        blk_bbox = (
+            min(float(b[0]) for b in bboxes),
+            min(float(b[1]) for b in bboxes),
+            max(float(b[2]) for b in bboxes),
+            max(float(b[3]) for b in bboxes),
+        )
+        ordered.append({"blk": blk, "bbox": blk_bbox})
+    ordered.sort(key=lambda x: (x["bbox"][1], x["bbox"][0]))
+
+    # Greedy band building
+    bands = []
+    for item in ordered:
+        placed = False
+        for band in bands:
+            # Vertical overlap check: the item must overlap the band's Y range
+            band_top = min(b["bbox"][1] for b in band)
+            band_bot = max(b["bbox"][3] for b in band)
+            overlap = min(band_bot, item["bbox"][3]) - max(band_top, item["bbox"][1])
+            if overlap > 0:
+                band.append(item)
+                placed = True
+                break
+        if not placed:
+            bands.append([item])
+
+    return bands
+
+
+def _pdf_band_to_html(band, page_left, page_right):
+    """
+    Emit a band as either:
+      • a 2-column <table> when the band contains >=2 side-by-side blocks, or
+      • a sequence of <p>s when the band is a single-column set of blocks.
+    """
+    if len(band) == 1:
+        return None  # caller handles single-block bands as normal paragraphs
+
+    # Sort band members left-to-right
+    band_sorted = sorted(band, key=lambda x: x["bbox"][0])
+
+    # Check that no two members horizontally overlap. If they do, they're
+    # not really two columns — bail and let them be paragraphs.
+    for i in range(len(band_sorted) - 1):
+        if band_sorted[i]["bbox"][2] > band_sorted[i + 1]["bbox"][0] - 2:
+            return None
+
+    # Build the table rows. Each row is one visual line across the columns.
+    # We reconstruct rows by Y position: every member block may have multiple
+    # visual lines inside it.
+    column_lines: list[list[str]] = []
+    for member in band_sorted:
+        lines_text = []
+        for ln in member["blk"]["lines"]:
+            parts = [s.get("text", "") for s in ln.get("spans", []) if s.get("text")]
+            text = "".join(parts).rstrip()
+            lines_text.append(text)
+        column_lines.append(lines_text)
+
+    max_rows = max(len(c) for c in column_lines)
+    rows_html = []
+    for r in range(max_rows):
+        cells = []
+        for col in column_lines:
+            cell_text = col[r] if r < len(col) else ""
+            escaped = _escape_html(cell_text)
+            cells.append(f"<td>{escaped}</td>")
+        rows_html.append(f"<tr>{''.join(cells)}</tr>")
+
+    return "<table>" + "".join(rows_html) + "</table>"
+# ─────────────────────────────────────────────────────────────────────────────
+# PDF → HTML (alignment-aware)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def pdf_to_html(contents: bytes) -> str:
+    """
+    Convert a PDF into an editor-friendly HTML fragment.
+
+    Per page:
+      1. Extract text blocks + lines + bboxes via PyMuPDF's `get_text("dict")`.
+      2. Detect tables via `page.find_tables()` (PyMuPDF ≥ 1.23).
+      3. Measure the page's real text margins from non-letterhead, non-table
+         lines.
+      4. Filter out institutional letterhead blocks (top ~15 % of the page).
+      5. Drop text blocks that overlap a detected table's bbox — those cells
+         will be emitted as part of the <table> instead of duplicated as <p>s.
+      6. Merge remaining single-line blocks into paragraphs.
+      7. Interleave paragraph blocks and tables by their top Y so the reading
+         order is preserved, and emit each as <p> or <table>.
+    """
+    try:
+        import fitz  # PyMuPDF
+    except ImportError:
+        print("[pdf_to_html] PyMuPDF not installed — falling back to PyPDF2")
+        return _pdf_to_html_pypdf2(contents)
+
+    try:
+        doc = fitz.open(stream=contents, filetype="pdf")
+    except Exception as e:
+        print(f"[pdf_to_html] PyMuPDF open failed: {e} — falling back to PyPDF2")
+        return _pdf_to_html_pypdf2(contents)
+
+    html_parts: list[str] = []
+    try:
+        for page_num in range(len(doc)):
+            page = doc.load_page(page_num)
+            page_height = float(page.rect.height) or 1.0
+            page_width = float(page.rect.width) or 1.0
+
+            try:
+                page_dict = page.get_text("dict")
+            except Exception as e:
+                print(f"[pdf_to_html] dict failed on page {page_num}: {e}")
+                continue
+
+            # ── (2) Detect tables ──────────────────────────────────────────
+            pdf_tables = []
+            try:
+                finder = page.find_tables()
+                if finder is not None:
+                    pdf_tables = [t for t in finder.tables if t is not None]
+            except AttributeError:
+                # PyMuPDF < 1.23 — no table detection available.
+                pass
+            except Exception as e:
+                print(f"[pdf_to_html] find_tables failed on page {page_num}: {e}")
+
+            table_bboxes = []
+            for t in pdf_tables:
+                try:
+                    tb = t.bbox
+                    if tb:
+                        table_bboxes.append(tb)
+                except Exception:
+                    continue
+
+            # ── (3) Measure page content margins ───────────────────────────
+            xs0, xs1 = [], []
+            for blk in page_dict.get("blocks", []):
+                if blk.get("type", 0) != 0:
+                    continue
+                bb = blk.get("bbox")
+                if not bb:
+                    continue
+                if float(bb[3]) < page_height * _PDF_HEADER_FILTER_RATIO:
+                    continue
+                if float(bb[1]) > page_height * _PDF_FOOTER_FILTER_RATIO:
+                    continue
+                if _bbox_overlaps_any(bb, table_bboxes):
+                    continue
+                for ln in blk.get("lines", []):
+                    lb = ln.get("bbox")
+                    if not lb:
+                        continue
+                    xs0.append(float(lb[0]))
+                    xs1.append(float(lb[2]))
+            page_left = min(xs0) if xs0 else page_width * 0.10
+            page_right = max(xs1) if xs1 else page_width * 0.90
+
+            # ── (4 & 5) Filter blocks ──────────────────────────────────────
+            text_blocks = []
+            for blk in page_dict.get("blocks", []):
+                if blk.get("type", 0) != 0:
+                    continue
+                bb = blk.get("bbox")
+                lines = blk.get("lines") or []
+                if not bb or not lines:
+                    continue
+
+                # Skip anything that visually overlaps a table — its text
+                # will come from the table extraction.
+                if _bbox_overlaps_any(bb, table_bboxes):
+                    continue
+
+                # Assemble text for letterhead-phrase check.
+                block_text_parts = []
+                for ln in lines:
+                    line_text = "".join(s.get("text", "") for s in ln.get("spans", []))
+                    if line_text:
+                        block_text_parts.append(line_text)
+                block_text = " ".join(block_text_parts)
+
+                if _pdf_is_letterhead_block(block_text, float(bb[1]), float(bb[3]), page_height):
+                    continue
+
+                text_blocks.append({"lines": list(lines)})
+
+            # ── (6) Merge single-line blocks into paragraphs ───────────────
+                       # ── (6) Merge single-line blocks into paragraphs ───────────────
+            merged_blocks = _pdf_merge_paragraph_blocks(text_blocks)
+
+            # ── (6b) Group into row bands; emit paired columns as <table> ──
+            bands = _pdf_pair_side_by_side_blocks(merged_blocks)
+
+            items = []  # (top_y, html)
+            for band in bands:
+                # Try to emit as a 2-column table first
+                table_html = _pdf_band_to_html(band, page_left, page_right)
+                if table_html:
+                    top_y = min(b["bbox"][1] for b in band)
+                    items.append((top_y, table_html))
+                    continue
+
+                # Otherwise treat each member as an independent paragraph
+                for member in band:
+                    blk = member["blk"]
+                    bbox = member["bbox"]
+                    align = _pdf_infer_alignment(bbox, blk["lines"], page_left, page_right)
+                    text_lines = []
+                    for ln in blk["lines"]:
+                        parts_ = [s.get("text", "") for s in ln.get("spans", []) if s.get("text")]
+                        line_text = "".join(parts_).rstrip()
+                        if line_text:
+                            text_lines.append(line_text)
+                    if not text_lines:
+                        continue
+                    escaped = _escape_html("\n".join(text_lines)).replace("\n", "<br>")
+                    style_attr = f' style="text-align:{align}"' if align != "left" else ""
+                    items.append((bbox[1], f"<p{style_attr}>{escaped}</p>"))
+
+            # Emit tables (from find_tables) interleaved with paragraphs by Y
+            for t in pdf_tables:
+                try:
+                    tb = t.bbox
+                    top_y = float(tb[1]) if tb else 0.0
+                except Exception:
+                    top_y = 0.0
+                table_html = _pdf_table_to_html(t)
+                if table_html:
+                    items.append((top_y, table_html))
+
+            items.sort(key=lambda x: x[0])
+            for _, html in items:
+                html_parts.append(html)
+
+    finally:
+        try:
+            doc.close()
+        except Exception:
+            pass
+
+    if not html_parts:
+        print("[pdf_to_html] dict mode produced no paragraphs")
+        return "<p><br></p>"
+
+    print(f"[pdf_to_html] PyMuPDF dict mode — {len(html_parts)} block(s)")
+    return "".join(html_parts)
+
+# Fraction of the page top/bottom that belongs to the institutional letterhead.
+# Matches the ratios used by extract_pdf_header_footer_images so the two
+# functions agree on where the letterhead lives.
+PDF_HEADER_REGION_RATIO = 0.14
+PDF_FOOTER_REGION_RATIO = 0.90
+
+
+def _is_in_header_or_footer(bbox, page_height: float) -> bool:
+    """
+    True if the given bbox lies entirely within the page's header or footer
+    band. Blocks here are the PDF's baked-in letterhead (CTU seal text,
+    partner logos strip, etc.) which should not be duplicated into the
+    editor body — the editor already renders the local letterhead image.
+    """
+    if page_height <= 0:
+        return False
+    try:
+        _, y0, _, y1 = bbox
+    except Exception:
+        return False
+    y0 = float(y0)
+    y1 = float(y1)
+    if y1 < page_height * PDF_HEADER_REGION_RATIO:
+        return True
+    if y0 > page_height * PDF_FOOTER_REGION_RATIO:
+        return True
+    return False
+
+
+def _compute_page_content_bounds(page_dict, page_height: float):
+    """
+    Return (page_left, page_right) — the actual horizontal text margins of
+    the page — by scanning every non-header/footer text line's bbox.
+
+    Returns (None, None) when the page has no usable text lines, so callers
+    can fall back to the 10%-of-page-width heuristic.
+
+    Using the page's OWN margins (rather than a hard-coded 10%/90% of the
+    page width) is what makes the justify / center / right detection work
+    across documents with different margin settings.
+    """
+    xs0, xs1 = [], []
+    for block in page_dict.get("blocks", []):
+        if block.get("type", 0) != 0:
+            continue
+        for line in block.get("lines", []):
+            ln_bbox = line.get("bbox")
+            if not ln_bbox:
+                continue
+            if _is_in_header_or_footer(ln_bbox, page_height):
+                continue
+            xs0.append(float(ln_bbox[0]))
+            xs1.append(float(ln_bbox[2]))
+    if not xs0 or not xs1:
+        return None, None
+    return min(xs0), max(xs1)
+
+
+def _infer_pdf_block_alignment(bbox, lines_list, page_left: float, page_right: float) -> str:
+    """
+    Infer a PDF text block's alignment from its bbox and its per-line bboxes,
+    using the page's MEASURED content margins (page_left / page_right).
+
+    Returns one of: "center", "right", "justify", "left".
+
+    Priority:
+      1. Centered  — block is narrow and its horizontal center lies near
+                     the page's content center, and it doesn't touch either
+                     margin.
+      2. Right     — block is flush with the right margin but not the left.
+      3. Justified — 2+ lines, the block spans nearly the full content
+                     width, its non-final lines average close to the full
+                     width, and its last line is noticeably shorter (the
+                     hallmark of justified text).
+      4. Left      — the default.
+    """
+    try:
+        x0, _y0, x1, _y1 = bbox
+    except Exception:
+        return "left"
+
+    x0 = float(x0)
+    x1 = float(x1)
+    block_width = x1 - x0
+
+    if block_width <= 0 or page_right <= page_left:
+        return "left"
+
+    content_width = page_right - page_left
+    if content_width <= 0:
+        return "left"
+
+    page_center = (page_left + page_right) / 2.0
+    block_center = (x0 + x1) / 2.0
+
+    edge_tol   = content_width * 0.06
+    center_tol = content_width * 0.10
+
+    near_left   = abs(x0 - page_left)  < edge_tol
+    near_right  = abs(x1 - page_right) < edge_tol
+    near_center = abs(block_center - page_center) < center_tol
+
+    # 1. Centered
+    if near_center and not near_left and not near_right and block_width < content_width * 0.80:
+        return "center"
+
+    # 2. Right-aligned
+    if near_right and not near_left:
+        return "right"
+
+    # 3. Justified
+    if len(lines_list) >= 2:
+        line_bboxes = [ln.get("bbox") for ln in lines_list if ln.get("bbox")]
+        if len(line_bboxes) >= 2:
+            widths = [float(b[2]) - float(b[0]) for b in line_bboxes]
+            last_width = widths[-1]
+            other_widths = widths[:-1]
+            if other_widths:
+                avg_other = sum(other_widths) / len(other_widths)
+                if (
+                    block_width > content_width * 0.85
+                    and avg_other > content_width * 0.70
+                    and last_width < avg_other * 0.85
+                ):
+                    return "justify"
+
+    return "left"
+
+def pdf_to_html(contents: bytes) -> str:
+    """
+    Convert a PDF into an editor-friendly HTML fragment.
+
+    Improvements over the previous version:
+
+      1. The top 14% and bottom 10% of each page (the institutional
+         letterhead regions) are SKIPPED. PyMuPDF returns the CTU seal text
+         and the partner-logo strip as ordinary text blocks; without this
+         filter they leak into the editor body and duplicate the local
+         letterhead image the editor already renders.
+
+      2. Alignment inference uses the page's OWN content margins (measured
+         from the non-header/footer lines) rather than a hard-coded 10%/90%
+         of page width. This is what makes justified body paragraphs
+         actually register as justified when the document's margins don't
+         match the hard-coded assumption.
+
+    Uses PyMuPDF's `get_text("dict")` mode to obtain per-block and per-line
+    bounding boxes. Falls back to PyPDF2 (no alignment, no header/footer
+    filtering) when PyMuPDF is unavailable or fails to open the file.
+    """
+    try:
+        import fitz  # PyMuPDF
+    except ImportError:
+        print("[pdf_to_html] PyMuPDF not installed — falling back to PyPDF2 (no alignment preserved)")
+        return _pdf_to_html_pypdf2(contents)
+
+    try:
+        doc = fitz.open(stream=contents, filetype="pdf")
+    except Exception as e:
+        print(f"[pdf_to_html] PyMuPDF open failed: {e} — falling back to PyPDF2")
+        return _pdf_to_html_pypdf2(contents)
+
+    html_parts: list[str] = []
+    try:
+        for page_num in range(len(doc)):
+            page = doc.load_page(page_num)
+            page_width  = float(page.rect.width)  or 1.0
+            page_height = float(page.rect.height) or 1.0
+
+            try:
+                page_dict = page.get_text("dict")
+            except Exception as e:
+                print(f"[pdf_to_html] dict extraction failed on page {page_num}: {e}")
+                # Fallback: text mode, no alignment, no header/footer filtering.
+                text = page.get_text("text") or ""
+                for block in text.split("\n\n"):
+                    block = block.strip()
+                    if block:
+                        escaped = _escape_html(block).replace("\n", "<br>")
+                        html_parts.append(f"<p>{escaped}</p>")
+                continue
+
+            # Measure this page's real content margins.
+            page_left, page_right = _compute_page_content_bounds(page_dict, page_height)
+            if page_left is None or page_right is None:
+                page_left  = page_width * 0.10
+                page_right = page_width * 0.90
+
+            for block in page_dict.get("blocks", []):
+                # 0 = text block, 1 = image block. Only text is handled.
+                if block.get("type", 0) != 0:
+                    continue
+
+                raw_lines = block.get("lines") or []
+                if not raw_lines:
+                    continue
+
+                # Drop header/footer lines from the block.
+                kept_lines = []
+                for ln in raw_lines:
+                    ln_bbox = ln.get("bbox")
+                    if not ln_bbox:
+                        continue
+                    if _is_in_header_or_footer(ln_bbox, page_height):
+                        continue
+                    kept_lines.append(ln)
+
+                if not kept_lines:
+                    continue
+
+                # Recompute the block bbox from the kept lines only, so the
+                # alignment inference isn't skewed by filtered-out neighbours.
+                try:
+                    kept_bbox = [
+                        min(float(ln["bbox"][0]) for ln in kept_lines),
+                        min(float(ln["bbox"][1]) for ln in kept_lines),
+                        max(float(ln["bbox"][2]) for ln in kept_lines),
+                        max(float(ln["bbox"][3]) for ln in kept_lines),
+                    ]
+                except Exception:
+                    continue
+
+                align = _infer_pdf_block_alignment(kept_bbox, kept_lines, page_left, page_right)
+
+                                # Build the paragraph's text by joining WRAPPED lines with a
+                # space and HARD-BROKEN lines with <br>.
+                #
+                # Why this matters: CSS `text-align: justify` only stretches
+                # soft-wrapped lines. Any line terminated by a forced break
+                # (a <br>) is treated as the last line of a segment and is
+                # left-aligned, no matter what text-align says. Joining every
+                # visual line with a <br> — as the previous version did —
+                # therefore made justify a visual no-op on PDF-sourced text.
+                #
+                # A line is considered "wrapped" (soft) when it ends within a
+                # small tolerance of the page's right content margin. Lines
+                # ending short are treated as intentional hard breaks.
+                parts: list[str] = []
+                WRAP_TOLERANCE = max(6.0, (page_right - page_left) * 0.02)
+                for i, line in enumerate(kept_lines):
+                    line_text = "".join(
+                        s.get("text", "") for s in line.get("spans", []) if s.get("text")
+                    ).rstrip()
+                    if not line_text:
+                        continue
+                    parts.append(line_text)
+
+                    is_last = (i == len(kept_lines) - 1)
+                    if is_last:
+                        continue
+
+                    lb = line.get("bbox")
+                    wraps = False
+                    if lb:
+                        line_end_x = float(lb[2])
+                        wraps = abs(line_end_x - page_right) <= WRAP_TOLERANCE
+
+                    parts.append(" " if wraps else "<br>")
+
+                if not parts:
+                    continue
+
+                joined = "".join(parts)
+                escaped = _escape_html(joined)
+                style_attr = f' style="text-align:{align}"' if align != "left" else ""
+                html_parts.append(f"<p{style_attr}>{escaped}</p>")
+    finally:
+        try:
+            doc.close()
+        except Exception:
+            pass
+
+    if not html_parts:
+        print("[pdf_to_html] dict mode produced no paragraphs")
+        return "<p><br></p>"
+
+    print(f"[pdf_to_html] PyMuPDF dict mode — {len(html_parts)} paragraph(s)")
+    return "".join(html_parts)
+    
+def extract_pdf_header_footer_images(contents: bytes):
+    """
+    Render the top 12% of page 1 as the header image and the bottom 10% of
+    the last page as the footer image.
+
+    Requires PyMuPDF (fitz) for rendering. If PyMuPDF is not installed, this
+    returns (None, None) rather than raising — the backfill path proceeds
+    with content_html only, and the editor simply renders without letterhead.
+    """
+    try:
+        import fitz  # noqa: F401  — import guard
+    except ImportError:
+        print("[extract_pdf_header_footer_images] PyMuPDF not installed — skipping header/footer extraction")
+        return None, None
+
+    header_png = None
+    footer_png = None
+    try:
+        doc = fitz.open(stream=contents, filetype="pdf")
+        if len(doc) > 0:
+            first = doc.load_page(0)
+            r = first.rect
+            header_clip = fitz.Rect(r.x0, r.y0, r.x1, r.y0 + r.height * 0.12)
+            header_png = first.get_pixmap(clip=header_clip, dpi=150).tobytes("png")
+
+            last = doc.load_page(len(doc) - 1)
+            rl = last.rect
+            footer_clip = fitz.Rect(rl.x0, rl.y1 - rl.height * 0.10, rl.x1, rl.y1)
+            footer_png = last.get_pixmap(clip=footer_clip, dpi=150).tobytes("png")
+        doc.close()
+    except Exception as e:
+        print(f"[extract_pdf_header_footer_images] warning: {e}")
+    return header_png, footer_png
+
+def _upload_asset_to_storage(asset_bytes: bytes, prefix: str) -> str | None:
+    """Upload a PNG blob to the documents bucket and return its public URL."""
+    if not asset_bytes:
+        return None
+    try:
+        path = f"{prefix}_{int(time.time())}_{os.urandom(4).hex()}.png"
+        supabase.storage.from_("documents").upload(
+            file=asset_bytes, path=path, file_options={"content-type": "image/png"}
+        )
+        return supabase.storage.from_("documents").get_public_url(path)
+    except Exception as e:
+        print(f"[_upload_asset_to_storage] warning: {e}")
+        return None
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# REPOSITORY HELPER FUNCTIONS
+# ─────────────────────────────────────────────────────────────────────────────
+# These three helpers are consumed by the document endpoints below:
+#   • _merge_metadata_across_chunks   → get_documents(), get_document_content()
+#   • _backfill_content_html          → get_document_content() (lazy backfill)
+#   • _fetch_url_bytes                → _backfill_content_html() (download binary)
+# They must be defined before ANY of those endpoints are declared.
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _fetch_url_bytes(url: str) -> bytes | None:
+    """
+    Download the raw bytes at `url`.
+
+    Supabase Storage sits behind Cloudflare, which returns HTTP 403 for
+    requests using Python's default `Python-urllib/x.y` User-Agent. To
+    avoid the block we:
+
+      1. Prefer Supabase's own storage client, extracting the object path
+         from the public URL. This sends proper auth headers + a UA that
+         Cloudflare accepts.
+      2. Fall back to urllib but with an explicit browser-like User-Agent.
+
+    Returns None on any failure.
+    """
+    if not url:
+        return None
+
+    # ── Path 1: Supabase storage client (preferred) ──────────────────────
+    # Public URL format:
+    #   https://<project>.supabase.co/storage/v1/object/public/documents/<path>
+    try:
+        marker = "/storage/v1/object/public/documents/"
+        if marker in url:
+            object_path = url.split(marker, 1)[1]
+            # Strip any query string that might have been appended.
+            object_path = object_path.split("?", 1)[0]
+            blob = supabase.storage.from_("documents").download(object_path)
+            if blob:
+                print(f"[_fetch_url_bytes] ✓ supabase client fetched {object_path} ({len(blob)} bytes)")
+                return blob
+    except Exception as e:
+        print(f"[_fetch_url_bytes] supabase client failed for {url}: {e}")
+
+    # ── Path 2: urllib with browser-like UA (fallback) ───────────────────
+    try:
+        req = urllib.request.Request(
+            url,
+            headers={
+                "User-Agent": (
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) "
+                    "Chrome/120.0.0.0 Safari/537.36"
+                ),
+                "Accept": "*/*",
+            },
+        )
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            blob = resp.read()
+            print(f"[_fetch_url_bytes] ✓ urllib fetched {url} ({len(blob)} bytes)")
+            return blob
+    except Exception as e:
+        print(f"[_fetch_url_bytes] urllib failed for {url}: {e}")
+        return None
+
+
+def _merge_metadata_across_chunks(rows: list) -> dict:
+    """
+    document_sections is a CHUNKED table: one document = N rows, one per
+    embedding chunk. Different chunks may carry different metadata keys —
+    e.g., `content_html` is only guaranteed to be on the chunk that was
+    written by the ingestion path that had it, and older / versioned rows
+    may be missing the field entirely.
+
+    This helper merges all chunk rows for a single logical document into
+    one metadata dict, preferring the FIRST NON-EMPTY value for each key.
+
+    The input rows must already be ordered deterministically (e.g. by id
+    ascending). Callers are responsible for the ordering — this function
+    is otherwise pure.
+    """
+    merged: dict = {}
+    for row in rows or []:
+        meta = row.get("metadata", {})
+        if isinstance(meta, str):
+            try:    meta = json.loads(meta)
+            except: meta = {}
+        for key, val in meta.items():
+            if key in merged:
+                existing = merged[key]
+                # Keep an already-good value; only overwrite empties.
+                if existing not in (None, "", [], {}):
+                    continue
+            merged[key] = val
+    return merged
+
+
+def _backfill_content_html(meta: dict) -> dict | None:
+    """
+    Lazy backfill for legacy documents uploaded before the editor-facing
+    representation existed (or that went through a code path that dropped
+    it — see upload_new_version). Downloads the original binary from its
+    Supabase Storage `file_url`, runs the structure-preserving converter,
+    uploads any header/footer assets it discovers, and returns the fields
+    to merge into the metadata row.
+
+    Idempotent and safe to call repeatedly: returns None on any failure,
+    letting the caller fall through to its normal empty-content_html path.
+    """
+    file_url = meta.get("file_url")
+    if not file_url:
+        print("[_backfill] no file_url in metadata")
+        return None
+
+    contents = _fetch_url_bytes(file_url)
+    if not contents:
+        print(f"[_backfill] could not download {file_url}")
+        return None
+
+    # Sniff extension from the URL path; strip any query string.
+    filename = (file_url.split("/")[-1] or "").split("?")[0].lower()
+
+    content_html = ""
+    hdr_bytes = None
+    ftr_bytes = None
+
+    try:
+        if filename.endswith(".docx"):
+            content_html, hdr_bytes, ftr_bytes = docx_to_html_with_assets(contents)
+        elif filename.endswith(".pdf"):
+            content_html = pdf_to_html(contents)
+            hdr_bytes, ftr_bytes = extract_pdf_header_footer_images(contents)
+        elif filename.endswith((".png", ".jpg", ".jpeg")):
+            b64 = base64.b64encode(contents).decode("ascii")
+            mime = "image/png" if filename.endswith(".png") else "image/jpeg"
+            content_html = f'<p><img src="data:{mime};base64,{b64}" /></p>'
+        elif filename.endswith(".txt"):
+            text = contents.decode("utf-8", errors="ignore")
+            escaped = _escape_html(text)
+            content_html = "".join(
+                f"<p>{line}</p>" if line.strip() else "<p><br></p>"
+                for line in escaped.split("\n")
+            )
+        else:
+            print(f"[_backfill] unsupported extension: {filename}")
+            return None
+    except Exception as e:
+        print(f"[_backfill] conversion error for {filename}: {e}")
+        return None
+
+    if not content_html or not content_html.strip():
+        print(f"[_backfill] converter returned empty for {filename}")
+        return None
+
+    header_url = _upload_asset_to_storage(hdr_bytes, prefix="backfill_header")
+    footer_url = _upload_asset_to_storage(ftr_bytes, prefix="backfill_footer")
+
+    print(f"[_backfill] ✓ generated content_html for '{meta.get('name')}' ({len(content_html)} chars)")
+    return {
+        "content_html":     content_html,
+        "header_image_url": header_url,
+        "footer_image_url": footer_url,
+        "page_size":        meta.get("page_size",  "short"),
+        "line_spacing":     meta.get("line_spacing", "1.5"),
+    }
 
 def supabase_query_with_retry(query_fn, retries=3, delay=1):
     """Retry a Supabase query on connection drops."""
@@ -924,27 +2008,54 @@ async def upload_document(
 ):
     contents       = await file.read()
     extracted_text = ""
+    content_html   = ""
+    hdr_bytes      = None
+    ftr_bytes      = None
 
     try:
         filename_lower = file.filename.lower()
 
-        if filename_lower.endswith(".pdf"):
+        if filename_lower.endswith(".docx"):
+            try:
+                content_html, hdr_bytes, ftr_bytes = docx_to_html_with_assets(contents)
+            except Exception:
+                content_html, hdr_bytes, ftr_bytes = "", None, None
+            import docx as _docx
+            _d = _docx.Document(io.BytesIO(contents))
+            extracted_text = "\n".join(p.text for p in _d.paragraphs)
+
+        elif filename_lower.endswith(".pdf"):
+            try:
+                content_html = pdf_to_html(contents)
+            except Exception:
+                content_html = ""
+            try:
+                hdr_bytes, ftr_bytes = extract_pdf_header_footer_images(contents)
+            except Exception:
+                hdr_bytes, ftr_bytes = None, None
             extracted_text = extract_pdf_text(contents)
+
         elif filename_lower.endswith((".png", ".jpg", ".jpeg")):
             img = PILImage.open(io.BytesIO(contents)).convert("RGB")
             img_array = np.array(img)
             ocr = get_ocr()
             extracted_text = run_ocr(ocr, img_array)
+            b64 = base64.b64encode(contents).decode("ascii")
+            mime = "image/png" if filename_lower.endswith(".png") else "image/jpeg"
+            content_html = f'<p><img src="data:{mime};base64,{b64}" /></p>'
+
         elif filename_lower.endswith(".txt"):
             extracted_text = contents.decode("utf-8")
-        elif filename_lower.endswith(".docx"):
-            import docx
-            doc = docx.Document(io.BytesIO(contents))
-            extracted_text = "\n".join([paragraph.text for paragraph in doc.paragraphs])
+            escaped = _escape_html(extracted_text)
+            content_html = "".join(
+                f"<p>{line}</p>" if line.strip() else "<p><br></p>"
+                for line in escaped.split("\n")
+            )
+
         else:
             raise HTTPException(status_code=400, detail="Unsupported file format. Please upload PDF, DOCX, TXT, or Image.")
 
-        if not extracted_text.strip():
+        if not extracted_text.strip() and not content_html.strip():
             raise HTTPException(status_code=400, detail="Could not extract text from document or image.")
 
         safe_filename   = file.filename.replace(" ", "_")
@@ -953,9 +2064,12 @@ async def upload_document(
         supabase.storage.from_("documents").upload(
             file=contents,
             path=unique_filename,
-            file_options={"content-type": "application/pdf"}
+            file_options={"content-type": file.content_type or "application/octet-stream"}
         )
         public_url = supabase.storage.from_("documents").get_public_url(unique_filename)
+
+        header_image_url = _upload_asset_to_storage(hdr_bytes, prefix="doc_header")
+        footer_image_url = _upload_asset_to_storage(ftr_bytes, prefix="doc_footer")
 
         metadata = {
             "name":             name,
@@ -967,6 +2081,11 @@ async def upload_document(
             "file_url":         public_url,
             "status":           "Active",
             "uploaded_by":      uploaded_by or "Unknown",
+            "content_html":     content_html,
+            "header_image_url": header_image_url,
+            "footer_image_url": footer_image_url,
+            "page_size":        "short",
+            "line_spacing":     "1.5",
         }
 
         chunks_count = vector_store.add_to_vector_db(extracted_text, metadata)
@@ -1010,6 +2129,12 @@ async def upload_new_version(
     uploaded_by:          str = Form(None),
     db: Session = Depends(get_db),
 ):
+    """
+    Uploads a new version of an existing document. Mirrors upload_document's
+    editor-facing enrichment so versioned rows carry content_html and the
+    header/footer asset URLs — the fields that were previously dropped here,
+    which is what made versioned documents impossible to open in the editor.
+    """
     try:
         res = supabase.table("document_sections").select("metadata").eq("metadata->>name", old_document_name).limit(1).execute()
         if not res.data:
@@ -1019,6 +2144,7 @@ async def upload_new_version(
         category     = old_metadata.get("category", "Policy")
         office       = old_metadata.get("office",   "Academic Affairs")
 
+        # Archive every chunk of the old version.
         old_chunks_res = supabase.table("document_sections").select("id, metadata").eq("metadata->>name", old_document_name).execute()
         if old_chunks_res.data:
             for chunk in old_chunks_res.data:
@@ -1028,37 +2154,84 @@ async def upload_new_version(
 
         contents       = await file.read()
         extracted_text = ""
+        content_html   = ""
+        hdr_bytes      = None
+        ftr_bytes      = None
         filename_lower = file.filename.lower()
 
-        if filename_lower.endswith(".pdf"):
-            extracted_text = extract_pdf_text(contents)
+        # ── Structure-preserving conversion for the editor ─────────────────
+        # Mirrors upload_document() and upload_accreditation_evidence() so
+        # versioned documents are equally openable in the Document Studio.
+        if filename_lower.endswith(".docx"):
+            try:
+                content_html, hdr_bytes, ftr_bytes = docx_to_html_with_assets(contents)
+            except Exception as conv_exc:
+                print(f"[upload_new_version] DOCX→HTML conversion warning: {conv_exc}")
+            try:
+                import docx as _docx
+                _d = _docx.Document(io.BytesIO(contents))
+                extracted_text = "\n".join(p.text for p in _d.paragraphs)
+            except Exception as txt_exc:
+                print(f"[upload_new_version] DOCX plain-text warning: {txt_exc}")
+
+        elif filename_lower.endswith(".pdf"):
+            try:
+                content_html = pdf_to_html(contents)
+            except Exception as conv_exc:
+                print(f"[upload_new_version] PDF→HTML conversion warning: {conv_exc}")
+            try:
+                hdr_bytes, ftr_bytes = extract_pdf_header_footer_images(contents)
+            except Exception as img_exc:
+                print(f"[upload_new_version] PDF header/footer warning: {img_exc}")
+            try:
+                extracted_text = extract_pdf_text(contents)
+            except Exception as txt_exc:
+                print(f"[upload_new_version] PDF plain-text warning: {txt_exc}")
+
         elif filename_lower.endswith((".png", ".jpg", ".jpeg")):
-            img = PILImage.open(io.BytesIO(contents)).convert("RGB")
-            img_array = np.array(img)
-            ocr = get_ocr()
-            extracted_text = run_ocr(ocr, img_array)
+            try:
+                img = PILImage.open(io.BytesIO(contents)).convert("RGB")
+                img_array = np.array(img)
+                ocr = get_ocr()
+                extracted_text = run_ocr(ocr, img_array)
+            except Exception as ocr_exc:
+                print(f"[upload_new_version] OCR warning: {ocr_exc}")
+            b64 = base64.b64encode(contents).decode("ascii")
+            mime = "image/png" if filename_lower.endswith(".png") else "image/jpeg"
+            content_html = f'<p><img src="data:{mime};base64,{b64}" /></p>'
+
         elif filename_lower.endswith(".txt"):
-            extracted_text = contents.decode("utf-8")
-        elif filename_lower.endswith(".docx"):
-            import docx
-            doc = docx.Document(io.BytesIO(contents))
-            extracted_text = "\n".join([paragraph.text for paragraph in doc.paragraphs])
+            extracted_text = contents.decode("utf-8", errors="ignore")
+            escaped = _escape_html(extracted_text)
+            content_html = "".join(
+                f"<p>{line}</p>" if line.strip() else "<p><br></p>"
+                for line in escaped.split("\n")
+            )
+
         else:
             raise HTTPException(status_code=400, detail="Unsupported file format.")
 
-        if not extracted_text.strip():
+        if not extracted_text.strip() and not content_html.strip():
             raise HTTPException(status_code=400, detail="Could not extract text.")
 
+        # ── Upload the raw binary ──────────────────────────────────────────
         safe_filename   = file.filename.replace(" ", "_")
         unique_filename = f"v{new_version}_{int(time.time())}_{safe_filename}"
 
         supabase.storage.from_("documents").upload(
             file=contents,
             path=unique_filename,
-            file_options={"content-type": file.content_type}
+            file_options={"content-type": file.content_type or "application/octet-stream"}
         )
         public_url = supabase.storage.from_("documents").get_public_url(unique_filename)
 
+        # ── Upload header / footer assets if extracted ────────────────────
+        header_image_url = _upload_asset_to_storage(hdr_bytes, prefix="v_header")
+        footer_image_url = _upload_asset_to_storage(ftr_bytes, prefix="v_footer")
+
+        # ── Persist metadata (RAG + editor representation together) ────────
+        # Preserve prior page geometry if the old version had it, otherwise
+        # fall back to the same defaults upload_document uses.
         new_metadata = {
             "name":             old_document_name,
             "category":         category,
@@ -1069,6 +2242,12 @@ async def upload_new_version(
             "file_url":         public_url,
             "status":           "Active",
             "uploaded_by":      uploaded_by or "Unknown",
+            # ── Editor-facing fields — the previously-missing block ──────
+            "content_html":     content_html,
+            "header_image_url": header_image_url,
+            "footer_image_url": footer_image_url,
+            "page_size":        old_metadata.get("page_size",  "short"),
+            "line_spacing":     old_metadata.get("line_spacing", "1.5"),
         }
 
         vector_store.add_to_vector_db(extracted_text, new_metadata)
@@ -1097,43 +2276,76 @@ async def upload_new_version(
 
         return {"message": "New version uploaded successfully and old version archived!"}
 
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"Update version error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
 # ─────────────────────────────────────────────────────────────────────────────
 # DOCUMENTS — LIST
 # ─────────────────────────────────────────────────────────────────────────────
 
 @app.get("/documents")
-def get_documents():
-    try:
-        res = supabase.table("document_sections").select("metadata").execute()
+def get_documents(category: Optional[str] = None, status: Optional[str] = None):
+    """
+    Lists documents from the chunked document_sections table. Because each
+    document is spread across N chunk rows, we first AGGREGATE by document
+    name (merging per-chunk metadata preferring first non-empty value),
+    then apply the optional category/status filters on the merged view.
 
-        unique_docs = {}
+    This ensures `has_content_html` reflects whether ANY chunk of the
+    document carries an editor-facing HTML payload — which is what
+    `get_document_content()` also uses to decide whether to backfill.
+    """
+    try:
+        res = (
+            supabase.table("document_sections")
+            .select("metadata, id")
+            .order("id", desc=False)   # deterministic; required by the merger
+            .execute()
+        )
+
+        # ── 1. Group chunk rows by document name ──────────────────────────
+        grouped: dict[str, list] = {}
         if res.data:
             for row in res.data:
                 meta = row.get("metadata", {})
                 if isinstance(meta, str):
                     try:    meta = json.loads(meta)
                     except: meta = {}
-
                 name = meta.get("name")
-                if not name or name in unique_docs:
+                if not name:
+                    continue
+                grouped.setdefault(name, []).append(row)
+
+        # ── 2. Merge each group's chunks, then filter + project ───────────
+        unique_docs = {}
+        for name, rows in grouped.items():
+            meta = _merge_metadata_across_chunks(rows)
+
+            if category and meta.get("category") != category:
+                continue
+            # Match the display default: no explicit status ⇒ "Active".
+            if status:
+                effective_status = meta.get("status") or "Active"
+                if effective_status != status:
                     continue
 
-                unique_docs[name] = {
-                    "name":             name,
-                    "category":         meta.get("category",         ""),
-                    "office":           meta.get("office",           ""),
-                    "program":          meta.get("program",          "GLOBAL"),
-                    "version":          meta.get("version",          "1.0"),
-                    "effectivity_date": meta.get("effectivity_date", ""),
-                    "status":           meta.get("status",           "Active"),
-                    "file_url":         meta.get("file_url",         ""),
-                    "upload_date":      meta.get("upload_date",      ""),
-                    "uploaded_by":      meta.get("uploaded_by",      "Unknown"),
-                }
+            unique_docs[name] = {
+                "name":             name,
+                "category":         meta.get("category",         ""),
+                "office":           meta.get("office",           ""),
+                "program":          meta.get("program",          "GLOBAL"),
+                "version":          meta.get("version",          "1.0"),
+                "effectivity_date": meta.get("effectivity_date", ""),
+                "status":           meta.get("status",           "Active"),
+                "file_url":         meta.get("file_url",         ""),
+                "upload_date":      meta.get("upload_date",      ""),
+                "uploaded_by":      meta.get("uploaded_by",      "Unknown"),
+                "has_content_html": bool(meta.get("content_html")),
+                "header_image_url": meta.get("header_image_url"),
+                "footer_image_url": meta.get("footer_image_url"),
+            }
 
         return list(unique_docs.values())
 
@@ -1141,8 +2353,75 @@ def get_documents():
         print(f"[get_documents] error: {e}")
         raise HTTPException(status_code=500, detail="Failed to fetch documents")
 
+@app.get("/documents/{document_name}/content")
+def get_document_content(document_name: str):
+    """
+    Returns the structure-preserving HTML representation + header/footer
+    asset URLs for a single document, for the editor's loadHtmlIntoPreview()
+    path.
 
+    Fetches ALL chunk rows for the document name (ordered by id ascending),
+    merges their metadata preferring first non-empty value per key, and only
+    then reads `content_html`. This eliminates the previous nondeterministic
+    `.limit(1)` behavior that could pick a chunk row missing the payload
+    even when another chunk row had it.
 
+    If, after merging, content_html is still empty, a lazy backfill is
+    attempted from the stored `file_url` binary. On success the enriched
+    metadata is persisted back to every chunk row for the document.
+    """
+    try:
+        res = (
+            supabase.table("document_sections")
+            .select("metadata, id")
+            .eq("metadata->>name", document_name)
+            .order("id", desc=False)
+            .execute()
+        )
+        if not res.data:
+            raise HTTPException(status_code=404, detail="Document not found")
+
+        meta = _merge_metadata_across_chunks(res.data)
+
+        # ── Lazy backfill for legacy / versioned rows ──────────────────────
+        if not meta.get("content_html"):
+            print(f"[get_document_content] backfilling '{document_name}' …")
+            backfilled = _backfill_content_html(meta)
+            if backfilled:
+                meta.update(backfilled)
+                try:
+                    # Persist to every chunk row for this document. Every
+                    # row receives the same merged + backfilled metadata,
+                    # so future reads are stable regardless of which chunk
+                    # a query lands on first.
+                    supabase.table("document_sections") \
+                        .update({"metadata": meta}) \
+                        .eq("metadata->>name", document_name) \
+                        .execute()
+                    print(f"[get_document_content] persisted backfill for '{document_name}'")
+                except Exception as e:
+                    # Persistence failure is non-fatal — this request still
+                    # returns the freshly-generated payload.
+                    print(f"[get_document_content] persist warning: {e}")
+
+        return {
+            "name":             meta.get("name", document_name),
+            "category":         meta.get("category", ""),
+            "office":           meta.get("office", ""),
+            "version":          meta.get("version", "1.0"),
+            "effectivity_date": meta.get("effectivity_date", ""),
+            "content_html":     meta.get("content_html", ""),
+            "header_image_url": meta.get("header_image_url"),
+            "footer_image_url": meta.get("footer_image_url"),
+            "file_url":         meta.get("file_url", ""),
+            "page_size":        meta.get("page_size", "short"),
+            "line_spacing":     meta.get("line_spacing", "1.5"),
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[get_document_content] error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch document content")
 # ─────────────────────────────────────────────────────────────────────────────
 # DOCUMENTS — UPDATE METADATA
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1697,70 +2976,120 @@ async def upload_accreditation_evidence(
     requirement_target:  str = Form(...),
     uploaded_by:         str = Form(None),
 ):
-    import time, io, PyPDF2
-    from datetime import datetime
-
     try:
-        contents       = await file.read()
-        extracted_text = ""
+        contents = await file.read()
         filename_lower = file.filename.lower()
 
-        if filename_lower.endswith(".pdf"):
-            pdf_reader = PyPDF2.PdfReader(io.BytesIO(contents))
-            for page in pdf_reader.pages:
-                text = page.extract_text()
-                if text: extracted_text += text + "\n"
+        extracted_text   = ""
+        content_html     = ""
+        header_bytes     = None
+        footer_bytes     = None
+
+        # ── Structure-preserving conversion for the editor ─────────────────
+        if filename_lower.endswith(".docx"):
+            try:
+                content_html, header_bytes, footer_bytes = docx_to_html_with_assets(contents)
+            except Exception as conv_exc:
+                print(f"[accreditation] DOCX→HTML conversion warning: {conv_exc}")
+            # Plain text for RAG (unchanged pipeline)
+            try:
+                import docx as _docx
+                _d = _docx.Document(io.BytesIO(contents))
+                extracted_text = "\n".join(p.text for p in _d.paragraphs)
+            except Exception as txt_exc:
+                print(f"[accreditation] DOCX plain-text warning: {txt_exc}")
+
+        elif filename_lower.endswith(".pdf"):
+            try:
+                content_html = pdf_to_html(contents)
+            except Exception as conv_exc:
+                print(f"[accreditation] PDF→HTML conversion warning: {conv_exc}")
+            try:
+                header_bytes, footer_bytes = extract_pdf_header_footer_images(contents)
+            except Exception as img_exc:
+                print(f"[accreditation] PDF header/footer warning: {img_exc}")
+            # Plain text for RAG
+            try:
+                pdf_reader = PyPDF2.PdfReader(io.BytesIO(contents))
+                for page in pdf_reader.pages:
+                    t = page.extract_text()
+                    if t:
+                        extracted_text += t + "\n"
+            except Exception as txt_exc:
+                print(f"[accreditation] PDF plain-text warning: {txt_exc}")
+
         elif filename_lower.endswith(".txt"):
-            extracted_text = contents.decode("utf-8")
-        elif filename_lower.endswith(".docx"):
-            import docx
-            doc = docx.Document(io.BytesIO(contents))
-            extracted_text = "\n".join([paragraph.text for paragraph in doc.paragraphs])
+            extracted_text = contents.decode("utf-8", errors="ignore")
+            escaped = _escape_html(extracted_text)
+            content_html = "".join(
+                f"<p>{line}</p>" if line.strip() else "<p><br></p>"
+                for line in escaped.split("\n")
+            )
+
+        elif filename_lower.endswith((".png", ".jpg", ".jpeg")):
+            b64 = base64.b64encode(contents).decode("ascii")
+            mime = "image/png" if filename_lower.endswith(".png") else "image/jpeg"
+            content_html = f'<p><img src="data:{mime};base64,{b64}" /></p>'
+            extracted_text = f"[Image document: {document_name}]"
+            # The image IS the content — no separate header/footer extraction.
+
         else:
             raise HTTPException(status_code=400, detail="Unsupported file format.")
 
-        if not extracted_text.strip():
-            raise HTTPException(status_code=400, detail="Could not extract text.")
+        if not extracted_text.strip() and not content_html.strip():
+            raise HTTPException(status_code=400, detail="Could not extract any content from document.")
 
+        # ── Upload the original binary ─────────────────────────────────────
         safe_filename   = file.filename.replace(" ", "_")
         unique_filename = f"evid_{int(time.time())}_{safe_filename}"
-
         supabase.storage.from_("documents").upload(
-            file=contents, path=unique_filename, file_options={"content-type": file.content_type}
+            file=contents, path=unique_filename,
+            file_options={"content-type": file.content_type or "application/octet-stream"}
         )
         public_url = supabase.storage.from_("documents").get_public_url(unique_filename)
 
+        # ── Upload header / footer assets if extracted ─────────────────────
+        header_image_url = _upload_asset_to_storage(header_bytes, prefix="evid_header")
+        footer_image_url = _upload_asset_to_storage(footer_bytes, prefix="evid_footer")
+
+        # ── Persist metadata (RAG + editor representation together) ────────
         metadata = {
-            "name": document_name,
-            "category": "Accreditation Evidence",
-            "office": "Quality Assurance",
-            "version": "1.0",
-            "status": "Pending", 
-            "program": program,
-            "area_code": area_code,
-            "requirement_target": requirement_target, 
-            "uploaded_by": uploaded_by, 
-            "admin_feedback": "",
-            "upload_date": datetime.now().isoformat(),
-            "file_url": public_url
+            "name":               document_name,
+            "category":           "Accreditation Evidence",
+            "office":             "Quality Assurance",
+            "version":            "1.0",
+            "status":             "Pending",
+            "program":            program,
+            "area_code":          area_code,
+            "requirement_target": requirement_target,
+            "uploaded_by":        uploaded_by,
+            "admin_feedback":     "",
+            "upload_date":        datetime.now().isoformat(),
+            "file_url":           public_url,
+            # NEW editor-facing fields:
+            "content_html":       content_html,
+            "header_image_url":   header_image_url,
+            "footer_image_url":   footer_image_url,
+            "page_size":          "short",
+            "line_spacing":       "1.5",
         }
 
         vector_store.add_to_vector_db(extracted_text, metadata)
 
-        # --- SILENT AUDIT LOG ---
+        # ── Silent audit log ───────────────────────────────────────────────
         try:
-            # FIX: Using the global supabase client instead of importing it locally
             supabase.table("system_events_logs").insert({
-                "user_email": uploaded_by, 
+                "user_email": uploaded_by,
                 "event_type": "Accreditation Upload",
                 "description": f"Uploaded '{document_name}' for {program} ({area_code}) - Pending Review"
             }).execute()
         except Exception as e:
             print(f"Failed to log accreditation upload: {e}")
-        # ------------------------
 
         return {"message": "Evidence successfully uploaded and is pending Admin review!"}
 
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"Evidence upload error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -3276,28 +4605,71 @@ async def upload_iso_evidence(
         # RAG AI Vector Ingestion
         try:
             extracted_text = ""
-            fn_lower = file.filename.lower()
-            if fn_lower.endswith(".pdf"):
-                pdf_reader = PyPDF2.PdfReader(io.BytesIO(contents))
-                for page in pdf_reader.pages:
-                    txt = page.extract_text()
-                    if txt: extracted_text += txt + "\n"
-            elif fn_lower.endswith(".txt"):
-                extracted_text = contents.decode("utf-8")
-            elif fn_lower.endswith(".docx"):
-                import docx
-                d = docx.Document(io.BytesIO(contents))
-                extracted_text = "\n".join([p.text for p in d.paragraphs])
+            content_html   = ""
+            hdr_bytes      = None
+            ftr_bytes      = None
+            fn_lower       = file.filename.lower()
 
-            if extracted_text.strip():
+            if fn_lower.endswith(".docx"):
+                try:
+                    content_html, hdr_bytes, ftr_bytes = docx_to_html_with_assets(contents)
+                except Exception as conv_exc:
+                    print(f"[iso] DOCX→HTML conversion warning: {conv_exc}")
+                try:
+                    import docx as _docx
+                    _d = _docx.Document(io.BytesIO(contents))
+                    extracted_text = "\n".join(p.text for p in _d.paragraphs)
+                except Exception as txt_exc:
+                    print(f"[iso] DOCX plain-text warning: {txt_exc}")
+
+            elif fn_lower.endswith(".pdf"):
+                try:
+                    content_html = pdf_to_html(contents)
+                except Exception as conv_exc:
+                    print(f"[iso] PDF→HTML conversion warning: {conv_exc}")
+                try:
+                    hdr_bytes, ftr_bytes = extract_pdf_header_footer_images(contents)
+                except Exception as img_exc:
+                    print(f"[iso] PDF header/footer warning: {img_exc}")
+                try:
+                    pdf_reader = PyPDF2.PdfReader(io.BytesIO(contents))
+                    for page in pdf_reader.pages:
+                        txt = page.extract_text()
+                        if txt: extracted_text += txt + "\n"
+                except Exception as txt_exc:
+                    print(f"[iso] PDF plain-text warning: {txt_exc}")
+
+            elif fn_lower.endswith(".txt"):
+                extracted_text = contents.decode("utf-8", errors="ignore")
+                escaped = _escape_html(extracted_text)
+                content_html = "".join(
+                    f"<p>{line}</p>" if line.strip() else "<p><br></p>"
+                    for line in escaped.split("\n")
+                )
+
+            elif fn_lower.endswith((".png", ".jpg", ".jpeg")):
+                b64 = base64.b64encode(contents).decode("ascii")
+                mime = "image/png" if fn_lower.endswith(".png") else "image/jpeg"
+                content_html = f'<p><img src="data:{mime};base64,{b64}" /></p>'
+                extracted_text = f"[Image document: {document_name}]"
+
+            header_image_url = _upload_asset_to_storage(hdr_bytes, prefix="iso_header")
+            footer_image_url = _upload_asset_to_storage(ftr_bytes, prefix="iso_footer")
+
+            if extracted_text.strip() or content_html.strip():
                 vector_store.add_to_vector_db(extracted_text, {
-                    "name": document_name,
-                    "category": "Accreditation Evidence",
-                    "office": req.auditee_office,
-                    "program": "GLOBAL",
-                    "iso_clause": req.iso_clause,
-                    "uploaded_by": uploaded_by,
-                    "file_url": public_url
+                    "name":             document_name,
+                    "category":         "Accreditation Evidence",
+                    "office":           req.auditee_office,
+                    "program":          "GLOBAL",
+                    "iso_clause":       req.iso_clause,
+                    "uploaded_by":      uploaded_by,
+                    "file_url":         public_url,
+                    "content_html":     content_html,
+                    "header_image_url": header_image_url,
+                    "footer_image_url": footer_image_url,
+                    "page_size":        "short",
+                    "line_spacing":     "1.5",
                 })
         except Exception as vexc:
             print(f"[upload_iso_evidence] vector store ingestion warning: {vexc}")

@@ -1,10 +1,18 @@
 // server.js
 // ---------------------------------------------------------------------------
-// A tiny local backend for testing the AI Document Generator with Vite/CRA.
-// Keeps your GROQ_API_KEY secure on the server side.
+// Local backend for the AI Document Generator with Vite/CRA.
+//
+// Responsibilities
+//   1. /api/generate-document            — Groq AI drafting proxy
+//   2. /api/repository-documents         — proxy → main.py /documents
+//   3. /api/repository-documents/:n/content
+//                                        — proxy → main.py /documents/:n/content
+//   4. /api/models                       — diagnostic: list Groq models your key can use
 //
 // SETUP
 //   Add GROQ_API_KEY=gsk_... to your .env file
+//   Optionally add GROQ_MODEL=<id>            (override the first model tried)
+//   Optionally add REPOSITORY_BACKEND_URL=http://localhost:8000  (default)
 //
 // RUN
 //   node server.js
@@ -14,14 +22,20 @@ import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 
-dotenv.config(); // loads .env in project root
+dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+const REPOSITORY_BACKEND_URL =
+  process.env.REPOSITORY_BACKEND_URL || "http://localhost:8000";
+
 app.use(cors());
 app.use(express.json());
 
+/* ============================================================================
+ * SYSTEM PROMPT
+ * ==========================================================================*/
 const SYSTEM_PROMPT = `You are a senior institutional and academic document drafting assistant for higher education institutions (such as Cebu Technological University - CTU Argao Campus and partner organizations).
 
 You generate professional, legally sound, and academic-grade documents (e.g., Memoranda, Office Orders, Activity Proposals, Course Syllabi, Endorsement Letters, Resolutions, Certificates, Policy Guidelines, Contracts, Terms of Reference, Minutes of Meeting).
@@ -61,30 +75,29 @@ RULES:
      Campus Director / University President
 4. Ensure the draft is complete, rich in institutional context, coherent, and ready for immediate review and printing without missing standard sections.`;
 
-// Candidate models in order of priority
+/* ============================================================================
+ * MODEL FALLBACK CHAIN
+ * ==========================================================================*/
+const REASONING_MODEL_IDS = new Set([
+  "openai/gpt-oss-120b",
+  "openai/gpt-oss-20b",
+  "qwen/qwen3.6-27b",
+  "qwen/qwen3.8-27b",
+]);
+
 const MODELS_TO_TRY = [
   process.env.GROQ_MODEL,
   "openai/gpt-oss-120b",
   "openai/gpt-oss-20b",
-  "qwen/qwen3-32b",
+  "qwen/qwen3.6-27b",
   "groq/compound",
+  "groq/compound-mini",
 ].filter(Boolean);
 
-// ---------------------------------------------------------------------------
-// WORD BUDGET
-// A printed page (institutional letterhead + metadata block + headings +
-// signature block) realistically holds ~250-300 words of body text at a
-// still-readable font size. Anything above that forces the client-side
-// auto-fit to shrink past its minimum font size, which spills the leftover
-// 1-2 lines onto an otherwise-empty extra page.
-// ---------------------------------------------------------------------------
 const WORDS_PER_PAGE_MIN = 250;
 const WORDS_PER_PAGE_MAX = 300;
 const WORDS_PER_PAGE_TARGET = 275;
-// Allow a small overshoot before we bother paying for a shorten pass.
 const OVERSHOOT_TOLERANCE = 1.1;
-// Mirrors MAX_TARGET_PAGES in DocumentGenerator.tsx — kept here too so the
-// cap holds even if a request ever reaches this endpoint some other way.
 const MAX_TARGET_PAGES = 5;
 
 function computeWordBudget(targetPages) {
@@ -99,7 +112,6 @@ function computeWordBudget(targetPages) {
   };
 }
 
-/** Rough but good-enough word count: strips markdown syntax noise before counting. */
 function countWords(text) {
   const stripped = (text || "")
     .replace(/<think>[\s\S]*?<\/think>/g, "")
@@ -109,29 +121,15 @@ function countWords(text) {
   return matches ? matches.length : 0;
 }
 
-// Same signature-block detector the frontend's pagination uses, so the
-// server's trim and the client's "keep signature block atomic" logic agree
-// on where the protected tail starts.
 const SIG_BLOCK_REGEX =
   /\b(prepared\s+by|reviewed\s+by|approved\s+by|recommending\s+approval|recommended\s+by|noted\s+by|attested\s+by|conforme|submitted\s+by|respectfully\s+submitted)\b/i;
 
-// A metadata field like "**SUBJECT:** ____" — part of the protected head.
 const METADATA_LINE_REGEX = /^\*\*[A-Z0-9 /.]+:\*\*/;
 
-/**
- * Deterministically cut a markdown document down to maxWords, guaranteed.
- * Keeps the title + metadata block (head) and the signature block (tail)
- * fully intact, and drops whole body blocks (paragraphs / headings / list
- * runs), starting from the end of the body, until the total fits.
- */
 function hardTrimToWordBudget(content, maxWords) {
-  // Split into blocks on blank lines, keeping each block's internal newlines.
   const blocks = content.replace(/\r\n/g, "\n").split(/\n\s*\n/).filter((b) => b.trim());
   if (blocks.length === 0) return content;
 
-  // Head: title line + any leading metadata lines. Only the H1 title
-  // ("# TITLE") counts as head — "## 1.0 RATIONALE" etc. must stay
-  // trimmable body, not get swept into the protected head.
   let headEnd = 0;
   while (
     headEnd < blocks.length &&
@@ -139,13 +137,11 @@ function hardTrimToWordBudget(content, maxWords) {
   ) {
     headEnd++;
   }
-  headEnd = Math.max(headEnd, blocks.length > 0 ? 1 : 0); // always keep at least the title block
+  headEnd = Math.max(headEnd, blocks.length > 0 ? 1 : 0);
 
-  // Tail: search backward from the end for the first block matching the
-  // signature regex, and protect everything from there to the end.
   let tailStart = blocks.length;
   for (let i = blocks.length - 1; i >= headEnd; i--) {
-    if (SIG_BLOCK_REGEX.test(blocks[i])) tailStart = Math.max(headEnd, i - 1); // include the line just before it too
+    if (SIG_BLOCK_REGEX.test(blocks[i])) tailStart = Math.max(headEnd, i - 1);
   }
 
   const head = blocks.slice(0, headEnd);
@@ -163,9 +159,6 @@ function hardTrimToWordBudget(content, maxWords) {
       keptBody.push(block);
       remaining -= w;
     } else if (remaining > 15) {
-      // Partial room left: keep the block's opening sentences up to the
-      // remaining budget rather than dropping it wholesale (mainly helps
-      // headings-with-one-paragraph blocks keep some content).
       const sentences = block.match(/[^.!?]+[.!?]+|\S+$/g) || [block];
       let partial = "";
       let used = 0;
@@ -188,21 +181,33 @@ function hardTrimToWordBudget(content, maxWords) {
   return [...head, ...keptBody, ...tail].join("\n\n");
 }
 
+/* ============================================================================
+ * GROQ CALL  (reasoning-aware)
+ * ==========================================================================*/
 async function callGroq(model, systemPrompt, userPrompt) {
+  const isReasoning = REASONING_MODEL_IDS.has(model);
+
+  const body = {
+    model,
+    messages: [
+      { role: "system", content: systemPrompt },
+      { role: "user",   content: userPrompt },
+    ],
+    temperature: 0.7,
+    max_completion_tokens: 4096,
+  };
+
+  if (isReasoning) {
+    body.reasoning_effort = "low";
+  }
+
   const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
     },
-    body: JSON.stringify({
-      model,
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt },
-      ],
-      temperature: 0.7,
-    }),
+    body: JSON.stringify(body),
   });
 
   if (!response.ok) {
@@ -211,25 +216,68 @@ async function callGroq(model, systemPrompt, userPrompt) {
   }
 
   const data = await response.json();
-  let rawContent = data.choices?.[0]?.message?.content ?? "";
+  const choice = data.choices?.[0];
+  let rawContent = choice?.message?.content ?? "";
+
+  if (!rawContent && choice?.message?.reasoning) {
+    rawContent = choice.message.reasoning;
+  }
+
   rawContent = rawContent.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
   return rawContent;
 }
 
 async function generateWithFallback(systemPrompt, userPrompt) {
-  let lastError = null;
+  const failures = [];
   for (const model of MODELS_TO_TRY) {
     try {
       const content = await callGroq(model, systemPrompt, userPrompt);
-      if (content) return { content, model };
+      if (content && content.trim().length > 0) {
+        return { content, model };
+      }
+      const msg = `${model}: returned empty content`;
+      console.warn(msg);
+      failures.push(msg);
     } catch (err) {
       console.warn(err.message);
-      lastError = err.message;
+      failures.push(err.message);
     }
   }
-  throw new Error(lastError || "All models failed to generate content.");
+  throw new Error(
+    `All ${MODELS_TO_TRY.length} model(s) failed:\n  - ${failures.join("\n  - ")}`
+  );
 }
 
+/* ============================================================================
+ * DIAGNOSTIC: list Groq models your key can call
+ * ==========================================================================*/
+app.get("/api/models", async (_req, res) => {
+  if (!process.env.GROQ_API_KEY) {
+    return res
+      .status(500)
+      .json({ error: "GROQ_API_KEY is not set. Check your .env file." });
+  }
+  try {
+    const upstream = await fetch("https://api.groq.com/openai/v1/models", {
+      method: "GET",
+      headers: { Authorization: `Bearer ${process.env.GROQ_API_KEY}` },
+    });
+    const text = await upstream.text();
+    res.status(upstream.status);
+    res.set(
+      "Content-Type",
+      upstream.headers.get("content-type") || "application/json"
+    );
+    return res.send(text);
+  } catch (err) {
+    console.error("[/api/models] upstream failed:", err.message);
+    return res.status(502).json({ error: err.message });
+  }
+});
+
+/* ============================================================================
+ * AI DOCUMENT GENERATION
+ * ==========================================================================*/
 app.post("/api/generate-document", async (req, res) => {
   try {
     if (!process.env.GROQ_API_KEY) {
@@ -257,18 +305,23 @@ app.post("/api/generate-document", async (req, res) => {
       const result = await generateWithFallback(SYSTEM_PROMPT, userPrompt);
       content = result.content;
     } catch (err) {
-      console.error("All models failed. Last error:", err.message);
-      return res
-        .status(502)
-        .json({ error: "The AI service could not generate this document. Please try again." });
+      console.error("All models failed. Details:\n" + err.message);
+      return res.status(502).json({
+        error:
+          "The AI service could not generate this document. " +
+          "Check the server console for per-model failure details, " +
+          "or open /api/models to see which Groq models your key can access.",
+      });
     }
 
-    // Defense in depth, layer 1: LLMs routinely ignore a requested word count.
-    // Ask for a condensed rewrite, checking the actual count after each try —
-    // and only keep the rewrite if it actually got shorter.
     let wordCount = countWords(content);
     const MAX_SHORTEN_ATTEMPTS = 2;
-    for (let attempt = 1; attempt <= MAX_SHORTEN_ATTEMPTS && wordCount > budget.maxWords * OVERSHOOT_TOLERANCE; attempt++) {
+    for (
+      let attempt = 1;
+      attempt <= MAX_SHORTEN_ATTEMPTS &&
+      wordCount > budget.maxWords * OVERSHOOT_TOLERANCE;
+      attempt++
+    ) {
       try {
         const shortenPrompt =
           `The document below is ${wordCount} words, which is over the ${budget.maxWords}-word limit. ` +
@@ -278,12 +331,11 @@ app.post("/api/generate-document", async (req, res) => {
           `only the revised document in the same format.\n\n---\n${content}`;
         const shortened = await generateWithFallback(SYSTEM_PROMPT, shortenPrompt);
         const shortenedCount = countWords(shortened.content);
-        // Only accept the rewrite if it's a real improvement.
         if (shortened.content && shortenedCount < wordCount) {
           content = shortened.content;
           wordCount = shortenedCount;
         } else {
-          break; // model isn't making progress — stop asking, fall through to hard trim
+          break;
         }
       } catch (shortenErr) {
         console.warn(`Shorten attempt ${attempt} failed:`, shortenErr.message);
@@ -291,11 +343,6 @@ app.post("/api/generate-document", async (req, res) => {
       }
     }
 
-    // Defense in depth, layer 2: guaranteed hard trim. If the model still
-    // overshot after the retries above, deterministically cut body content
-    // down to the budget — never shipped output should exceed it. This
-    // preserves the title/metadata head and the signature-block tail intact
-    // and only removes whole body paragraphs/list items from the middle.
     if (wordCount > budget.maxWords) {
       content = hardTrimToWordBudget(content, budget.maxWords);
       wordCount = countWords(content);
@@ -308,6 +355,59 @@ app.post("/api/generate-document", async (req, res) => {
   }
 });
 
+/* ============================================================================
+ * KNOWLEDGE REPOSITORY PROXY
+ * ==========================================================================*/
+async function proxyJson(res, url) {
+  try {
+    const upstream = await fetch(url, { method: "GET" });
+    const text = await upstream.text();
+    res.status(upstream.status);
+    const ct = upstream.headers.get("content-type") || "";
+    res.set("Content-Type", ct.includes("application/json") ? ct : "application/json");
+    return res.send(text);
+  } catch (err) {
+    console.error(`[proxy] upstream ${url} failed:`, err.message);
+    return res.status(502).json({
+      error: "Knowledge Repository backend is unreachable.",
+      detail: err.message,
+    });
+  }
+}
+
+/**
+ * GET /api/repository-documents?category=…&status=…
+ *
+ * Forwards both filters to main.py. Defaults:
+ *   category = "Accreditation Evidence"
+ *   status   = "Active"
+ *
+ * The picker's only consumer is the DocumentGenerator "Open Existing
+ * Document" grid, which always wants Active accreditation evidence.
+ */
+app.get("/api/repository-documents", async (req, res) => {
+  const category = req.query.category || "Accreditation Evidence";
+  const status   = req.query.status   || "Active";
+  const url =
+    `${REPOSITORY_BACKEND_URL}/documents` +
+    `?category=${encodeURIComponent(category)}` +
+    `&status=${encodeURIComponent(status)}`;
+  return proxyJson(res, url);
+});
+
+/**
+ * GET /api/repository-documents/:name/content
+ */
+app.get("/api/repository-documents/:name/content", async (req, res) => {
+  const url = `${REPOSITORY_BACKEND_URL}/documents/${encodeURIComponent(req.params.name)}/content`;
+  return proxyJson(res, url);
+});
+
 app.listen(PORT, () => {
   console.log(`AI document server running at http://localhost:${PORT}`);
+  console.log(`Repository backend proxied to ${REPOSITORY_BACKEND_URL}`);
+  console.log(
+    `Model fallback chain (${MODELS_TO_TRY.length} entries): ${MODELS_TO_TRY.join(" → ")}`
+  );
+  console.log(`Diagnostic endpoint: http://localhost:${PORT}/api/models`);
 });
